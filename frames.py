@@ -1,7 +1,7 @@
-"""Right-handed Body (+z nose) and fixed launch-site NED transformations.
+"""Right-handed Body (+x nose) and fixed launch-site ENU transformations.
 
 Quaternions use Hamilton multiplication, scalar first, and rotate Body vectors
-into NED. NED-to-ECEF is a separate geometric transformation, not a correction
+into ENU. ENU-to-ECEF is a separate geometric transformation, not a correction
 for omitted Earth-rotation or Earth-curvature dynamics.
 """
 
@@ -37,7 +37,7 @@ def quaternion_product(left, right):
     ])
 
 
-def body_to_ned_matrix(quaternion_wxyz):
+def body_to_enu_matrix(quaternion_wxyz):
     w, x, y, z = normalize_quaternion(quaternion_wxyz)
     return np.array([
         [1-2*(y*y+z*z), 2*(x*y-w*z), 2*(x*z+w*y)],
@@ -46,8 +46,8 @@ def body_to_ned_matrix(quaternion_wxyz):
     ])
 
 
-def quaternion_rate_body_to_ned(quaternion_wxyz, omega_body_radps):
-    """Body/NED rate in Body components; Earth rotation is zero in v0."""
+def quaternion_rate_body_to_enu(quaternion_wxyz, omega_body_radps):
+    """Body/ENU rate in Body components; Earth rotation is zero in v0."""
     return 0.5 * quaternion_product(
         normalize_quaternion(quaternion_wxyz), np.r_[0.0, vector3(omega_body_radps)]
     )
@@ -79,22 +79,22 @@ class LaunchSite:
             (n*(1.0-e2)+h)*np.sin(latitude),
         ])
 
-    def ned_to_ecef_matrix(self):
+    def enu_to_ecef_matrix(self):
         latitude, longitude = np.deg2rad([self.latitude_deg, self.longitude_deg])
         s, c = np.sin(latitude), np.cos(latitude)
         sl, cl = np.sin(longitude), np.cos(longitude)
-        # Columns are north, east, down, expressed in ECEF axes.
-        return np.array([[-s*cl, -sl, -c*cl], [-s*sl, cl, -c*sl], [c, 0, -s]])
+        # Columns are east, north, up, expressed in ECEF axes.
+        return np.array([[-sl, -s*cl, c*cl], [cl, -s*sl, c*sl], [0, c, s]])
 
-    def position_ned_to_ecef(self, position_ned_m):
-        return self.origin_ecef_m() + self.ned_to_ecef_matrix() @ vector3(position_ned_m)
+    def position_enu_to_ecef(self, position_enu_m):
+        return self.origin_ecef_m() + self.enu_to_ecef_matrix() @ vector3(position_enu_m)
 
-    def position_ecef_to_ned(self, position_ecef_m):
-        return self.ned_to_ecef_matrix().T @ (vector3(position_ecef_m)-self.origin_ecef_m())
+    def position_ecef_to_enu(self, position_ecef_m):
+        return self.enu_to_ecef_matrix().T @ (vector3(position_ecef_m)-self.origin_ecef_m())
 
-    def vector_ned_to_ecef(self, vector_ned):
+    def vector_enu_to_ecef(self, vector_enu):
         """Free vectors have no origin offset; applies to Earth-relative velocity."""
-        return self.ned_to_ecef_matrix() @ vector3(vector_ned)
+        return self.enu_to_ecef_matrix() @ vector3(vector_enu)
 
-    def attitude_body_to_ecef_matrix(self, quaternion_body_to_ned_wxyz):
-        return self.ned_to_ecef_matrix() @ body_to_ned_matrix(quaternion_body_to_ned_wxyz)
+    def attitude_body_to_ecef_matrix(self, quaternion_body_to_enu_wxyz):
+        return self.enu_to_ecef_matrix() @ body_to_enu_matrix(quaternion_body_to_enu_wxyz)

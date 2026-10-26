@@ -1,4 +1,4 @@
-"""A-owned six-DOF core: Body +z nose, fixed NED position, no Earth rotation.
+"""A-owenu six-DOF core: Body +x nose, fixed ENU position, no Earth rotation.
 
 Force already includes propulsive momentum reaction. Do not also add an
 exhaust-velocity times mass-flow term. The preliminary angular balance retains
@@ -10,31 +10,31 @@ from typing import Callable
 import numpy as np
 
 from frames import (
-    vector3, normalize_quaternion, body_to_ned_matrix, quaternion_rate_body_to_ned,
+    vector3, normalize_quaternion, body_to_enu_matrix, quaternion_rate_body_to_enu,
 )
 
 
 @dataclass(frozen=True)
 class State:
-    position_ned_m: np.ndarray
+    position_enu_m: np.ndarray
     velocity_body_mps: np.ndarray
-    quaternion_body_to_ned_wxyz: np.ndarray
+    quaternion_body_to_enu_wxyz: np.ndarray
     omega_body_radps: np.ndarray
     propellant_kg: np.ndarray  # [Stage 1, attached Stage 2]
 
     def __post_init__(self):
-        for field in ("position_ned_m", "velocity_body_mps", "omega_body_radps"):
+        for field in ("position_enu_m", "velocity_body_mps", "omega_body_radps"):
             object.__setattr__(self, field, vector3(getattr(self, field)).copy())
-        object.__setattr__(self, "quaternion_body_to_ned_wxyz",
-                           normalize_quaternion(self.quaternion_body_to_ned_wxyz))
+        object.__setattr__(self, "quaternion_body_to_enu_wxyz",
+                           normalize_quaternion(self.quaternion_body_to_enu_wxyz))
         prop = np.asarray(self.propellant_kg, dtype=float)
         if prop.shape != (2,) or not np.all(np.isfinite(prop)) or np.any(prop < -1e-7):
             raise ValueError("State needs nonnegative [Stage 1, Stage 2] propellant masses.")
         object.__setattr__(self, "propellant_kg", np.maximum(prop, 0.0))
 
     def to_vector(self):
-        return np.r_[self.position_ned_m, self.velocity_body_mps,
-                     self.quaternion_body_to_ned_wxyz, self.omega_body_radps,
+        return np.r_[self.position_enu_m, self.velocity_body_mps,
+                     self.quaternion_body_to_enu_wxyz, self.omega_body_radps,
                      self.propellant_kg]
 
     @classmethod
@@ -49,11 +49,11 @@ class State:
 class Loads:
     force_body_n: np.ndarray       # Thrust + aerodynamics; gravity excluded.
     moment_body_nm: np.ndarray     # About current CG, Body components.
-    gravity_ned_mps2: np.ndarray   # Gravity added exactly once by A.
+    gravity_enu_mps2: np.ndarray   # Gravity added exactly once by A.
     consumption_kgps: np.ndarray   # Nonnegative [Stage 1, Stage 2] consumption.
 
     def __post_init__(self):
-        for field in ("force_body_n", "moment_body_nm", "gravity_ned_mps2"):
+        for field in ("force_body_n", "moment_body_nm", "gravity_enu_mps2"):
             object.__setattr__(self, field, vector3(getattr(self, field)).copy())
         rate = np.asarray(self.consumption_kgps, dtype=float)
         if rate.shape != (2,) or not np.all(np.isfinite(rate)) or np.any(rate < 0):
@@ -71,16 +71,16 @@ def state_derivative(time_s, state_vector, model, configuration, provider):
         raise ValueError("Powered dual-tank propagation requires a consistent open-system model. "
                          "Use fixed-inventory diagnostics; do not silently use Jdot alone.")
     properties = model.mass_properties(configuration, state.propellant_kg, loads.consumption_kgps)
-    rotation = body_to_ned_matrix(state.quaternion_body_to_ned_wxyz)
+    rotation = body_to_enu_matrix(state.quaternion_body_to_enu_wxyz)
     omega = state.omega_body_radps
     position_rate = rotation @ state.velocity_body_mps
     # A rotating Body velocity needs this transport term even when Earth does not rotate.
     body_velocity_rate = (
         loads.force_body_n/properties.mass_kg
-        + rotation.T @ loads.gravity_ned_mps2
+        + rotation.T @ loads.gravity_enu_mps2
         - np.cross(omega, state.velocity_body_mps)
     )
-    attitude_rate = quaternion_rate_body_to_ned(state.quaternion_body_to_ned_wxyz, omega)
+    attitude_rate = quaternion_rate_body_to_enu(state.quaternion_body_to_enu_wxyz, omega)
     angular_rate = np.linalg.solve(properties.inertia_body_kgm2,
         loads.moment_body_nm
         - np.cross(omega, properties.inertia_body_kgm2 @ omega)
@@ -105,22 +105,22 @@ def rk4_step(time_s, state, step_s, model, configuration, provider):
 
 def navigation_truth(state, loads):
     """Truth at the instantaneous CG for C; a real displaced IMU needs lever-arm terms."""
-    rotation = body_to_ned_matrix(state.quaternion_body_to_ned_wxyz)
+    rotation = body_to_enu_matrix(state.quaternion_body_to_enu_wxyz)
     return {
-        "position_ned_m": state.position_ned_m.copy(),
-        "velocity_ned_mps": rotation @ state.velocity_body_mps,
-        "quaternion_body_to_ned_wxyz": state.quaternion_body_to_ned_wxyz.copy(),
-        # Body/NED equals Body/inertial ONLY under the documented zero-Earth-rotation approximation.
+        "position_enu_m": state.position_enu_m.copy(),
+        "velocity_enu_mps": rotation @ state.velocity_body_mps,
+        "quaternion_body_to_enu_wxyz": state.quaternion_body_to_enu_wxyz.copy(),
+        # Body/ENU equals Body/inertial ONLY under the documented zero-Earth-rotation approximation.
         "omega_body_radps": state.omega_body_radps.copy(),
         "force_nongrav_body_n": loads.force_body_n.copy(),
-        "gravity_ned_mps2": loads.gravity_ned_mps2.copy(),
+        "gravity_enu_mps2": loads.gravity_enu_mps2.copy(),
     }
 
 
 def acceleration_truth(state, loads, mass_kg):
-    rotation = body_to_ned_matrix(state.quaternion_body_to_ned_wxyz)
+    rotation = body_to_enu_matrix(state.quaternion_body_to_enu_wxyz)
     specific_force = loads.force_body_n/mass_kg
     return {
         "specific_force_body_mps2": specific_force,
-        "acceleration_ned_mps2": rotation @ specific_force + loads.gravity_ned_mps2,
+        "acceleration_enu_mps2": rotation @ specific_force + loads.gravity_enu_mps2,
     }

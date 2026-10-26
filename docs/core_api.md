@@ -8,19 +8,19 @@ parameter files. NumPy is required; Matplotlib is only for separate examples.
 | Module | Responsibility |
 | --- | --- |
 | `mass_properties.py` | Axisymmetric component CG/inertia and geometric derivatives; parallel-axis combination |
-| `frames.py` | Hamilton scalar-first quaternion operations, Body/NED rotations, WGS-84 NED/ECEF geometry |
+| `frames.py` | Hamilton scalar-first quaternion operations, Body/ENU rotations, WGS-84 ENU/ECEF geometry |
 | `load_interface.py` | Sum application-point forces and moments about the supplied current CG |
 | `dynamics.py` | CG state derivatives, RK4 integration and navigation truth outputs |
 
 ## Coordinate and interface contract
 
 - Body +z points toward the nose; initially +x east, +y north, +z up.
-- Reference frame is fixed launch-site NED: north, east, down.
-- Quaternions use [w, x, y, z], Hamilton products and Body-to-NED mapping.
-- Initial vertical quaternion is [0, 1/√2, 1/√2, 0].
+- Reference frame is fixed launch-site ENU: east, north, up.
+- Quaternions use [w, x, y, z], Hamilton products and Body-to-ENU mapping.
+- Initial vertical quaternion is [0.5, −0.5, −0.5, −0.5].
 - Structural stations use a fixed base datum in Body axes. Inertias/moments use current CG.
-- `State.position_ned_m` tracks CG; `State.velocity_body_mps` is CG ground-relative
-  velocity expressed in Body. Public navigation velocity is rotated to NED.
+- `State.position_enu_m` tracks CG; `State.velocity_body_mps` is CG ground-relative
+  velocity expressed in Body. Public navigation velocity is rotated to ENU.
 - Earth rotation is omitted by the propagator. WGS-84 constants belong only to
   coordinate output and do not introduce Earth-rotation dynamics.
 
@@ -30,7 +30,7 @@ with `mass_model_name` and a callable
 `MassProperties`. No particular Vehicle class is imported by the core.
 
 The load provider is called at every RK4 evaluation and returns `Loads`:
-Body nongravitational force, Body moment about current CG, NED gravity, and
+Body nongravitational force, Body moment about current CG, ENU gravity, and
 nonnegative consumption rates for [stage 1, attached stage 2].
 `assemble_loads` requires gravity explicitly; it has no assumed local gravity.
 Do not include gravity in both the force list and the separate gravity vector.
@@ -41,7 +41,7 @@ Do not add an application-point moment twice.
 Mass components and inertia calculations use an axisymmetric geometric model.
 The liquid-column model requires settled, frozen-density cylinders; it does not
 resolve slosh or fluid behavior during free fall. Dataclass freezing prevents
-field reassignment but does not make contained NumPy arrays read-only.
+field reassignment but does not make contaienu NumPy arrays read-only.
 
 The preliminary variable-inertia balance omits exhaust angular-momentum flux.
 The core explicitly rejects positive consumption with `mass_model_name="dual_tank"`
@@ -52,7 +52,9 @@ validation against an actual launch or landing.
 ## Checks
 
 Run `python -m unittest discover -s tests -p test_core_math.py -v`.
+Axial inertia is Ixx; transverse inertias are Iyy and Izz. CG station vectors are [axial station, 0, 0].
+
 The fixtures are synthetic numerical inputs, not Falcon 9 parameters. Checks
-cover analytical mass combination, force-arm sign, NED orientation, free fall,
+cover analytical mass combination, force-arm sign, ENU orientation, free fall,
 and constant-moment rotation. Vehicle-specific parameters and scenarios belong
 in a separate commit.
