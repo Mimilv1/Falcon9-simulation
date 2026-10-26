@@ -1,0 +1,549 @@
+{
+  "description": "Provisional Falcon-9-like model; literature masses are not verified Block 5 measurements.",
+  "literature_set": "Pezent 2024, Table 2.17, printed p.77 (PDF p.94)",
+  "literature_url": "https://ir-api.ua.edu/api/core/bitstreams/cafcf02b-b6e7-47d8-a41b-24b1ba12a154/content",
+  "geometry_url": "https://www.spacex.com/assets/media/falcon-users-guide-2025-05-09.pdf",
+  "ft_geometry_url": "https://www.faa.gov/about/office_org/headquarters_offices/ast/media/2018_AST_Compendium.pdf",
+  "parameters": {
+    "body_diameter_m": {
+      "class": "K",
+      "source": "SpaceX 2025 guide, Table 2-1, p.9",
+      "attribute": "body_diameter",
+      "unit": "m",
+      "source_ids": [
+        "S1"
+      ]
+    },
+    "fairing_diameter_m": {
+      "class": "K",
+      "source": "SpaceX 2025 guide, section 4.1.3, p.16",
+      "attribute": "fairing_diameter",
+      "unit": "m",
+      "source_ids": [
+        "S1"
+      ]
+    },
+    "fairing_length_m": {
+      "class": "K",
+      "source": "SpaceX 2025 guide, section 4.1.3, p.16",
+      "attribute": "fairing_height",
+      "unit": "m",
+      "source_ids": [
+        "S1"
+      ]
+    },
+    "stage1_length_m": {
+      "class": "E",
+      "source": "FAA 2018 Falcon 9 FT fact sheet; Block 5 applicability and interstage boundaries unresolved",
+      "attribute": "stage1_length",
+      "unit": "m",
+      "source_ids": [
+        "S9"
+      ]
+    },
+    "stage2_length_m": {
+      "class": "E",
+      "source": "FAA 2018 Falcon 9 FT fact sheet; provisional geometry",
+      "attribute": "stage2_length",
+      "unit": "m",
+      "source_ids": [
+        "S9"
+      ]
+    },
+    "stage1_dry_mass_kg": {
+      "class": "E",
+      "source": "S2 Table 2.17, printed p.77 / PDF p.94; literature mass set P",
+      "attribute": "stage1_dry_mass",
+      "unit": "kg",
+      "source_ids": [
+        "S2"
+      ]
+    },
+    "stage1_propellant_initial_kg": {
+      "class": "E",
+      "source": "S2 Table 2.17, printed p.77 / PDF p.94; literature mass set P",
+      "attribute": "stage1_propellant",
+      "unit": "kg",
+      "source_ids": [
+        "S2"
+      ]
+    },
+    "stage2_dry_mass_kg": {
+      "class": "E",
+      "source": "S2 Table 2.17, printed p.77 / PDF p.94; literature mass set P",
+      "attribute": "stage2_dry_mass",
+      "unit": "kg",
+      "source_ids": [
+        "S2"
+      ]
+    },
+    "stage2_propellant_initial_kg": {
+      "class": "E",
+      "source": "S2 Table 2.17, printed p.77 / PDF p.94; literature mass set P",
+      "attribute": "stage2_propellant",
+      "unit": "kg",
+      "source_ids": [
+        "S2"
+      ]
+    },
+    "fairing_mass_kg": {
+      "class": "E",
+      "source": "S2 Table 2.17, printed p.77 / PDF p.94; literature mass set P",
+      "attribute": "fairing_mass",
+      "unit": "kg",
+      "source_ids": [
+        "S2"
+      ]
+    },
+    "payload_mass_kg": {
+      "class": "A",
+      "source": "Example mission; replace when a flight is selected",
+      "attribute": "payload_mass",
+      "unit": "kg",
+      "source_ids": [],
+      "condition": "Legacy full-stack demonstration only; a mission-specific value has not been established. Excluded from the new first-stage rotation diagnostic."
+    },
+    "stage2_cg_station_m": {
+      "class": "A",
+      "source": "A: stage1 length + stage2 local midpoint; consistent with team Stage.offset",
+      "attribute": "stage2_cg_station",
+      "unit": "m",
+      "source_ids": [],
+      "condition": "Equivalent-cylinder upper stage, not a measured CG",
+      "method": "42.6+12.6/2 = 48.9"
+    },
+    "fairing_cg_station_m": {
+      "class": "A",
+      "source": "Uniform equivalent cylinder ending at 70 m; not detailed fairing geometry",
+      "attribute": "fairing_cg_station",
+      "unit": "m",
+      "source_ids": [],
+      "condition": "Legacy full-stack demonstration only; a mission-specific value has not been established. Excluded from the new first-stage rotation diagnostic."
+    },
+    "payload_cg_station_m": {
+      "class": "A",
+      "source": "Example payload position above the vehicle base datum",
+      "attribute": "payload_cg_station",
+      "unit": "m",
+      "source_ids": [],
+      "condition": "Legacy full-stack demonstration only; a mission-specific value has not been established. Excluded from the new first-stage rotation diagnostic."
+    },
+    "payload_length_m": {
+      "class": "A",
+      "source": "Equivalent uniform-cylinder payload",
+      "attribute": "payload_length",
+      "unit": "m",
+      "source_ids": [],
+      "condition": "Legacy full-stack demonstration only; a mission-specific value has not been established. Excluded from the new first-stage rotation diagnostic."
+    },
+    "payload_radius_m": {
+      "class": "A",
+      "source": "Equivalent uniform-cylinder payload",
+      "attribute": "payload_radius",
+      "unit": "m",
+      "source_ids": [],
+      "condition": "Legacy full-stack demonstration only; a mission-specific value has not been established. Excluded from the new first-stage rotation diagnostic."
+    },
+    "stage1_dry_cg_station_m": {
+      "attribute": "stage1_dry_cg",
+      "class": "E/A",
+      "source": "S4 Table 2 dry groups + S2 total dry mass; residual uniformly allocated over S3 tank region",
+      "unit": "m",
+      "source_ids": [
+        "S2",
+        "S3",
+        "S4"
+      ],
+      "method": "Mass-weighted component stations; remaining 6450 kg distributed over x=4.0..40.8 m",
+      "condition": "Research proxy; not actual dry CG. Conditional uncertainty exported."
+    },
+    "stage1_oxidizer_fuel_ratio": {
+      "attribute": "stage1_oxidizer_fuel_ratio",
+      "class": "E",
+      "source": "S4 sec.2.2 engine operating model",
+      "unit": "1",
+      "source_ids": [
+        "S4"
+      ],
+      "method": "LOX consumption / RP-1 consumption",
+      "condition": "Constant 2.35; different from loaded inventory ratio"
+    },
+    "stage1_rp1_density_kgm3": {
+      "attribute": "stage1_rp1_density",
+      "class": "E",
+      "source": "S6 Table 5 Falcon 9 first-stage comparative data",
+      "unit": "kg/m3",
+      "source_ids": [
+        "S6"
+      ],
+      "method": "Constant reference property",
+      "condition": "266 K RP-1 / 66 K LOX; pressure unspecified; no in-flight heating/pressurization model"
+    },
+    "stage1_lox_density_kgm3": {
+      "attribute": "stage1_lox_density",
+      "class": "E",
+      "source": "S6 Table 5 Falcon 9 first-stage comparative data",
+      "unit": "kg/m3",
+      "source_ids": [
+        "S6"
+      ],
+      "method": "Constant reference property",
+      "condition": "266 K RP-1 / 66 K LOX; pressure unspecified; no in-flight heating/pressurization model"
+    },
+    "stage1_rp1_tank_bottom_m": {
+      "attribute": "stage1_rp1_tank_bottom",
+      "class": "E/A",
+      "source": "S3 Table 1 lower skirt and ordered tank section lengths",
+      "unit": "m",
+      "source_ids": [
+        "S3"
+      ],
+      "method": "RP-1 bottom=4.0; LOX bottom=4.0+14.7",
+      "condition": "Common flat bulkhead and aligned source datums are explicit A"
+    },
+    "stage1_rp1_initial_kg": {
+      "attribute": "stage1_rp1_initial",
+      "class": "E",
+      "source": "S5 Table 1 tank capacities",
+      "unit": "kg",
+      "source_ids": [
+        "S5"
+      ],
+      "method": "RP-1 123500 + LOX 287400 = S2 total 410900",
+      "condition": "Nominal loading scenario; not measured flight inventory"
+    },
+    "stage1_rp1_tank_inner_radius_m": {
+      "attribute": "stage1_rp1_tank_inner_radius",
+      "class": "E/A",
+      "source": "S1 outer diameter minus S3 modeled tank skin",
+      "unit": "m",
+      "source_ids": [
+        "S1",
+        "S3"
+      ],
+      "method": "3.66/2 - .0031",
+      "condition": "Equivalent circular bore; stringers, domes and transfer-tube volume omitted"
+    },
+    "stage1_rp1_tank_length_m": {
+      "attribute": "stage1_rp1_tank_length",
+      "class": "E",
+      "source": "S3 Table 1 modeled structural section length",
+      "unit": "m",
+      "source_ids": [
+        "S3"
+      ],
+      "method": "Adopted as equivalent cylinder envelope",
+      "condition": "Structural section length is not surveyed liquid volume geometry"
+    },
+    "stage1_rp1_temperature_k": {
+      "attribute": "stage1_rp1_temperature",
+      "class": "E",
+      "source": "S6 Table 5 reference temperature",
+      "unit": "K",
+      "source_ids": [
+        "S6"
+      ],
+      "method": "Reference condition of adopted density",
+      "condition": "Fixed condition only; temperature is not propagated"
+    },
+    "stage1_lox_initial_kg": {
+      "attribute": "stage1_lox_initial",
+      "class": "E",
+      "source": "S5 Table 1 tank capacities",
+      "unit": "kg",
+      "source_ids": [
+        "S5"
+      ],
+      "method": "RP-1 123500 + LOX 287400 = S2 total 410900",
+      "condition": "Nominal loading scenario; not measured flight inventory"
+    },
+    "stage1_lox_tank_inner_radius_m": {
+      "attribute": "stage1_lox_tank_inner_radius",
+      "class": "E/A",
+      "source": "S1 outer diameter minus S3 modeled tank skin",
+      "unit": "m",
+      "source_ids": [
+        "S1",
+        "S3"
+      ],
+      "method": "3.66/2 - .0029",
+      "condition": "Equivalent circular bore; stringers, domes and transfer-tube volume omitted"
+    },
+    "stage1_lox_tank_length_m": {
+      "attribute": "stage1_lox_tank_length",
+      "class": "E",
+      "source": "S3 Table 1 modeled structural section length",
+      "unit": "m",
+      "source_ids": [
+        "S3"
+      ],
+      "method": "Adopted as equivalent cylinder envelope",
+      "condition": "Structural section length is not surveyed liquid volume geometry"
+    },
+    "stage1_lox_tank_bottom_m": {
+      "attribute": "stage1_lox_tank_bottom",
+      "class": "E/A",
+      "source": "S3 Table 1 lower skirt and ordered tank section lengths",
+      "unit": "m",
+      "source_ids": [
+        "S3"
+      ],
+      "method": "RP-1 bottom=4.0; LOX bottom=4.0+14.7",
+      "condition": "Common flat bulkhead and aligned source datums are explicit A"
+    },
+    "stage1_lox_temperature_k": {
+      "attribute": "stage1_lox_temperature",
+      "class": "E",
+      "source": "S6 Table 5 reference temperature",
+      "unit": "K",
+      "source_ids": [
+        "S6"
+      ],
+      "method": "Reference condition of adopted density",
+      "condition": "Fixed condition only; temperature is not propagated"
+    },
+    "stage1_engine_thrust_vac_n": {
+      "attribute": "stage1_engine_thrust_vac",
+      "class": "E",
+      "unit": "N",
+      "source": "S2 Table 2.16, printed p.77 / PDF p.94",
+      "source_ids": [
+        "S2"
+      ],
+      "condition": "Adopted literature engine model; not a manufacturer certification for a selected flight"
+    },
+    "stage1_isp_vac_s": {
+      "attribute": "stage1_isp_vac",
+      "class": "E",
+      "unit": "s",
+      "source": "S2 Table 2.16, printed p.77 / PDF p.94",
+      "source_ids": [
+        "S2"
+      ],
+      "condition": "Adopted literature engine model; not a manufacturer certification for a selected flight"
+    },
+    "stage1_engine_exit_area_m2": {
+      "attribute": "stage1_engine_exit_area",
+      "class": "E",
+      "unit": "m2",
+      "source": "S2 Table 2.16, printed p.77 / PDF p.94",
+      "source_ids": [
+        "S2"
+      ],
+      "condition": "Adopted literature engine model; not a manufacturer certification for a selected flight"
+    },
+    "stage1_throttle_min": {
+      "attribute": "stage1_throttle_min",
+      "class": "E",
+      "unit": "1",
+      "source": "S2 Table 2.16, printed p.77 / PDF p.94",
+      "source_ids": [
+        "S2"
+      ],
+      "condition": "Adopted literature engine model; not a manufacturer certification for a selected flight"
+    },
+    "stage1_gimbal_max_rad": {
+      "attribute": "stage1_gimbal_max",
+      "class": "A",
+      "unit": "rad",
+      "source": "Upstream 5b61a45 assumed 5 degrees",
+      "source_ids": [],
+      "condition": ""
+    },
+    "stage1_engine_dry_mass_kg": {
+      "attribute": "stage1_engine_dry_mass",
+      "class": "E",
+      "unit": "kg",
+      "source": "S4 Table 2 engine-group estimate",
+      "source_ids": [
+        "S4"
+      ],
+      "condition": "Already included in stage dry budget; do not add engine mass twice"
+    },
+    "stage1_engine_pivot_axial_m": {
+      "attribute": "stage1_engine_pivot_axial",
+      "class": "A",
+      "unit": "m",
+      "source": "Upstream 5b61a45 axial engine station",
+      "source_ids": [],
+      "condition": "Pivot station is not engine CG"
+    },
+    "stage2_engine_thrust_vac_n": {
+      "attribute": "stage2_engine_thrust_vac",
+      "class": "E",
+      "unit": "N",
+      "source": "S2 Table 2.16, printed p.77 / PDF p.94",
+      "source_ids": [
+        "S2"
+      ],
+      "condition": "Adopted literature engine model; not a manufacturer certification for a selected flight"
+    },
+    "stage2_isp_vac_s": {
+      "attribute": "stage2_isp_vac",
+      "class": "E",
+      "unit": "s",
+      "source": "S2 Table 2.16, printed p.77 / PDF p.94",
+      "source_ids": [
+        "S2"
+      ],
+      "condition": "Adopted literature engine model; not a manufacturer certification for a selected flight"
+    },
+    "stage2_engine_exit_area_m2": {
+      "attribute": "stage2_engine_exit_area",
+      "class": "E",
+      "unit": "m2",
+      "source": "S2 Table 2.16, printed p.77 / PDF p.94",
+      "source_ids": [
+        "S2"
+      ],
+      "condition": "Adopted literature engine model; not a manufacturer certification for a selected flight"
+    },
+    "stage2_throttle_min": {
+      "attribute": "stage2_throttle_min",
+      "class": "E",
+      "unit": "1",
+      "source": "S2 Table 2.16, printed p.77 / PDF p.94",
+      "source_ids": [
+        "S2"
+      ],
+      "condition": "Adopted literature engine model; not a manufacturer certification for a selected flight"
+    },
+    "stage2_gimbal_max_rad": {
+      "attribute": "stage2_gimbal_max",
+      "class": "A",
+      "unit": "rad",
+      "source": "Upstream 5b61a45 assumed 5 degrees",
+      "source_ids": [],
+      "condition": ""
+    },
+    "stage2_engine_dry_mass_kg": {
+      "attribute": "stage2_engine_dry_mass",
+      "class": "E",
+      "unit": "kg",
+      "source": "S4 Table 2 engine-group estimate",
+      "source_ids": [
+        "S4"
+      ],
+      "condition": "Already included in stage dry budget; do not add engine mass twice"
+    },
+    "stage2_engine_pivot_axial_m": {
+      "attribute": "stage2_engine_pivot_axial",
+      "class": "A",
+      "unit": "m",
+      "source": "Upstream 5b61a45 axial engine station",
+      "source_ids": [],
+      "condition": "Pivot station is not engine CG"
+    },
+    "stage1_isp_sl_s": {
+      "attribute": "stage1_isp_sl",
+      "class": "E/A",
+      "unit": "s",
+      "source": "Derived from S2 vacuum thrust, exit area and vacuum Isp using reference sea-level pressure",
+      "source_ids": [
+        "S2"
+      ],
+      "condition": "Reference p=101325 Pa; assumes pressure correction at unchanged vacuum-model mass flow",
+      "method": "Tsl=Tvac-Ae*p_ref; Isp_sl=Isp_vac*Tsl/Tvac"
+    },
+    "stage1_engine_ring_radius_m": {
+      "attribute": "stage1_engine_ring_radius",
+      "class": "A",
+      "unit": "m",
+      "source": "Upstream 5b61a45 ring geometry estimate",
+      "source_ids": [],
+      "condition": ""
+    }
+  },
+  "mass_model_assumptions": {
+    "class": "A",
+    "flight_default": "uniform_cylinder (legacy connection demo)",
+    "dual_tank": "Evidence-led settled cylindrical columns, fixed engine O/F=2.35; loaded ratio is independent",
+    "tank_layout": "S3 structural sections mapped to flat cylinders; nozzle-exit/body-base datum alignment, domes, stringers and transfer tube displacement unresolved",
+    "liquid_motion": "Quasi-steady settled-fluid shape; frozen snapshots in rotation demo. Not a model of coast slosh, flip or reverse acceleration",
+    "dry_geometry": "S4 shell/fins/engines/folded legs; S2 minus these masses leaves 6450 kg. Uniform thin shell over x=4..40.8 m is an explicit residual-allocation A. Other localized groups are equivalent disks of body radius.",
+    "cross_vehicle_use": "S2 mass budget, S3 FT structure, S4 generic RFZ group estimates and S6 reference fluid conditions form a mixed-source research surrogate. Not a reconstructed Falcon 9 variant.",
+    "upper_vehicle": "Old stage2/fairing/payload A geometry retained only in legacy full-stack scenario; no newly claimed flight values",
+    "rates": "Geometric CG/J derivatives only. Powered dual-tank propagation is guarded until consistent open-system momentum/kinematics are implemented.",
+    "integration": "Shared core excludes demonstration scenarios. Active dual-tank consumption remains guarded; no full open-system burn integration is claimed.",
+    "inventory": "Fixed initial loading and flow ratio allow total-mass state reconstruction. No venting, variable mixture, refilling or restart-specific ratio schedules.",
+    "engine_operating_set": "Pezent Table 2.16: vacuum thrust 914/935 kN, Isp 311/348 s, exit area 0.68/4.9 m2, throttle minimum 0.60/0.40. These are literature estimates; do not imply actual mission limits."
+  },
+  "numeric_source": "Falcon9Parameters in vehicle_parameters.py; Vehicle factory references these values",
+  "team_repository": "https://github.com/Mimilv1/Falcon9-simulation",
+  "team_base_commit": "5b61a45b07766fbd458d4410a1034977da824837",
+  "revision": "v4: team objects, ENU / Body +x, no demo scenarios",
+  "sources": {
+    "S1": {
+      "title": "SpaceX Falcon User Guide, May 2025",
+      "url": "https://www.spacex.com/assets/media/falcon-users-guide-2025-05-09.pdf",
+      "locator": "Table 2-1, printed p.9",
+      "scope": "Official external geometry, not internal tank/CG data"
+    },
+    "S2": {
+      "title": "Pezent dissertation, 2024",
+      "url": "https://ir-api.ua.edu/api/core/bitstreams/cafcf02b-b6e7-47d8-a41b-24b1ba12a154/content",
+      "locator": "Tables 2.16-2.17, printed p.77 / PDF p.94",
+      "scope": "Consistent literature engine and mass set; not measured Block 5 flight data"
+    },
+    "S3": {
+      "title": "Ecker et al., A Numerical Study on the Thermal Loads During a Supersonic Rocket Retro-Propulsion Maneuver, 2017",
+      "url": "https://doi.org/10.2514/6.2017-4878",
+      "public_author_copy": "https://www.researchgate.net/publication/318295483_A_Numerical_Study_on_the_Thermal_Loads_During_a_Supersonic_Rocket_Retro-Propulsion_Maneuver",
+      "locator": "Table 1, paper p.3",
+      "scope": "Reverse-engineered Falcon 9 FT structural study, not manufacturer drawings"
+    },
+    "S4": {
+      "title": "Tamas Bykerk, A standard model for the investigation of aerodynamic and aerothermal loads on a re-usable launch vehicle, 2023",
+      "url": "https://www.eucass.eu/doi/EUCASS2023-018.pdf",
+      "doi": "10.13009/EUCASS2023-018",
+      "locator": "sec.2.2 p.4; Table 2 p.5",
+      "scope": "Generic Falcon-9-like research vehicle; explicit estimates. Tank rows include tank weight; not pure liquids."
+    },
+    "S5": {
+      "title": "Romero-Calvo et al., Novel propellant settling strategies for liquid rocket engine restart in microgravity, 2023",
+      "url": "https://hanspeterschaub.info/PapersPrivate/RomeroCalvo2023.pdf",
+      "doi": "10.1016/j.actaastro.2022.10.012",
+      "locator": "Table 1, journal p.215 / PDF p.2",
+      "scope": "Public-literature capacities only. Its upper-stage mass and ambiguous CG/geometry are not adopted."
+    },
+    "S6": {
+      "title": "Valentin Miquel, Propellant Feeding System of a Liquid Rocket With Multiple Engines, KTH, 2020",
+      "url": "https://www.diva-portal.org/smash/get/diva2:1440090/FULLTEXT01.pdf",
+      "locator": "Table 5, PDF p.24, Falcon 9 first-stage row",
+      "scope": "Comparative study: RP-1 266 K, 820 kg/m³; subcooled LOX 66 K, 1250 kg/m³. Pressure and original measurement provenance not provided; E reference conditions, not certified flight properties."
+    },
+    "S7": {
+      "title": "Huber, Lemmon and Bruno, Effect of RP-1 Compositional Variability on Thermophysical Properties, NIST, 2009",
+      "url": "https://tsapps.nist.gov/publication/get_pdf.cfm?pub_id=902380",
+      "doi": "10.1021/ef900597q",
+      "locator": "Table 5, journal p.5553 / PDF p.4",
+      "scope": "Cross-check only: model density 808.1 kg/m³ at 288.7 K, 101.325 kPa. Not substituted for cold RP-1."
+    },
+    "S8": {
+      "title": "Course Module 4 Simulation Examples",
+      "url": "local: RSLV_GNC_Module4_Simulation_Examples.pdf",
+      "locator": "pp.10-13",
+      "scope": "NED/body state and rigid-body equations; numerical examples are not measured Falcon parameters"
+    },
+    "S9": {
+      "title": "FAA Annual Compendium of Commercial Space Transportation, 2018",
+      "url": "https://www.faa.gov/about/office_org/headquarters_offices/ast/media/2018_AST_Compendium.pdf",
+      "locator": "Falcon 9 FT fact sheet",
+      "scope": "Legacy FT geometry; stage/interstage boundary applicability remains unresolved. Not used for v3 internal tank section lengths."
+    }
+  },
+  "coordinate_convention": {
+    "reference": "ENU east/north/up",
+    "body": "Body +x nose; initially +y east, +z north",
+    "quaternion": "Hamilton scalar-first Body to ENU",
+    "initial_quaternion_wxyz": [
+      0.5,
+      -0.5,
+      -0.5,
+      -0.5
+    ],
+    "inertia_order": "Ixx axial; Iyy/Izz transverse",
+    "vehicle_position_origin": "fixed structural base",
+    "dynamics_state_origin": "instantaneous CG"
+  }
+}

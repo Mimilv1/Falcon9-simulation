@@ -3,7 +3,7 @@
 This commit supplies mass-property calculations, coordinate mathematics,
 load assembly and an RK4 rigid-body core independently of `VehicleData.py`.
 Importing the four core modules does not instantiate a Falcon 9 or load vehicle
-parameter files. NumPy is required; Matplotlib is only for separate examples.
+parameter files. NumPy is required. Demonstration scenarios are excluded from this branch.
 
 | Module | Responsibility |
 | --- | --- |
@@ -14,7 +14,7 @@ parameter files. NumPy is required; Matplotlib is only for separate examples.
 
 ## Coordinate and interface contract
 
-- Body +z points toward the nose; initially +x east, +y north, +z up.
+- Body +x points toward the nose; initially +y east and +z north.
 - Reference frame is fixed launch-site ENU: east, north, up.
 - Quaternions use [w, x, y, z], Hamilton products and Body-to-ENU mapping.
 - Initial vertical quaternion is [0.5, −0.5, −0.5, −0.5].

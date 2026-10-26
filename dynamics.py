@@ -1,4 +1,4 @@
-"""A-owenu six-DOF core: Body +x nose, fixed ENU position, no Earth rotation.
+"""A-owned six-DOF core: Body +x nose, fixed ENU position, no Earth rotation.
 
 Force already includes propulsive momentum reaction. Do not also add an
 exhaust-velocity times mass-flow term. The preliminary angular balance retains
