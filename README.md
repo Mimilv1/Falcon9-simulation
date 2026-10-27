@@ -40,6 +40,9 @@ would make a stationary point move when only the rocket turns.
 | `Aerodynamics.py` | Digitized Mach-dependent drag curve; drag through CG |
 | `ascent.py` / `main.py` | Connect A+B, propagate one phase segment, export C truth |
 | `prescribed_loads.py` | Explicit smooth force doublet for powered-attitude verification |
+| `engine_schedule.py` | Analytic smooth shutdown amplitude and derivative |
+| `staging.py` | Accepted-state separation map and conservation audit |
+| `phase_sequence.py` | Shutdown, attached coast, split and two gravity-only coast branches |
 | `config/powered_ascent.json` | Shared first-segment inputs and explicit assumptions |
 
 Read [the shared interface](docs/core_api.md), [powered dynamics and assumptions](docs/powered_dynamics.md),
@@ -60,6 +63,12 @@ Run `python main.py --config config/ascent_attitude_check.json` for the connecte
 small-angle rotation check, writing `results/attitude_check/`. It adds an explicit
 verification force and a second virtual accelerometer; see [the attitude check](docs/attitude_check.md)
 for assumptions, moment signs and sensor lever-arm validation.
+
+Run `python main.py --config config/shutdown_separation_check.json` to connect
+smooth shutdown, zero-impulse separation and two tracked coast branches. The
+[sequence guide](docs/shutdown_separation.md) distinguishes the explicit test
+timing and gravity-only/frozen-liquid assumptions from real flight behavior.
+Separate CSV streams and `events.json` appear in `results/shutdown_separation/`.
 
 `build_falcon9()` creates independent team objects. `vehicle.mass_model()` evaluates
 RK trial inventories without mutating Stage objects; use configuration=None.

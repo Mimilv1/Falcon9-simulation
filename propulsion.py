@@ -47,3 +47,21 @@ def evaluate_steady_engine(engine,ambient_pressure_pa, *, stage_index,stage_offs
     exit_station=np.array([stage_offset_m+nozzle_exit_axial_m,engine.position[1],engine.position[2]])
     port=ExhaustPort(stage_index,exit_station,flow,0.0,uniform_disk_gyration(np.sqrt(area/np.pi)))
     return EngineOutput(AppliedForce([thrust,0,0],station),port,float(thrust),float(flow))
+
+
+def scale_shutdown_output(steady_output,amplitude,amplitude_rate_per_s):
+    """Verification envelope scales BOTH full thrust and flow to zero.
+
+    This is not steady operation below the minimum throttle, or a measured
+    shutdown law. Scaling the entire ambient-corrected thrust prevents a
+    residual -Ae*p force when an engine is off. Derivative propagates into CG.
+    """
+    if not np.all(np.isfinite([amplitude,amplitude_rate_per_s])) or not 0<=amplitude<=1:
+        raise ValueError('Invalid shutdown amplitude or derivative.')
+    port=steady_output.exhaust_port
+    return EngineOutput(
+        AppliedForce(amplitude*steady_output.applied_force.force_body_n,
+                     steady_output.applied_force.station_body_m),
+        ExhaustPort(port.stage_index,port.station_body_m,amplitude*port.mass_flow_kgps,
+                    amplitude_rate_per_s*port.mass_flow_kgps,port.gyration_body_m2),
+        amplitude*steady_output.thrust_n,amplitude*steady_output.mass_flow_kgps)

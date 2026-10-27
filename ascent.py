@@ -6,7 +6,7 @@ import numpy as np
 from VehicleData import build_falcon9
 from Environement import TroposphereEnvironment
 from Aerodynamics import DragOnlyAerodynamics,MachDragCurve
-from propulsion import steady_mass_flow,evaluate_steady_engine
+from propulsion import steady_mass_flow,evaluate_steady_engine,scale_shutdown_output
 from load_interface import AppliedForce,assemble_loads
 from dynamics import acceleration_truth
 from propagation import propagate
@@ -29,13 +29,14 @@ class AscentEvaluation:
 class SteadyPoweredAscent:
     """Steady engine commands; B can replace this provider without changing A."""
     def __init__(self,vehicle,environment,aerodynamics, *, nozzle_exit_axial_m=0.0,
-                 prescribed_loads=(),max_angle_of_attack_rad=None):
+                 prescribed_loads=(),max_angle_of_attack_rad=None,command_envelope=None):
         self.vehicle=vehicle
         self.model=vehicle.mass_model()
         self.environment=environment
         self.aerodynamics=aerodynamics
         self.nozzle_exit_axial_m=float(nozzle_exit_axial_m)
         self.prescribed_loads=tuple(prescribed_loads)
+        self.command_envelope=command_envelope
         self.max_angle_of_attack_rad=max_angle_of_attack_rad
         if max_angle_of_attack_rad is not None and (not np.isfinite(max_angle_of_attack_rad) or max_angle_of_attack_rad<=0):
             raise ValueError('A configured angle-of-attack check limit must be positive.')
@@ -43,10 +44,16 @@ class SteadyPoweredAscent:
         self._commands=tuple((e.running,e.throttle,e.gimbal_pitch,e.gimbal_yaw) for e in self.stage1.engines)
         self.consumption_kgps=np.array([sum(steady_mass_flow(e,vehicle.parameters.G0) for e in self.stage1.engines),0.])
 
+    def flow_at(self,time_s):
+        amplitude,derivative=(1.0,0.0) if self.command_envelope is None else self.command_envelope(time_s)
+        return self.consumption_kgps*amplitude,self.consumption_kgps*derivative
+
     def evaluate(self,time_s,state):
         if self._commands != tuple((e.running,e.throttle,e.gimbal_pitch,e.gimbal_yaw) for e in self.stage1.engines):
             raise ValueError('Steady commands changed: construct a new properly bounded phase provider.')
-        properties=self.model.mass_properties(None,state.propellant_kg,self.consumption_kgps)
+        consumption,consumption_derivative=self.flow_at(time_s)
+        properties=self.model.mass_properties(None,state.propellant_kg,consumption,
+                                              consumption_rate_kgps2=consumption_derivative)
         altitude=self.environment.altitude(state,properties)
         atmosphere=self.environment.atmosphere(altitude)
         forces=[];ports=[];thrust=0.0
@@ -56,6 +63,8 @@ class SteadyPoweredAscent:
             ambient=self.environment.atmosphere(exit_height).pressure_pa
             result=evaluate_steady_engine(engine,ambient,stage_index=0,stage_offset_m=self.stage1.offset,
                                            nozzle_exit_axial_m=self.nozzle_exit_axial_m,g0=self.vehicle.parameters.G0)
+            if self.command_envelope is not None:
+                result=scale_shutdown_output(result,*self.command_envelope(time_s))
             forces.append(result.applied_force);ports.append(result.exhaust_port);thrust+=result.thrust_n
         aero=self.aerodynamics.evaluate(state,properties,atmosphere,self.environment.wind_body(state))
         if self.max_angle_of_attack_rad is not None and aero.relative_speed_mps>1e-6 and aero.angle_of_attack_rad>self.max_angle_of_attack_rad:
@@ -68,7 +77,7 @@ class SteadyPoweredAscent:
             forces.append(force)
             prescribed_force+=force.force_body_n
         loads=assemble_loads(properties,forces,gravity_body_mps2=self.environment.gravity_body(state),
-                              consumption_kgps=self.consumption_kgps,exhaust_ports=ports)
+                              consumption_kgps=consumption,exhaust_ports=ports)
         return AscentEvaluation(loads,properties,atmosphere,aero,thrust,altitude,
                                  self.environment.altitude(state,properties,[0,0,0]),prescribed_force)
 
@@ -78,6 +87,54 @@ class SteadyPoweredAscent:
 
 def load_config(path):
     with open(path,encoding='utf-8') as f: return json.load(f)
+
+
+def sample_truth(vehicle,provider,time_s,state,config, *, phase=None,vehicle_id='stack',event_side='regular'):
+    """One accepted-state record, shared by ascent and branching phase sequences."""
+    sample=provider.evaluate(time_s,state);p=sample.properties
+    environment=provider.environment
+    station=vector3(config['imu_station_body_m'])
+    sensor=acceleration_truth(state,sample.loads,p,sensor_station_body_m=station)
+    pressure=environment.atmosphere(environment.altitude(state,p,station)).pressure_pa
+    stage1=next((s for s in vehicle.stages if s.name=='stage1'),None)
+    inventory=(stage1.liquid_profile.stage1_inventory(state.propellant_kg[0])
+               if stage1 is not None and stage1.liquid_profile is not None else (0.,0.))
+    nose=body_to_initial_body_matrix(state.quaternion_body_to_initial_body_wxyz)[:,0]
+    row={'time_s':float(time_s),'phase':phase or config['phase'],'vehicle_id':vehicle_id,'event_side':event_side,
+         'imu_id':config.get('imu_id','original_base_imu'),
+         'total_mass_kg':p.mass_kg,'stage1_propellant_kg':float(state.propellant_kg[0]),
+         'stage2_propellant_kg':float(state.propellant_kg[1]),'rp1_kg':inventory[0],'lox_kg':inventory[1],
+         'cg_station_x_m':float(p.cg_station_body_m[0]),'base_altitude_m':sample.base_altitude_m,
+         'cg_altitude_m':sample.cg_altitude_m,'airspeed_mps':sample.aero.relative_speed_mps,
+         'mach':sample.aero.mach,'drag_coefficient':sample.aero.drag_coefficient,
+         'dynamic_pressure_pa':sample.aero.dynamic_pressure_pa,'angle_of_attack_rad':sample.aero.angle_of_attack_rad,
+         'thrust_n':sample.thrust_n,'drag_n':float(np.linalg.norm(sample.aero.force_body_n)),
+         'pressure_imu_pa':pressure,'density_cg_kgm3':sample.atmosphere.density_kgm3,
+         'temperature_cg_k':sample.atmosphere.temperature_k,
+         'tilt_from_initial_axis_rad':float(np.arctan2(np.linalg.norm(nose[1:]),nose[0])),
+         'stage1_consumption_kgps':float(sample.loads.consumption_kgps[0]),
+         'stage1_consumption_derivative_kgps2':float(sample.loads.consumption_rate_kgps2[0]),
+         'structural_base_original_station_x_m':vehicle.datum_shift_m,
+         'imu_original_station_x_m':vehicle.datum_shift_m+float(station[0]),
+         'imu_station_x_m':float(station[0]),'imu_station_y_m':float(station[1]),'imu_station_z_m':float(station[2])}
+    for prefix,axes,values in [
+        ('position_body_m','xyz',state.position_body_m),('velocity_body_mps','xyz',state.velocity_body_mps),
+        ('quaternion_body_to_initial','wxyz',state.quaternion_body_to_initial_body_wxyz),
+        ('gyro_ideal_body_radps','xyz',state.omega_body_radps),
+        ('accelerometer_ideal_body_mps2','xyz',sensor['specific_force_body_mps2']),
+        ('acceleration_body_mps2','xyz',sensor['acceleration_body_mps2']),
+        ('gravity_body_mps2','xyz',sample.loads.gravity_body_mps2),
+        ('force_nongrav_body_n','xyz',sample.loads.force_body_n),('moment_cg_body_nm','xyz',sample.loads.moment_body_nm),
+        ('prescribed_force_body_n','xyz',sample.prescribed_force_body_n),
+        ('angular_acceleration_body_radps2','xyz',sensor['angular_acceleration_body_radps2']),
+        ('inertia_body_kgm2','xyz',np.diag(p.inertia_body_kgm2))]:
+        row.update({f'{prefix}_{axis}':float(value) for axis,value in zip(axes,values)})
+    comparison_station=config.get('comparison_imu_station_body_m')
+    if comparison_station is not None:
+        comparison=acceleration_truth(state,sample.loads,p,sensor_station_body_m=comparison_station)
+        row.update({f'comparison_accelerometer_ideal_body_mps2_{axis}':float(value)
+                    for axis,value in zip('xyz',comparison['specific_force_body_mps2'])})
+    return row
 
 
 def run_ascent(config, *, step_s=None):
@@ -106,47 +163,7 @@ def run_ascent(config, *, step_s=None):
     result=propagate(0,initial,float(config['duration_s']),used_step,
                      provider.model,None,provider,
                      breakpoints_s=[t for p in prescribed for t in p.breakpoints_s])
-    rows=[]
-    sensor_station=np.asarray(config['imu_station_body_m'],dtype=float)
-    comparison_station=config.get('comparison_imu_station_body_m')
-    if comparison_station is not None:comparison_station=vector3(comparison_station)
-    for t,state in zip(result.times_s,result.states):
-        sample=provider.evaluate(t,state);p=sample.properties
-        sensor=acceleration_truth(state,sample.loads,p,sensor_station_body_m=sensor_station)
-        sensor_altitude=environment.altitude(state,p,sensor_station)
-        pressure=environment.atmosphere(sensor_altitude).pressure_pa
-        inventory=vehicle.stages[0].liquid_profile.stage1_inventory(state.propellant_kg[0])
-        nose=body_to_initial_body_matrix(state.quaternion_body_to_initial_body_wxyz)[:,0]
-        tilt=float(np.arctan2(np.linalg.norm(nose[1:]),nose[0]))
-        row={'time_s':float(t),'phase':config['phase'],'total_mass_kg':p.mass_kg,
-             'stage1_propellant_kg':float(state.propellant_kg[0]),'rp1_kg':inventory[0],'lox_kg':inventory[1],
-             'cg_station_x_m':float(p.cg_station_body_m[0]),'base_altitude_m':sample.base_altitude_m,
-             'cg_altitude_m':sample.cg_altitude_m,'airspeed_mps':sample.aero.relative_speed_mps,
-             'mach':sample.aero.mach,'drag_coefficient':sample.aero.drag_coefficient,
-             'dynamic_pressure_pa':sample.aero.dynamic_pressure_pa,
-             'angle_of_attack_rad':sample.aero.angle_of_attack_rad,'thrust_n':sample.thrust_n,
-             'drag_n':float(np.linalg.norm(sample.aero.force_body_n)),
-             'pressure_imu_pa':pressure,'density_cg_kgm3':sample.atmosphere.density_kgm3,
-             'temperature_cg_k':sample.atmosphere.temperature_k}
-        row['tilt_from_initial_axis_rad']=tilt
-        for prefix,axes,values in [
-            ('position_body_m','xyz',state.position_body_m),('velocity_body_mps','xyz',state.velocity_body_mps),
-            ('quaternion_body_to_initial','wxyz',state.quaternion_body_to_initial_body_wxyz),
-            ('gyro_ideal_body_radps','xyz',state.omega_body_radps),
-            ('accelerometer_ideal_body_mps2','xyz',sensor['specific_force_body_mps2']),
-            ('acceleration_body_mps2','xyz',sensor['acceleration_body_mps2']),
-            ('gravity_body_mps2','xyz',sample.loads.gravity_body_mps2),
-            ('force_nongrav_body_n','xyz',sample.loads.force_body_n),
-            ('moment_cg_body_nm','xyz',sample.loads.moment_body_nm),
-            ('prescribed_force_body_n','xyz',sample.prescribed_force_body_n),
-            ('angular_acceleration_body_radps2','xyz',sensor['angular_acceleration_body_radps2']),
-            ('inertia_body_kgm2','xyz',np.diag(p.inertia_body_kgm2))]:
-            row.update({f'{prefix}_{axis}':float(value) for axis,value in zip(axes,values)})
-        if comparison_station is not None:
-            comparison=acceleration_truth(state,sample.loads,p,sensor_station_body_m=comparison_station)
-            row.update({f'comparison_accelerometer_ideal_body_mps2_{axis}':float(value)
-                        for axis,value in zip('xyz',comparison['specific_force_body_mps2'])})
-        rows.append(row)
+    rows=[sample_truth(vehicle,provider,t,state,config) for t,state in zip(result.times_s,result.states)]
     final_loads=provider(result.times_s[-1],result.states[-1])
     vehicle.apply_state(result.states[-1],result.times_s[-1],
                          consumption_by_stage={'stage1':final_loads.consumption_kgps[0]})
@@ -167,7 +184,8 @@ def write_outputs(rows,summary,config,output_dir):
     output_dir=Path(output_dir);output_dir.mkdir(parents=True,exist_ok=True)
     config={**config,'step_s':summary['step_s']}
     with (output_dir/'truth_for_c.csv').open('w',newline='',encoding='utf-8') as f:
-        writer=csv.DictWriter(f,fieldnames=list(rows[0]));writer.writeheader();writer.writerows(rows)
+        fields=list(dict.fromkeys(key for row in rows for key in row))
+        writer=csv.DictWriter(f,fieldnames=fields);writer.writeheader();writer.writerows(rows)
     (output_dir/'summary.json').write_text(json.dumps(summary,indent=2,ensure_ascii=False),encoding='utf-8')
     (output_dir/'run_config.json').write_text(json.dumps(config,indent=2,ensure_ascii=False),encoding='utf-8')
     source=Path(__file__).parent/'data'/'vehicle_parameters.json'
@@ -183,5 +201,6 @@ def write_outputs(rows,summary,config,output_dir):
               'coordinate_frame':'current Body, +x nose; geographic transforms deferred',
               'imu_station_body_m':config['imu_station_body_m'],
               'comparison_imu_station_body_m':config.get('comparison_imu_station_body_m'),
+              'vehicle_sensor_stations':summary.get('vehicle_sensor_stations'),
               'phase':config['phase']}
     (output_dir/'manifest.json').write_text(json.dumps(manifest,indent=2),encoding='utf-8')

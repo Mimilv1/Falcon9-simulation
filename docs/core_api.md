@@ -71,6 +71,14 @@ times, accepted states and a stop reason. At a limiting tank it stops within
 inventory_tolerance_kg (default 1e-6 kg); it does not invent a negative inventory
 or automatic engine command. Continue with an appropriate next provider/phase.
 
+`SteadyPoweredAscent(..., command_envelope=SmoothShutdown(...))` optionally
+evaluates time-dependent flow and analytic dq/dt using an explicit shutdown
+verification envelope. Its nominal steady command stays unchanged during trials.
+`separate_coasting_vehicle(vehicle,state,time_s,loads)` requires zero flow, zero
+flow derivative and off engine commands. It returns lower/upper Vehicles, their
+mapped states and a conservation audit without mutating the caller. See
+[the connected sequence](shutdown_separation.md) for event and sensor-stream rules.
+
 ## C outputs
 
 `navigation_truth` returns Body-component CG position/velocity, relative-initial

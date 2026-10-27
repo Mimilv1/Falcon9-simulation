@@ -86,6 +86,9 @@ base/CG state mapping; fixed-sensor kinematics; and limiting-tank stopping.
 A separate local 30 s prescribed-load case compares total linear/angular
 momentum budgets and halved integration steps. It is not flight-data validation.
 
-The numerical scenario, plots and outputs remain outside this shared repository.
-Actual B propulsion/aerodynamics, fluid settling/slosh, variable O/F, navigation,
-guidance/control, geographic outputs and full mission validation remain separate.
+Runnable project configurations now include early ascent, attitude verification
+and [smooth shutdown/separation](shutdown_separation.md). Generated plots and
+outputs remain outside version control. The first B models are research
+surrogates; measured transients, separate-stage aerodynamics, fluid settling/slosh,
+variable O/F, navigation, guidance/control, geographic outputs and full mission
+validation remain separate.
