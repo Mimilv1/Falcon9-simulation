@@ -61,6 +61,14 @@ masses. Source RFZ x-axial stations now match the agreed Body +x convention.
 
 ## Sources
 
+The executable early-ascent segment adds a standard troposphere, pressure-dependent
+steady thrust and a digitized Mach drag curve. Their adopted values, K/E/A
+classifications and source locators are listed in [the first-segment table](first_ascent_segment.md).
+The drag table itself records its source PDF hash, pixel calibration and readout
+limitations in `data/drag_curve_pezent.json`. Initial state, steady throttle,
+constant gravity, zero wind, drag through CG, exit-plane placement and virtual
+sensor placement remain explicit assumptions.
+
 - **S1** [SpaceX Falcon User Guide, May 2025](https://www.spacex.com/assets/media/falcon-users-guide-2025-05-09.pdf). Table 2-1, printed p.9. Official external geometry, not internal tank/CG data
 - **S2** [Pezent dissertation, 2024](https://ir-api.ua.edu/api/core/bitstreams/cafcf02b-b6e7-47d8-a41b-24b1ba12a154/content). Tables 2.16-2.17, printed p.77 / PDF p.94. Consistent literature engine and mass set; not measured Block 5 flight data
 - **S3** [Ecker et al., A Numerical Study on the Thermal Loads During a Supersonic Rocket Retro-Propulsion Maneuver, 2017](https://doi.org/10.2514/6.2017-4878). Table 1, paper p.3. Reverse-engineered Falcon 9 FT structural study, not manufacturer drawings

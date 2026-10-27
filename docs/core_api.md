@@ -23,6 +23,11 @@ transport term −ω×vᴮ. The quaternion records the changing basis.
 
 ## B inputs
 
+The first implementation is `SteadyPoweredAscent` in `ascent.py`, connecting
+`propulsion.py`, `Environement.py` and `Aerodynamics.py`. It uses the existing
+vehicle profile; B can replace each model while keeping the Loads contract.
+See [the executable first segment](first_ascent_segment.md).
+
 `provider(time_s, trial_state) -> Loads` is evaluated at every RK4 stage.
 
 | Loads field | Definition |

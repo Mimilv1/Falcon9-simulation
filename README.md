@@ -1,6 +1,7 @@
 # Falcon9-simulation
 
-Project 2 A-block: shared rigid-body mathematics and sourced vehicle data.
+Project 2 A-block with a first replaceable B model: powered dynamics, sourced
+vehicle data, and an executable early-ascent segment exporting ideal truth for C.
 
 ## Current team convention
 
@@ -34,6 +35,11 @@ would make a stationary point move when only the rocket turns.
 | `dynamics.py` | Open-system CG accelerations and RK4; Body-only shared states |
 | `propagation.py` | Smooth-segment propagation, scheduled breakpoints and fuel-limit stopping |
 | `frames.py` | Generic vector/quaternion operations relative to initial Body; no Earth conversion API |
+| `Environement.py` | Standard troposphere, constant-magnitude gravity, prescribed wind |
+| `propulsion.py` | Steady engine fuel flow and ambient-pressure-dependent thrust |
+| `Aerodynamics.py` | Digitized Mach-dependent drag curve; drag through CG |
+| `ascent.py` / `main.py` | Connect A+B, propagate one phase segment, export C truth |
+| `config/powered_ascent.json` | Shared first-segment inputs and explicit assumptions |
 
 Read [the shared interface](docs/core_api.md), [powered dynamics and assumptions](docs/powered_dynamics.md),
 and [the English source table](docs/parameter_evidence.md).
@@ -43,6 +49,11 @@ and [the English source table](docs/parameter_evidence.md).
 Python 3.11+ and NumPy are required. Install with `python -m pip install -r requirements.txt`.
 Run `python -m unittest discover -s tests -v` for analytical and integration checks.
 The fixtures are diagnostic mathematical inputs, not measured flight data.
+
+Run `python main.py` for **30 seconds of early vertical powered ascent**.
+Results appear in `results/powered_ascent/`, including `truth_for_c.csv`, the
+configuration, source metadata and summary. See [the first segment guide](docs/first_ascent_segment.md)
+for assumptions, signal meanings and how C can use the output.
 
 `build_falcon9()` creates independent team objects. `vehicle.mass_model()` evaluates
 RK trial inventories without mutating Stage objects; use configuration=None.
@@ -66,13 +77,12 @@ tank, within its stated tolerance, rather than clipping or burning negative fuel
 Settled flat cylindrical liquids, fixed density, fixed loaded ratio/consumption
 O/F and omitted internal fluid swirl remain assumptions. Venting, variable O/F,
 slosh, free-fall liquid behavior and full propellant feed-system dynamics are not
-implemented. Forces/thrust and gravity come from B. C must provide a fixed Body
+implemented. The first replaceable B provider supplies thrust, drag and gravity.
+C must provide a fixed Body
 sensor station to obtain physical IMU acceleration; CG coordinate acceleration
 is a different quantity when the CG moves.
 
-Demonstration scripts, scenario files and generated results remain outside the
-shared branch. The upstream `main.py` still has its update call commented out;
-running that time loop alone is not a flight simulation. The completed library
-integration is exercised by analytical tests and a separate local diagnostic.
+The shared branch includes the project phase configuration and runnable main;
+generated results and separate diagnostic/plot scripts are not committed.
 Actual-flight validation, complete GNC and geographic output conversion remain
 future work. This is a mixed-source research model, not a reconstructed mission.
