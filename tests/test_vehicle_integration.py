@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from VehicleData import build_falcon9, VehicleModel, Configuration
-from frames import body_to_enu_matrix
+from frames import body_to_initial_body_matrix
 from dynamics import Loads, rk4_step
 
 
@@ -52,13 +52,13 @@ class VehicleIntegrationChecks(unittest.TestCase):
         v = build_falcon9()
         v.position=np.array([10.,20.,30.]); v.velocity=np.array([1.,2.,3.])
         v.omega=np.array([.02,-.03,.04]); v.quaternion=np.array([.6,.2,-.3,.7])
-        rotation=body_to_enu_matrix(v.quaternion)
+        rotation=body_to_initial_body_matrix(v.quaternion)
         cut=v.stages[1].offset
         local_point=np.array([.5,0,0]); original_point=local_point+np.array([cut,0,0])
         lower,upper=v.separate()
-        np.testing.assert_allclose(v.position+rotation@original_point,upper.position+rotation@local_point)
-        np.testing.assert_allclose(v.velocity+rotation@np.cross(v.omega,original_point),
-                                   upper.velocity+rotation@np.cross(upper.omega,local_point))
+        np.testing.assert_allclose(v.position+original_point,upper.position+local_point)
+        np.testing.assert_allclose(v.velocity+np.cross(v.omega,original_point),
+                                   upper.velocity+np.cross(upper.omega,local_point))
         self.assertEqual(lower.getmass()+upper.getmass(),v.getmass())
         original_moment=v.get_mass_properties().mass_kg*v.get_mass_properties().cg_station_body_m
         split_moment=(lower.getmass()*lower.get_mass_properties().cg_station_body_m
@@ -72,13 +72,13 @@ class VehicleIntegrationChecks(unittest.TestCase):
         self.assertEqual(v.stages[0].propellant_mass,410900)
         self.assertAlmostEqual(props.mass_kg,v.getmass()-(410900-200000))
 
-    def test_base_to_cg_mapping_and_no_dual_tank_powered_claim(self):
+    def test_base_to_cg_mapping_and_explicit_exhaust_requirement(self):
         v=build_falcon9()
         state=v.to_state()
-        self.assertGreater(state.position_enu_m[2],0)
-        np.testing.assert_allclose(state.position_enu_m[:2],[0,0])
+        self.assertGreater(state.position_body_m[0],0)
+        np.testing.assert_allclose(state.position_body_m[1:],[0,0])
         provider=lambda t,s: Loads([0,0,0],[0,0,0],[0,0,-9.80665],[1,0])
-        with self.assertRaisesRegex(ValueError,'open-system'):
+        with self.assertRaisesRegex(ValueError,'Exhaust ports'):
             rk4_step(0,state,.01,v.mass_model(),None,provider)
 
 

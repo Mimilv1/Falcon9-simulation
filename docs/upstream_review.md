@@ -20,6 +20,15 @@ metadata, tests and English documentation. No A demonstration files, scenario
 configuration, generated plots, trajectories, third-party PDF copies or runtime
 folders are included. Synthetic test fixtures are explicitly diagnostic.
 
-No powered dual-tank/open-system implementation is claimed. The active-depletion
-guard is retained. B/C physics, navigation and flight-data validation remain
+The scope described in the initial review was the earlier fixed-inventory
+checkpoint. The superseding decision and powered integration below describe
+the current branch. B/C model implementation and flight-data validation remain
 separate project work.
+
+## Superseding team decision: 2026-10-27
+
+The earlier ENU decision above is historical. Current shared interfaces use
+Body components, +x toward the nose, with q=[1,0,0,0] relative to initial Body.
+Geographic transforms were removed from the active API. Powered integration now
+uses explicit balanced exhaust data and CG migration terms; the old blanket
+dual-tank consumption guard is replaced by mass-flow/scope validation.

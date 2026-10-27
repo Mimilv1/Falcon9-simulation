@@ -2,7 +2,7 @@
 
 K = authoritative known value; E = literature estimate; A = explicit modeling assumption.
 E/A denotes a derived estimate that depends on a stated geometric or allocation assumption.
-All axial distances follow **Body +x toward the nose**. The reference frame is **ENU**.
+All axial distances follow **Body +x toward the nose**. All shared vectors are expressed in current **Body** axes; geographic conversion is deferred.
 
 | Parameter | Adopted value | Class | Evidence and method |
 | --- | --- | --- | --- |
@@ -41,7 +41,7 @@ All axial distances follow **Body +x toward the nose**. The reference frame is *
 | Gimbal limit | 5° | A | Retained team assumption; verified actuator specification unavailable. |
 | Residual dry-hardware placement | 6,450 kg uniformly over x=4.0–40.8 m | A | Remaining dry budget after the four RFZ dry groups; no surveyed location. |
 | Liquid geometry | Settled flat cylinders, fixed density | A | Domes, stringers, transfer tube, slosh and reversed/free-fall liquid behavior omitted. |
-| Earth model | Fixed local ENU, Earth rotation omitted | A | Initial rigid-body core scope; ECEF is an output transformation. |
+| Earth model | Body-only states, Earth rotation omitted | A | Initial Body is the mathematical attitude reference; geographic outputs deferred. |
 
 The dry-CG nominal value is not measured. If the remaining hardware's CG can lie
 anywhere in x=4.0–40.8 m while all listed groups remain fixed, the conditional

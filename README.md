@@ -1,85 +1,78 @@
 # Falcon9-simulation
 
-Shared Project 2 core and evidence-led vehicle data, integrated with team commit
-`5b61a45b07766fbd458d4410a1034977da824837`.
+Project 2 A-block: shared rigid-body mathematics and sourced vehicle data.
 
-## Agreed coordinates
+## Current team convention
 
-| Item | Convention |
+All shared position, velocity, force, moment, gravity and angular-rate vectors
+use **current Body components**. **Body +x points toward the nose**. The frame is
+right handed; engine-ring angle zero is +y and +90° is +z. Geographic heading,
+ENU and ECEF transforms are deferred.
+
+The quaternion is Hamilton [w,x,y,z], mapping current Body to the fixed **initial
+Body basis**. Initial q=[1,0,0,0]. It records attitude relative to the beginning
+of the run; no east/north/up direction is prescribed. This mathematical initial
+basis is necessary for orientation bookkeeping, not a geographic interface.
+
+`State.position_body_m` means the vector **from a fixed initial origin to CG,
+expressed in current Body axes**. It is not CG position relative to itself.
+Accordingly, both position and velocity derivatives include the rotating-basis
+terms: ṙᴮ=vᴮ−ω×rᴮ and v̇ᴮ=aᴮ−ω×vᴮ. Dropping the first term's rotation correction
+would make a stationary point move when only the rocket turns.
+
+## Files
+
+| File | Responsibility |
 | --- | --- |
-| Fixed reference | ENU: +x east, +y north, +z up |
-| Body longitudinal axis | +x toward the nose |
-| Initial vertical Body axes | +x up, +y east, +z north |
-| Quaternion | Hamilton, scalar-first [w,x,y,z], Body to ENU |
-| Initial vertical quaternion | [0.5, −0.5, −0.5, −0.5] |
-| Gravity input | ENU [0,0,−g], supplied by the environment model |
-| Inertia order | Ixx axial; Iyy and Izz transverse |
-| Structural stations | Body [axial station,0,0], measured from the fixed base datum |
+| `VehicleData.py` | Engine/Stage/Vehicle objects, staging, base/CG mapping, accepted-state synchronization |
+| `vehicle_parameters.py` | Single evidence-led numeric input profile |
+| `data/vehicle_parameters.json` | K/E/A metadata, source URLs, conditions and limitations |
+| `vehicle_mass_model.py` | Fixed-O/F liquid inventory and mass-profile adapter |
+| `mass_properties.py` | Components, CG/inertia and first/second geometric derivatives |
+| `mass_flow.py` | Exhaust-port boundary data, exit gyration and balance validation |
+| `load_interface.py` | Forces at structural stations -> net force/current-CG moment |
+| `dynamics.py` | Open-system CG accelerations and RK4; Body-only shared states |
+| `propagation.py` | Smooth-segment propagation, scheduled breakpoints and fuel-limit stopping |
+| `frames.py` | Generic vector/quaternion operations relative to initial Body; no Earth conversion API |
 
-The initial quaternion maps Body [1,0,0] to ENU [0,0,1]. Its four entries are
-an orientation representation, not three angles or physical vehicle parameters.
+Read [the shared interface](docs/core_api.md), [powered dynamics and assumptions](docs/powered_dynamics.md),
+and [the English source table](docs/parameter_evidence.md).
 
-## Files and ownership
-
-| File | Purpose |
-| --- | --- |
-| `VehicleData.py` | Team EngineSpec/Engine/Stage/Vehicle objects, fresh factory and structural-base staging |
-| `vehicle_parameters.py` | Single numeric input profile; declared K/E/A values and derived quantities |
-| `data/vehicle_parameters.json` | Input attribute mappings, source URLs, locators, methods and limitations |
-| `vehicle_mass_model.py` | Evidence-profile adapter and fixed-O/F first-stage inventories |
-| `mass_properties.py` | Generic mass components, axial cylinders, inertia and CG combination |
-| `load_interface.py` | Body application-point force to moment about current CG |
-| `dynamics.py` | CG-based rigid-body derivatives, RK4, navigation truth |
-| `frames.py` | Body/ENU quaternion operations and WGS-84 ENU/ECEF output transformations |
-
-Read [the parameter evidence table](docs/parameter_evidence.md),
-[the interface contract](docs/core_api.md), and
-[the upstream review](docs/upstream_review.md).
-
-## Use and checks
+## Use
 
 Python 3.11+ and NumPy are required. Install with `python -m pip install -r requirements.txt`.
-Run `python -m unittest discover -s tests -v` for analytical/frame/integration checks.
-All fixtures are synthetic diagnostic inputs, not measured flight data.
+Run `python -m unittest discover -s tests -v` for analytical and integration checks.
+The fixtures are diagnostic mathematical inputs, not measured flight data.
 
-`from VehicleData import falcon9` preserves the team's entry point.
-Use `build_falcon9()` to create independent mutable Stage/Vehicle objects.
-`falcon9.get_mass_properties()` returns properties for the currently attached
-stages and current `Stage.propellant_mass` values. Engine dry masses are already
-included in stage dry masses; do not add them again.
-
-`Stage.propellant_mass` is the authoritative stage-total inventory. First-stage
-RP-1/LOX masses are derived with the fixed loaded inventory and consumption O/F.
-TankSpec fields are reference geometry/property data, not a second mutable fuel state.
-After changing construction inputs, rebuild the vehicle; dry CG/inertia snapshots
-must agree with the component mass budget.
-
-`Vehicle.position`/`velocity` refer to the fixed structural base in ENU.
-The integrator's `State.position_enu_m` refers to instantaneous CG, and
-`State.velocity_body_mps` is CG velocity expressed in Body. At fixed inventory,
-`vehicle.to_state()` maps these definitions explicitly. `vehicle.mass_model()`
-evaluates trial inventories without changing the shared vehicle. Pass
-`configuration=None`; the attached Stage objects define the configuration.
-The integrator returns a new State; it does not automatically overwrite Vehicle snapshots.
-
-For B, application points are stage/vehicle structural stations in Body.
-Subtract current CG once, then form the cross product with the force. Supply
-gravity separately in ENU and do not duplicate it in nongravitational forces.
-For C, navigation truth returns ENU CG position/velocity, Body-to-ENU attitude,
-and Body rates under the zero-Earth-rotation approximation. A structurally fixed
-sensor displaced from CG needs lever-arm treatment.
+`build_falcon9()` creates independent team objects. `vehicle.mass_model()` evaluates
+RK trial inventories without mutating Stage objects; use configuration=None.
+`vehicle.to_state(consumption_by_stage=...)` includes CG migration when mapping
+base position/velocity to CG. After an accepted state, `vehicle.apply_state(...)`
+updates the vehicle and stage fuel inventories; do not synchronize RK trial states.
+Pass consistent flow and derivative data to both mappings when flow is nonzero.
 
 ## Current scope
 
-Demonstration scripts, synthetic flight scenarios and generated trajectory/plot
-outputs are excluded from this shared change. The upstream `main.py` still only
-advances its loop time; its Vehicle update call remains commented out. Running it
-is not evidence of an implemented flight trajectory.
+Powered integration now updates propellant mass, CG, inertia, translation and
+attitude together with explicit exhaust momentum terms. Supply ExhaustPort data
+for every positive consumption rate. Supported exhaust centroids and CG migration
+are axial; off-axis unbalanced outflow is explicitly rejected.
 
-The dual-tank model is a settled-fluid geometric approximation using mixed-source
-research inputs. It is not a reconstructed Block 5 mission. Dry-hardware placement,
-payload geometry, actuator limits and some engine stations remain explicit assumptions.
-The shared core rejects positive consumption with the dual-tank profile until
-moving-CG kinematics and exhaust momentum are treated consistently. No powered
-dual-tank flight, guidance/control loop, sensor estimator or real-flight validation
-is claimed. Earth rotation and curved-Earth propagation remain outside this core.
+Flow must be smooth with a consistent dq/dt inside each segment. Smooth ignition
+and cutoff are supported. Abrupt mass-flow jumps require a separate impulse/state
+map and are not silently approximated as smooth. `propagate` stops at a limiting
+tank, within its stated tolerance, rather than clipping or burning negative fuel.
+
+Settled flat cylindrical liquids, fixed density, fixed loaded ratio/consumption
+O/F and omitted internal fluid swirl remain assumptions. Venting, variable O/F,
+slosh, free-fall liquid behavior and full propellant feed-system dynamics are not
+implemented. Forces/thrust and gravity come from B. C must provide a fixed Body
+sensor station to obtain physical IMU acceleration; CG coordinate acceleration
+is a different quantity when the CG moves.
+
+Demonstration scripts, scenario files and generated results remain outside the
+shared branch. The upstream `main.py` still has its update call commented out;
+running that time loop alone is not a flight simulation. The completed library
+integration is exercised by analytical tests and a separate local diagnostic.
+Actual-flight validation, complete GNC and geographic output conversion remain
+future work. This is a mixed-source research model, not a reconstructed mission.

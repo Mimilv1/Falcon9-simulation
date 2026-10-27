@@ -18,8 +18,8 @@ class Falcon9Parameters:
         self.body_diameter = 3.66  # m, official outer diameter
         self.radius = self.body_diameter / 2  # m, derived outer radius
 
-        # Initial Body +x up, +y east, +z north; Body-to-ENU [w,x,y,z].
-        self.quaternion_body_to_enu_wxyz = (0.5, -0.5, -0.5, -0.5)
+        # Identity relative to the initial Body basis; no geographic orientation prescribed.
+        self.quaternion_body_to_initial_body_wxyz = (1.0, 0.0, 0.0, 0.0)
 
         # geometry
         self.fairing_diameter = 5.2  # m, Df
@@ -78,7 +78,7 @@ class Falcon9Parameters:
         self.stage1_rp1_tank_length = 14.7  # E: Ecker 2017 Table 1 structural section
         self.stage1_lox_tank_length = 22.1  # E: same; domes not resolved
         self.stage1_lox_tank_bottom = self.stage1_rp1_tank_bottom+self.stage1_rp1_tank_length
-        self.mass_model_name = "dual_tank"  # evidence profile; powered propagation guarded
+        self.mass_model_name = "dual_tank"  # evidence profile; explicit balanced exhaust required
 
         self.mass = (self.stage1_dry_mass + self.stage1_propellant
                      + self.stage2_dry_mass + self.stage2_propellant

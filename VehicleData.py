@@ -1,16 +1,16 @@
-"""Team objects: ENU reference, Body +x nose; Vehicle state tracks its base."""
+"""Team objects: Body +x nose; all shared vectors use current Body axes."""
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
 import numpy as np
-from frames import body_to_enu_matrix, normalize_quaternion, vector3
+from frames import body_to_initial_body_matrix, normalize_quaternion, vector3
 from mass_properties import combine_components, fixed_cylinder
 from vehicle_parameters import Falcon9Parameters
 from vehicle_mass_model import VehicleModel, Configuration
 
 
 def quat_rotate(q, v):
-    """Rotate Body components into ENU; Hamilton scalar-first quaternion."""
-    return body_to_enu_matrix(q) @ vector3(v)
+    """Rotate current Body components into the fixed initial Body basis."""
+    return body_to_initial_body_matrix(q) @ vector3(v)
 
 
 @dataclass(frozen=True)
@@ -62,9 +62,9 @@ class Stage:
     dry_components: tuple = ()
     liquid_profile: object | None = field(default=None, repr=False)
 
-    def mass_properties(self, propellant_mass=None, consumption_kgps=0.0):
+    def mass_properties(self, propellant_mass=None, consumption_kgps=0.0,consumption_rate_kgps2=0.0):
         remaining = self.propellant_mass if propellant_mass is None else float(propellant_mass)
-        if (not np.all(np.isfinite([remaining, consumption_kgps]))
+        if (not np.all(np.isfinite([remaining, consumption_kgps,consumption_rate_kgps2]))
                 or not 0 <= remaining <= self.propellant_capacity+1e-7 or consumption_kgps < 0):
             raise ValueError('Invalid remaining propellant or consumption rate.')
         if self.dry_components:
@@ -84,10 +84,11 @@ class Stage:
                 component = replace(component,inertia_at_center_kgm2=inertia.copy())
             components = [component]
         if self.liquid_profile is not None:
-            components.extend(self.liquid_profile.stage1_liquid_components(remaining,consumption_kgps))
+            components.extend(self.liquid_profile.stage1_liquid_components(remaining,consumption_kgps,consumption_rate_kgps2))
         else:
             components.append(fixed_cylinder(self.name+'_propellant',remaining,-consumption_kgps,
-                                              self.length/2,self.length,self.diameter/2))
+                                              self.length/2,self.length,self.diameter/2,
+                                              mass_acceleration_kgps2=-consumption_rate_kgps2))
         return combine_components(components)
 
     def tank_inventories(self):
@@ -105,9 +106,9 @@ class Vehicle:
     payload_mass: float = 0.0
     fairing_attached: bool = True
     t: float = 0.0
-    position: np.ndarray = field(default_factory=lambda: np.zeros(3))  # base, ENU m
-    velocity: np.ndarray = field(default_factory=lambda: np.zeros(3))  # base, ENU m/s
-    quaternion: np.ndarray = field(default_factory=lambda: np.array([.5,-.5,-.5,-.5]))
+    position: np.ndarray = field(default_factory=lambda: np.zeros(3))  # initial origin -> structural base, CURRENT Body m
+    velocity: np.ndarray = field(default_factory=lambda: np.zeros(3))  # base velocity relative to initial origin, CURRENT Body m/s
+    quaternion: np.ndarray = field(default_factory=lambda: np.array([1.,0.,0.,0.]))
     omega: np.ndarray = field(default_factory=lambda: np.zeros(3))  # Body rad/s
     parameters: object | None = field(default=None, repr=False)
     datum_shift_m: float = 0.0  # current base station relative to original datum
@@ -132,20 +133,23 @@ class Vehicle:
         for stage in upper.stages:
             stage.offset -= cut
         upper.datum_shift_m += cut
-        upper.position = self.position+quat_rotate(self.quaternion,r_body)
-        upper.velocity = self.velocity+quat_rotate(self.quaternion,np.cross(self.omega,r_body))
+        upper.position = self.position+r_body
+        upper.velocity = self.velocity+np.cross(self.omega,r_body)
         return lower,upper
 
     def getmass(self):
         fairing = self.fairing_mass if self.fairing_attached else 0.0
         return sum(s.dry_mass+s.propellant_mass for s in self.stages)+fairing+self.payload_mass
 
-    def get_mass_properties(self, *, propellant_by_stage=None, consumption_by_stage=None):
+    def get_mass_properties(self, *, propellant_by_stage=None, consumption_by_stage=None,
+                            consumption_derivative_by_stage=None):
         propellant_by_stage = propellant_by_stage or {}
         consumption_by_stage = consumption_by_stage or {}
+        consumption_derivative_by_stage = consumption_derivative_by_stage or {}
         components = []
         for stage in self.stages:
-            properties = stage.mass_properties(propellant_by_stage.get(stage.name),consumption_by_stage.get(stage.name,0.0))
+            properties = stage.mass_properties(propellant_by_stage.get(stage.name),consumption_by_stage.get(stage.name,0.0),
+                                                consumption_derivative_by_stage.get(stage.name,0.0))
             components.extend(replace(c,center_axial_m=c.center_axial_m+stage.offset) for c in properties.components)
         if (self.fairing_attached and self.fairing_mass) or self.payload_mass:
             if self.parameters is None:
@@ -159,16 +163,29 @@ class Vehicle:
                                                   p.payload_length,p.payload_radius))
         return combine_components(components)
 
-    def to_state(self):
-        """Fixed-inventory base ENU state -> CG position / Body velocity."""
+    def to_state(self, *, consumption_by_stage=None,consumption_derivative_by_stage=None):
+        """Base -> geometric CG, both expressed in current Body, including migration."""
         from dynamics import State
-        properties = self.get_mass_properties()
+        properties = self.get_mass_properties(consumption_by_stage=consumption_by_stage,
+                                              consumption_derivative_by_stage=consumption_derivative_by_stage)
         arm = properties.cg_station_body_m
-        rotation = body_to_enu_matrix(self.quaternion)
-        cg_velocity_enu = self.velocity+rotation @ np.cross(self.omega,arm)
+        cg_velocity_body = self.velocity+np.cross(self.omega,arm)+properties.cg_rate_body_mps
         prop = {stage.name:stage.propellant_mass for stage in self.stages}
-        return State(self.position+rotation @ arm,rotation.T @ cg_velocity_enu,self.quaternion,
+        return State(self.position+arm,cg_velocity_body,self.quaternion,
                      self.omega,[prop.get('stage1',0),prop.get('stage2',0)])
+
+    def apply_state(self,state,time_s, *, consumption_by_stage=None,consumption_derivative_by_stage=None):
+        """Synchronize an accepted A state; do not call this for RK trial states."""
+        prop = dict(zip(('stage1','stage2'),state.propellant_kg))
+        properties = self.get_mass_properties(propellant_by_stage=prop,consumption_by_stage=consumption_by_stage,
+                                              consumption_derivative_by_stage=consumption_derivative_by_stage)
+        arm = properties.cg_station_body_m
+        self.position = state.position_body_m-arm
+        self.velocity = state.velocity_body_mps-np.cross(state.omega_body_radps,arm)-properties.cg_rate_body_mps
+        self.quaternion = state.quaternion_body_to_initial_body_wxyz.copy()
+        self.omega = state.omega_body_radps.copy()
+        for stage in self.stages: stage.propellant_mass = float(prop[stage.name])
+        self.t = float(time_s)
 
     def mass_model(self):
         return VehicleMassAdapter(self)
@@ -181,21 +198,35 @@ class VehicleMassAdapter:
         self.mass_model_name = ('dual_tank' if any(s.liquid_profile is not None for s in vehicle.stages)
                                 else 'uniform_cylinder')
 
-    def mass_properties(self, configuration, propellant_kg, consumption_kgps=(0,0)):
+    def propellant_bounds(self,configuration=None):
+        if configuration is not None:
+            raise ValueError('Use configuration=None with attached Vehicle stages.')
+        lower,upper = np.zeros(2),np.zeros(2)
+        for stage in self.vehicle.stages:
+            index = {'stage1':0,'stage2':1}[stage.name]
+            upper[index] = stage.propellant_capacity
+            if stage.liquid_profile is not None:
+                lower[index] = stage.liquid_profile.stage1_burn_limits()['minimum_remaining_kg']
+        return lower,upper
+
+    def mass_properties(self, configuration, propellant_kg, consumption_kgps=(0,0),consumption_rate_kgps2=(0,0)):
         if configuration is not None:
             raise ValueError('Use configuration=None; attached stages are defined by this Vehicle.')
         values = np.asarray(propellant_kg,dtype=float)
         rates = np.asarray(consumption_kgps,dtype=float)
-        if (values.shape != (2,) or rates.shape != (2,)
-                or not np.all(np.isfinite(np.r_[values,rates])) or np.any(values < 0) or np.any(rates < 0)):
+        changes = np.asarray(consumption_rate_kgps2,dtype=float)
+        if (values.shape != (2,) or rates.shape != (2,) or changes.shape != (2,)
+                or not np.all(np.isfinite(np.r_[values,rates,changes])) or np.any(values < 0) or np.any(rates < 0)):
             raise ValueError('Expected nonnegative finite [stage1, stage2] inventories and rates.')
         attached = {stage.name for stage in self.vehicle.stages}
-        for name,mass,rate in zip(('stage1','stage2'),values,rates):
-            if name not in attached and (mass > 1e-7 or rate > 0):
+        for name,mass,rate,change in zip(('stage1','stage2'),values,rates,changes):
+            if name not in attached and (mass > 1e-7 or rate > 0 or change != 0):
                 raise ValueError('Detached stages cannot contribute propellant or consumption.')
         prop = dict(zip(('stage1','stage2'),values))
         rate = dict(zip(('stage1','stage2'),rates))
-        return self.vehicle.get_mass_properties(propellant_by_stage=prop,consumption_by_stage=rate)
+        change = dict(zip(('stage1','stage2'),changes))
+        return self.vehicle.get_mass_properties(propellant_by_stage=prop,consumption_by_stage=rate,
+                                                consumption_derivative_by_stage=change)
 
 
 def build_falcon9(parameters=None):
@@ -227,7 +258,7 @@ def build_falcon9(parameters=None):
                    engines=[Engine(spec2,np.array([p.stage2_engine_pivot_axial,0,0]))],
                    offset=p.stage1_length,name='stage2')
     return Vehicle([stage1,stage2],p.fairing_mass,p.payload_mass,parameters=p,
-                   quaternion=np.array(p.quaternion_body_to_enu_wxyz))
+                   quaternion=np.array(p.quaternion_body_to_initial_body_wxyz))
 
 
 # Preserve the team's global entry points. The factory provides independent objects.

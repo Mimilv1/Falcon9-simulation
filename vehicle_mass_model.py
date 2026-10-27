@@ -18,8 +18,7 @@ class Configuration(str, Enum):
 class VehicleModel:
     """Literature-input adapter for mass properties, independent of Vehicle objects.
 
-    Derivatives describe geometry only. Powered dual-tank propagation is guarded
-    by the shared dynamics core until open-system terms are implemented.
+    Geometric derivatives are coupled to explicit exhaust data by dynamics.py.
     """
 
     def __init__(self, parameter_path=None, *, inputs=None, mass_model=None):
@@ -101,15 +100,16 @@ class VehicleModel:
         return (max(0.0, v["stage1_rp1_initial_kg"]-burned/(1+ratio)),
                 max(0.0, v["stage1_lox_initial_kg"]-burned*ratio/(1+ratio)))
 
-    def stage1_liquid_components(self, propellant_kg, consumption_kgps=0.0):
+    def stage1_liquid_components(self, propellant_kg, consumption_kgps=0.0,consumption_rate_kgps2=0.0):
         g, v = self.stage1_tank_geometry(), self.value
         masses = self.stage1_inventory(propellant_kg)
         ratio = v["stage1_oxidizer_fuel_ratio"]
         rates = (-consumption_kgps/(1+ratio), -consumption_kgps*ratio/(1+ratio))
+        rate_changes = (-consumption_rate_kgps2/(1+ratio),-consumption_rate_kgps2*ratio/(1+ratio))
         return tuple(liquid_column(f"stage1_{fluid}", mass, rate, g[f"{fluid}_bottom_x_m"],
                                    g[f"{fluid}_radius_m"], v[f"stage1_{fluid}_density_kgm3"],
-                                   g[f"{fluid}_tank_length_m"])
-                     for fluid, mass, rate in zip(("rp1", "lox"), masses, rates))
+                                   g[f"{fluid}_tank_length_m"],mass_acceleration_kgps2=change)
+                     for fluid, mass, rate,change in zip(("rp1", "lox"), masses, rates,rate_changes))
 
     def stage1_dry_components(self):
         """RFZ dry-group proxy with explicit residual allocation and axisymmetry A.
@@ -143,16 +143,23 @@ class VehicleModel:
                 "conditional_lower_cg_m": (first_moment+residual*self.dry_residual_bottom)/mass,
                 "conditional_upper_cg_m": (first_moment+residual*self.dry_residual_top)/mass}
 
-    def mass_properties(self, configuration, propellant_kg, consumption_kgps=(0.0, 0.0)):
+    def propellant_bounds(self,configuration):
+        lower = self.stage1_burn_limits()['minimum_remaining_kg'] if self.mass_model_name == 'dual_tank' else 0.0
+        upper2 = self.value['stage2_propellant_initial_kg'] if Configuration(configuration) is Configuration.FULL_STACK else 0.0
+        return np.array([lower,0.0]),np.array([self.value['stage1_propellant_initial_kg'],upper2])
+
+    def mass_properties(self, configuration, propellant_kg, consumption_kgps=(0.0, 0.0),
+                        consumption_rate_kgps2=(0.0,0.0)):
         configuration = Configuration(configuration)
         prop = np.asarray(propellant_kg, dtype=float)
         rate = np.asarray(consumption_kgps, dtype=float)
-        if prop.shape != (2,) or rate.shape != (2,) or not np.all(np.isfinite(np.r_[prop, rate])):
+        rate_change = np.asarray(consumption_rate_kgps2,dtype=float)
+        if prop.shape != (2,) or rate.shape != (2,) or rate_change.shape != (2,) or not np.all(np.isfinite(np.r_[prop, rate,rate_change])):
             raise ValueError("Propellant and consumption arrays need two finite components.")
         if np.any(prop < -1e-7) or np.any(rate < 0):
             raise ValueError("Propellant and consumption must be nonnegative.")
         prop = np.maximum(prop, 0.0)
-        if configuration is Configuration.FIRST_STAGE and (prop[1] > 1e-7 or rate[1] > 0):
+        if configuration is Configuration.FIRST_STAGE and (prop[1] > 1e-7 or rate[1] > 0 or rate_change[1] != 0):
             raise ValueError("A detached booster cannot retain or consume Stage 2 propellant.")
         v = self.value
         radius = v["body_diameter_m"]/2
@@ -160,16 +167,18 @@ class VehicleModel:
                       else [fixed_cylinder("stage1_dry", v["stage1_dry_mass_kg"], 0.0,
                             v["stage1_length_m"]/2, v["stage1_length_m"], radius)])
         if self.mass_model_name == "dual_tank":
-            components.extend(self.stage1_liquid_components(prop[0], rate[0]))
+            components.extend(self.stage1_liquid_components(prop[0], rate[0],rate_change[0]))
         else:
             components.append(fixed_cylinder("stage1_propellant", prop[0], -rate[0],
-                              v["stage1_length_m"]/2, v["stage1_length_m"], radius))
+                              v["stage1_length_m"]/2, v["stage1_length_m"], radius,
+                              mass_acceleration_kgps2=-rate_change[0]))
         if configuration is Configuration.FULL_STACK:
             components += [
                 fixed_cylinder("stage2_dry", v["stage2_dry_mass_kg"], 0.0,
                                v["stage2_cg_station_m"], v["stage2_length_m"], radius),
                 fixed_cylinder("stage2_propellant", prop[1], -rate[1],
-                               v["stage2_cg_station_m"], v["stage2_length_m"], radius),
+                               v["stage2_cg_station_m"], v["stage2_length_m"], radius,
+                               mass_acceleration_kgps2=-rate_change[1]),
                 fixed_cylinder("fairing", v["fairing_mass_kg"], 0.0,
                                v["fairing_cg_station_m"], v["fairing_length_m"], v["fairing_diameter_m"]/2),
                 fixed_cylinder("payload", v["payload_mass_kg"], 0.0,

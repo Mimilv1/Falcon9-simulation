@@ -1,60 +1,77 @@
-# Reusable A-block mathematics
+# Shared A/B/C contract — Body +x
 
-This commit supplies mass-property calculations, coordinate mathematics,
-load assembly and an RK4 rigid-body core independently of `VehicleData.py`.
-Importing the four core modules does not instantiate a Falcon 9 or load vehicle
-parameter files. NumPy is required. Demonstration scenarios are excluded from this branch.
+All shared vectors use current Body axes; +x is axial toward the nose, Ixx is
+axial inertia, and Iyy/Izz are transverse. No ENU/ECEF state fields or Earth
+coordinate helpers are in the active API. Initial quaternion [1,0,0,0] maps current
+Body to the fixed initial Body basis. Geographic heading remains unspecified.
 
-| Module | Responsibility |
+## Origins and state meanings
+
+| Quantity | Origin / meaning |
 | --- | --- |
-| `mass_properties.py` | Axisymmetric component CG/inertia and geometric derivatives; parallel-axis combination |
-| `frames.py` | Hamilton scalar-first quaternion operations, Body/ENU rotations, WGS-84 ENU/ECEF geometry |
-| `load_interface.py` | Sum application-point forces and moments about the supplied current CG |
-| `dynamics.py` | CG state derivatives, RK4 integration and navigation truth outputs |
+| State.position_body_m | Fixed initial origin -> instantaneous CG, expressed in CURRENT Body axes |
+| State.velocity_body_mps | Inertial/geometric CG velocity, expressed in CURRENT Body axes |
+| Vehicle.position / velocity | Same fixed origin and current Body axes, but tracking the structural base |
+| CG/component stations | Distance from the vehicle structural base, along Body +x |
+| AppliedForce.station_body_m | Fixed vehicle structural station, not a CG arm |
+| ExhaustPort.station_body_m | Fixed nozzle-exit station from the same structural datum; not necessarily the engine pivot |
+| Moment/inertia | About instantaneous CG, Body components |
 
-## Coordinate and interface contract
+Fixed-origin position does not become zero because Body axes rotate. Its stored
+components change through ṙᴮ=vᴮ−ω×rᴮ. Velocity components similarly require the
+transport term −ω×vᴮ. The quaternion records the changing basis.
 
-- Body +x points toward the nose; initially +y east and +z north.
-- Reference frame is fixed launch-site ENU: east, north, up.
-- Quaternions use [w, x, y, z], Hamilton products and Body-to-ENU mapping.
-- Initial vertical quaternion is [0.5, −0.5, −0.5, −0.5].
-- Structural stations use a fixed base datum in Body axes. Inertias/moments use current CG.
-- `State.position_enu_m` tracks CG; `State.velocity_body_mps` is CG ground-relative
-  velocity expressed in Body. Public navigation velocity is rotated to ENU.
-- Earth rotation is omitted by the propagator. WGS-84 constants belong only to
-  coordinate output and do not introduce Earth-rotation dynamics.
+## B inputs
 
-`rk4_step(t, state, dt, model, configuration, provider)` accepts a model object
-with `mass_model_name` and a callable
-`mass_properties(configuration, propellant_kg, consumption_kgps)` returning
-`MassProperties`. No particular Vehicle class is imported by the core.
+`provider(time_s, trial_state) -> Loads` is evaluated at every RK4 stage.
 
-The load provider is called at every RK4 evaluation and returns `Loads`:
-Body nongravitational force, Body moment about current CG, ENU gravity, and
-nonnegative consumption rates for [stage 1, attached stage 2].
-`assemble_loads` requires gravity explicitly; it has no assumed local gravity.
-Do not include gravity in both the force list and the separate gravity vector.
-Do not add an application-point moment twice.
+| Loads field | Definition |
+| --- | --- |
+| force_body_n | Net thrust plus aerodynamic force, gravity excluded; thrust already includes relative exhaust momentum/pressure reaction |
+| moment_body_nm | Net external moment about current CG |
+| gravity_body_mps2 | Gravity in CURRENT Body, added once |
+| consumption_kgps | Nonnegative [stage1,stage2] mass consumption |
+| exhaust_ports | Each port's stage index, fixed structural station, q, dq/dt and per-unit-mass exit gyration |
 
-## Current physical scope
+Use `assemble_loads` to sum application-point forces and their r×F once.
+Supply gravity explicitly. A constant vector in an initial basis generally
+changes Body components as the rocket turns; do not hold gravity at [-g,0,0]
+through arbitrary rotation. B may use the generic quaternion operations for this
+physical direction calculation without introducing a geographic frame.
 
-Mass components and inertia calculations use an axisymmetric geometric model.
-The liquid-column model requires settled, frozen-density cylinders; it does not
-resolve slosh or fluid behavior during free fall. Dataclass freezing prevents
-field reassignment but does not make contaienu NumPy arrays read-only.
+Port flows must sum to each stage's consumption. The weighted transverse exit
+centroid and its derivative must vanish for this axial-flow model. Point ports
+use zero local gyration; `uniform_disk_gyration` is an explicit uniform-flux disk
+approximation. Swirl and moving/gimbaling exit-boundary kinematics are excluded.
 
-The preliminary variable-inertia balance omits exhaust angular-momentum flux.
-The core explicitly rejects positive consumption with `mass_model_name="dual_tank"`
-until moving-CG kinematics and open-system momentum are treated consistently.
-Fixed-mass diagnostic runs are supported. A successful numerical check is not
-validation against an actual launch or landing.
+`dq/dt` is the total derivative along the trajectory. Zero is an assumption of
+locally constant flow, not an automatic derivative of a throttle function.
+Use smooth flow at ignition/cutoff and split scheduled smooth changes at
+`propagate(..., breakpoints_s=...)`. Abrupt jumps need an impulse/state map.
 
-## Checks
+## Model and integration
 
-Run `python -m unittest discover -s tests -p test_core_math.py -v`.
-Axial inertia is Ixx; transverse inertias are Iyy and Izz. CG station vectors are [axial station, 0, 0].
+`model.mass_properties(configuration, propellant_kg, consumption_kgps,
+consumption_rate_kgps2=...)` returns MassProperties including CG migration rate,
+CG migration acceleration and mass second derivative. With VehicleMassAdapter,
+configuration=None and the attached Stage objects define the vehicle.
+`model.propellant_bounds(configuration)` returns lower/upper fuel limits.
 
-The fixtures are synthetic numerical inputs, not Falcon 9 parameters. Checks
-cover analytical mass combination, force-arm sign, ENU orientation, free fall,
-and constant-moment rotation. Vehicle-specific parameters and scenarios belong
-in a separate commit.
+`propagate(start_s,state,end_s,step_s,model,configuration,provider,...)` returns
+times, accepted states and a stop reason. At a limiting tank it stops within
+inventory_tolerance_kg (default 1e-6 kg); it does not invent a negative inventory
+or automatic engine command. Continue with an appropriate next provider/phase.
+
+## C outputs
+
+`navigation_truth` returns Body-component CG position/velocity, relative-initial
+attitude, Body angular rate, nongravitational force and Body gravity.
+`acceleration_truth(state,loads,properties,sensor_station_body_m=...)` returns
+geometric CG acceleration, fixed-sensor acceleration and ideal specific force.
+Pass the SAME structural sensor station every time for a physically fixed IMU.
+The default evaluates a fixed-body point coincident with CG at that instant;
+it does not describe a sensor that mechanically follows the moving CG.
+
+Body-coordinate acceleration is not the time derivative of its velocity
+components without the transport correction. Test fixtures exercise that
+distinction and compare against fixed-initial-basis conservation balances.

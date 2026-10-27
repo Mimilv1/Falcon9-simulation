@@ -19,6 +19,8 @@ class MassComponent:
     inertia_rate_at_center_kgm2ps: np.ndarray
     length_m: float
     radius_m: float
+    mass_acceleration_kgps2: float = 0.0
+    center_acceleration_mps2: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -30,6 +32,8 @@ class MassProperties:
     mass_rate_kgps: float = 0.0
     cg_rate_body_mps: np.ndarray | None = None
     components: tuple[MassComponent, ...] = ()
+    mass_acceleration_kgps2: float = 0.0
+    cg_acceleration_body_mps2: np.ndarray | None = None
 
     def arm_from_station(self, station_body_m):
         """Convert a structural-datum station to a force arm about current CG."""
@@ -46,25 +50,26 @@ def cylinder_inertia_per_kg(length_m, radius_m):
     return np.diag([radius**2/2] + [(3*radius**2 + length**2)/12]*2)
 
 
-def fixed_cylinder(name, mass_kg, mass_rate_kgps, center_axial_m, length_m, radius_m):
-    values = [mass_kg, mass_rate_kgps, center_axial_m, length_m, radius_m]
+def fixed_cylinder(name, mass_kg, mass_rate_kgps, center_axial_m, length_m, radius_m,
+                   *, mass_acceleration_kgps2=0.0):
+    values = [mass_kg, mass_rate_kgps, center_axial_m, length_m, radius_m,mass_acceleration_kgps2]
     if not np.all(np.isfinite(values)) or mass_kg < 0:
         raise ValueError("Component properties must be finite, with nonnegative mass.")
     shape = cylinder_inertia_per_kg(length_m, radius_m)
     return MassComponent(name, float(mass_kg), float(mass_rate_kgps),
                          float(center_axial_m), 0.0, mass_kg*shape,
-                         mass_rate_kgps*shape, float(length_m), float(radius_m))
+                         mass_rate_kgps*shape, float(length_m), float(radius_m),float(mass_acceleration_kgps2))
 
 
 def liquid_column(name, mass_kg, mass_rate_kgps, bottom_axial_m, radius_m,
-                  density_kgm3, max_height_m):
+                  density_kgm3, max_height_m, *, mass_acceleration_kgps2=0.0):
     """A uniform liquid cylinder draining from a fixed bottom along Body +x.
 
     Rates are derivatives of the geometric mass-property model, not additional
     forces or torques. Their use in open-system equations needs a separate
     momentum-flux derivation. At zero mass, an imposed outflow is a left limit.
     """
-    values = [mass_kg, mass_rate_kgps, bottom_axial_m, radius_m, density_kgm3, max_height_m]
+    values = [mass_kg, mass_rate_kgps, bottom_axial_m, radius_m, density_kgm3, max_height_m,mass_acceleration_kgps2]
     if (not np.all(np.isfinite(values)) or mass_kg < 0
             or min(radius_m, density_kgm3, max_height_m) <= 0):
         raise ValueError("Invalid liquid-column geometry or mass.")
@@ -78,7 +83,8 @@ def liquid_column(name, mass_kg, mass_rate_kgps, bottom_axial_m, radius_m,
     local_rate += np.diag([0.0] + [mass_kg*height*height_rate/6]*2)
     return MassComponent(name, float(mass_kg), float(mass_rate_kgps),
                          bottom_axial_m + height/2, height_rate/2,
-                         mass_kg*shape, local_rate, height, radius_m)
+                         mass_kg*shape, local_rate, height, radius_m,
+                         float(mass_acceleration_kgps2),mass_acceleration_kgps2/(2*mass_per_height))
 
 
 def combine_components(components):
@@ -88,12 +94,17 @@ def combine_components(components):
         raise ValueError("At least one mass component is required.")
     mass = sum(c.mass_kg for c in components)
     mass_rate = sum(c.mass_rate_kgps for c in components)
+    mass_acceleration = sum(c.mass_acceleration_kgps2 for c in components)
     if mass <= 0:
         raise ValueError("Attached mass must be positive.")
     center = sum(c.mass_kg*c.center_axial_m for c in components)/mass
     center_rate = (sum(c.mass_rate_kgps*c.center_axial_m
                        + c.mass_kg*c.center_rate_mps for c in components)
                    - center*mass_rate)/mass
+    center_acceleration = (sum(c.mass_acceleration_kgps2*c.center_axial_m
+                               + 2*c.mass_rate_kgps*c.center_rate_mps
+                               + c.mass_kg*c.center_acceleration_mps2 for c in components)
+                           - center*mass_acceleration - 2*mass_rate*center_rate)/mass
     inertia = np.zeros((3, 3))
     inertia_rate = np.zeros((3, 3))
     for c in components:
@@ -105,4 +116,5 @@ def combine_components(components):
         inertia_rate += (c.inertia_rate_at_center_kgm2ps
                          + c.mass_rate_kgps*parallel + c.mass_kg*parallel_rate)
     return MassProperties(mass, np.array([center, 0.0, 0.0]), inertia, inertia_rate,
-                          mass_rate, np.array([center_rate, 0.0, 0.0]), components)
+                          mass_rate, np.array([center_rate, 0.0, 0.0]), components,
+                          mass_acceleration,np.array([center_acceleration,0.0,0.0]))

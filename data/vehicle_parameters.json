@@ -456,22 +456,24 @@
   },
   "mass_model_assumptions": {
     "class": "A",
-    "flight_default": "uniform_cylinder (legacy connection demo)",
+    "flight_default": "dual_tank with explicit balanced exhaust boundary data; no embedded scenario",
     "dual_tank": "Evidence-led settled cylindrical columns, fixed engine O/F=2.35; loaded ratio is independent",
     "tank_layout": "S3 structural sections mapped to flat cylinders; nozzle-exit/body-base datum alignment, domes, stringers and transfer tube displacement unresolved",
-    "liquid_motion": "Quasi-steady settled-fluid shape; frozen snapshots in rotation demo. Not a model of coast slosh, flip or reverse acceleration",
+    "liquid_motion": "Quasi-steady settled columns updated during powered integration. Coast slosh, flip, reverse acceleration and feed-system transients are not resolved.",
     "dry_geometry": "S4 shell/fins/engines/folded legs; S2 minus these masses leaves 6450 kg. Uniform thin shell over x=4..40.8 m is an explicit residual-allocation A. Other localized groups are equivalent disks of body radius.",
     "cross_vehicle_use": "S2 mass budget, S3 FT structure, S4 generic RFZ group estimates and S6 reference fluid conditions form a mixed-source research surrogate. Not a reconstructed Falcon 9 variant.",
-    "upper_vehicle": "Old stage2/fairing/payload A geometry retained only in legacy full-stack scenario; no newly claimed flight values",
-    "rates": "Geometric CG/J derivatives only. Powered dual-tank propagation is guarded until consistent open-system momentum/kinematics are implemented.",
-    "integration": "Shared core excludes demonstration scenarios. Active dual-tank consumption remains guarded; no full open-system burn integration is claimed.",
+    "upper_vehicle": "Stage2/fairing/payload equivalent geometry remains A in full-stack mass properties; not measured CG/inertia for a specific mission.",
+    "rates": "Analytical geometric mass/CG/inertia derivatives, including CG and mass second derivatives; coupled to explicit exhaust momentum terms.",
+    "integration": "Body-only powered integration with explicit balanced exhaust flow, CG migration and angular-momentum outflow; smooth flow required. See docs/powered_dynamics.md.",
     "inventory": "Fixed initial loading and flow ratio allow total-mass state reconstruction. No venting, variable mixture, refilling or restart-specific ratio schedules.",
-    "engine_operating_set": "Pezent Table 2.16: vacuum thrust 914/935 kN, Isp 311/348 s, exit area 0.68/4.9 m2, throttle minimum 0.60/0.40. These are literature estimates; do not imply actual mission limits."
+    "engine_operating_set": "Pezent Table 2.16: vacuum thrust 914/935 kN, Isp 311/348 s, exit area 0.68/4.9 m2, throttle minimum 0.60/0.40. These are literature estimates; do not imply actual mission limits.",
+    "earth_model": "Current Body components; fixed initial Body basis only for attitude bookkeeping. No active geographic transformation API.",
+    "exhaust_closure": "Fixed port stations, axial CG migration, balanced axial exhaust first moments; relative-flow internal angular momentum/swirl and moving nozzle boundaries omitted."
   },
   "numeric_source": "Falcon9Parameters in vehicle_parameters.py; Vehicle factory references these values",
   "team_repository": "https://github.com/Mimilv1/Falcon9-simulation",
   "team_base_commit": "5b61a45b07766fbd458d4410a1034977da824837",
-  "revision": "v4: team objects, ENU / Body +x, no demo scenarios",
+  "revision": "Body-only shared vectors, +x axial, explicit exhaust flow and moving-CG dynamics",
   "sources": {
     "S1": {
       "title": "SpaceX Falcon User Guide, May 2025",
@@ -533,17 +535,18 @@
     }
   },
   "coordinate_convention": {
-    "reference": "ENU east/north/up",
-    "body": "Body +x nose; initially +y east, +z north",
-    "quaternion": "Hamilton scalar-first Body to ENU",
+    "shared_vectors": "Current Body components; Body +x points toward nose",
+    "body_transverse_axes": "Right handed; ring angle zero is +y, +90 degrees is +z; no geographic heading assigned",
+    "quaternion": "Hamilton [w,x,y,z], current Body -> fixed initial Body basis",
     "initial_quaternion_wxyz": [
-      0.5,
-      -0.5,
-      -0.5,
-      -0.5
+      1,
+      0,
+      0,
+      0
     ],
+    "position": "Vector from fixed initial origin to current CG, expressed in CURRENT Body, not CG relative to itself",
+    "gravity": "Current Body vector from B; rotate its direction as attitude changes",
     "inertia_order": "Ixx axial; Iyy/Izz transverse",
-    "vehicle_position_origin": "fixed structural base",
-    "dynamics_state_origin": "instantaneous CG"
+    "geographic_transformations": "ENU/ECEF deferred, absent from active propagation API"
   }
 }

@@ -19,8 +19,8 @@ class AppliedForce:
             object.__setattr__(self, field, vector3(getattr(self, field)).copy())
 
 
-def assemble_loads(properties, applied_forces, *, gravity_enu_mps2,
-                   free_moment_body_nm=(0, 0, 0), consumption_kgps=(0, 0)):
+def assemble_loads(properties, applied_forces, *, gravity_body_mps2,
+                   free_moment_body_nm=(0, 0, 0), consumption_kgps=(0, 0),exhaust_ports=()):
     """Sum non-gravitational forces; add each arm cross force exactly once.
 
     Pure couples belong in free_moment_body_nm. Gravity stays separate and is
@@ -33,4 +33,4 @@ def assemble_loads(properties, applied_forces, *, gravity_enu_mps2,
         force += applied.force_body_n
         moment += np.cross(properties.arm_from_station(applied.station_body_m),
                            applied.force_body_n)
-    return Loads(force, moment, gravity_enu_mps2, consumption_kgps)
+    return Loads(force, moment, gravity_body_mps2, consumption_kgps,tuple(exhaust_ports))

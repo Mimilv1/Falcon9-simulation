@@ -6,7 +6,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from mass_properties import fixed_cylinder, combine_components
-from frames import body_to_enu_matrix, LaunchSite
+from frames import body_to_initial_body_matrix
 from load_interface import AppliedForce, assemble_loads
 from dynamics import State, Loads, rk4_step
 
@@ -31,42 +31,41 @@ class CoreMathChecks(unittest.TestCase):
 
     def test_base_side_force_has_negative_z_moment(self):
         p = FixedModel().properties
-        loads = assemble_loads(p,[AppliedForce([0,1000,0],[0,0,0])],gravity_enu_mps2=[0,0,0])
+        loads = assemble_loads(p,[AppliedForce([0,1000,0],[0,0,0])],gravity_body_mps2=[0,0,0])
         np.testing.assert_allclose(loads.moment_body_nm,[0,0,-20000])
 
-    def test_vertical_body_axes_map_to_enu(self):
-        r = body_to_enu_matrix([.5,-.5,-.5,-.5])
-        np.testing.assert_allclose(r,[[0,1,0],[0,0,1],[1,0,0]],atol=1e-14)
+    def test_identity_is_the_initial_body_orientation(self):
+        np.testing.assert_allclose(body_to_initial_body_matrix([1,0,0,0]),np.eye(3))
 
     def test_free_fall(self):
         model = FixedModel()
-        state = State([0,0,100],[0,0,0],[.5,-.5,-.5,-.5],[0,0,0],[0,0])
-        provider = lambda t,s: Loads([0,0,0],[0,0,0],[0,0,-10],[0,0])
+        state = State([100,0,0],[0,0,0],[1,0,0,0],[0,0,0],[0,0])
+        provider = lambda t,s: Loads([0,0,0],[0,0,0],[-10,0,0],[0,0])
         result = rk4_step(0,state,1,model,None,provider)
-        np.testing.assert_allclose(result.position_enu_m,[0,0,95],atol=1e-12)
-        np.testing.assert_allclose(body_to_enu_matrix(result.quaternion_body_to_enu_wxyz)
-                                   @ result.velocity_body_mps,[0,0,-10],atol=1e-12)
+        np.testing.assert_allclose(result.position_body_m,[95,0,0],atol=1e-12)
+        np.testing.assert_allclose(body_to_initial_body_matrix(result.quaternion_body_to_initial_body_wxyz)
+                                   @ result.velocity_body_mps,[-10,0,0],atol=1e-12)
 
     def test_constant_moment_rotation(self):
         model = FixedModel()
         p = model.properties
-        state = State([0,0,100],[0,0,0],[.5,-.5,-.5,-.5],[0,0,0],[0,0])
-        provider = lambda t,s: assemble_loads(p,[AppliedForce([0,1000,0],[0,0,0])],gravity_enu_mps2=[0,0,0])
+        state = State([100,0,0],[0,0,0],[1,0,0,0],[0,0,0],[0,0])
+        provider = lambda t,s: assemble_loads(p,[AppliedForce([0,1000,0],[0,0,0])],gravity_body_mps2=[0,0,0])
         alpha = -20000/p.inertia_body_kgm2[2,2]
         for k in range(200): state = rk4_step(k*.01,state,.01,model,None,provider)
-        nose = body_to_enu_matrix(state.quaternion_body_to_enu_wxyz)[:,0]
-        tilt = np.arctan2(np.linalg.norm(nose[:2]),nose[2])
+        nose = body_to_initial_body_matrix(state.quaternion_body_to_initial_body_wxyz)[:,0]
+        tilt = np.arctan2(np.linalg.norm(nose[1:]),nose[0])
         self.assertAlmostEqual(tilt,abs(alpha)*2,places=10)
         self.assertAlmostEqual(state.omega_body_radps[2],alpha*2,places=10)
 
-    def test_enu_ecef_directions_and_round_trip(self):
-        site = LaunchSite(0,0,0)
-        np.testing.assert_allclose(site.vector_enu_to_ecef([1,0,0]),[0,1,0],atol=1e-14)
-        np.testing.assert_allclose(site.vector_enu_to_ecef([0,1,0]),[0,0,1],atol=1e-14)
-        np.testing.assert_allclose(site.vector_enu_to_ecef([0,0,1]),[1,0,0],atol=1e-14)
-        site = LaunchSite(28.5,-80.6,25)
-        point = np.array([123.4,-567.8,10000.])
-        np.testing.assert_allclose(site.position_ecef_to_enu(site.position_enu_to_ecef(point)),point,atol=1e-8)
+    def test_rotating_body_storage_preserves_straight_physical_motion(self):
+        model=FixedModel()
+        state=State([100,0,0],[10,0,0],[1,0,0,0],[0,0,1],[0,0])
+        provider=lambda t,s:Loads([0,0,0],[0,0,0],[0,0,0],[0,0])
+        for k in range(100): state=rk4_step(k*.01,state,.01,model,None,provider)
+        rotation=body_to_initial_body_matrix(state.quaternion_body_to_initial_body_wxyz)
+        np.testing.assert_allclose(rotation@state.position_body_m,[110,0,0],atol=2e-7)
+        np.testing.assert_allclose(rotation@state.velocity_body_mps,[10,0,0],atol=2e-8)
 
 
 if __name__ == '__main__': unittest.main()
