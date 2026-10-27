@@ -1,0 +1,84 @@
+{
+  "phase": "early_ascent_attitude_check",
+  "duration_s": 30.0,
+  "step_s": 0.02,
+  "stage1_throttle": 1.0,
+  "initial_base_position_body_m": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "initial_base_velocity_body_mps": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "initial_omega_body_radps": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "up_initial_body": [
+    1.0,
+    0.0,
+    0.0
+  ],
+  "gravity_mps2": 9.80665,
+  "ground_altitude_m": 0.0,
+  "wind_initial_body_mps": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "aero_reference_area_m2": 21.08,
+  "drag_curve_file": "data/drag_curve_pezent.json",
+  "nozzle_exit_axial_m": 0.0,
+  "imu_station_body_m": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "provenance": {
+    "phase": "A: first 30 s after release with engines already at steady throttle; no ignition transient, MECO or separation.",
+    "initial_state": "A: stationary structural base at the initial ground origin, initially vertical Body +x. Nominal literature propellant loading at release; not a reconstructed flight.",
+    "step_s": "A: 0.02 s shared truth interval; not a measured sensor sampling requirement.",
+    "propulsion": "E/A: Pezent 2024 Table 2.16: per-engine Tvac=914 kN, Isp_vac=311 s, Ae=0.68 m2. Fixed Isp and area, q=throttle*Tvac/(Isp_vac*g0), T=throttle*Tvac-Ae*p(h).",
+    "propulsion_source": "https://ir-api.ua.edu/api/core/bitstreams/cafcf02b-b6e7-47d8-a41b-24b1ba12a154/content",
+    "atmosphere": "E/A: standard dry troposphere, T0=288.15 K, p0=101325 Pa, lapse=0.0065 K/m, R=287.05287 J/(kg K), gamma=1.4. Local geometric height approximates geopotential height. Range 0..11 km; no actual weather.",
+    "atmosphere_source": "https://ntrs.nasa.gov/citations/19770009539",
+    "atmosphere_reference_table": "https://atmos.nmsu.edu/planetary_datasets/earth_temppres.html",
+    "aero_area": "E: 21.08 m2 from Pezent Table 2.18 for the full stack; kept with that coefficient convention.",
+    "drag_coefficient": "E/A: approximate raster digitization of Pezent Fig 2.13(b), printed p.76 / PDF p.93, with piecewise-linear interpolation over Mach 0..7. Source geometry: RasAeroII at zero AoA with a 5.2 m fairing. Not original numerical data or flight measurements. Pixel-scale uncertainty and source PDF hash are recorded in data/drag_curve_pezent.json. Applying the curve to this mixed-source vehicle is an assumption.",
+    "aero_moment": "A: drag-only force through current CG; no lift, normal-force/aero-moment model or pitch program.",
+    "gravity_wind": "A: constant standard-gravity magnitude and zero wind. Gravity direction is updated in current Body as attitude changes; no ENU/ECEF conversion.",
+    "exhaust": "A: nine equal flows, fixed coplanar exit station x=0, existing 1.3 m engine ring, uniform exit disks; no gimbal or internal swirl.",
+    "imu": "A: virtual fixed sensor at the structural base [0,0,0]; not the measured Falcon 9 IMU location. Outputs are ideal; C adds sensor errors.",
+    "scope": "Powered small-angle attitude verification; no aerodynamic normal force/moment, TVC, feedback control or real-flight validation.",
+    "attitude_check": "A: verification load only, not a physical wind/actuator model. At fixed station [1,0,0] m, Fy=10000*sin(2*pi*(t-10)/4)^3 N for 10<t<14 s and zero otherwise. Peak 10 kN is about 0.13 percent of initial total thrust; chosen to exercise small-angle rotation without changing engine flow. Both lobes and endpoints are integration breakpoints.",
+    "comparison_imu": "A: second virtual IMU at fixed station [40,0,0] m for checking rotation lever-arm effects. Both sensor locations are arbitrary verification stations, not surveyed flight hardware.",
+    "angle_of_attack_limit": "A: stop with an error above 3 degrees AoA. This is a selected small-angle verification limit, not validation of the zero-AoA drag curve at nonzero AoA."
+  },
+  "prescribed_loads": [
+    {
+      "kind": "smooth_force_doublet",
+      "start_s": 10.0,
+      "duration_s": 4.0,
+      "peak_force_body_n": [
+        0.0,
+        10000.0,
+        0.0
+      ],
+      "station_body_m": [
+        1.0,
+        0.0,
+        0.0
+      ]
+    }
+  ],
+  "comparison_imu_station_body_m": [
+    40.0,
+    0.0,
+    0.0
+  ],
+  "max_angle_of_attack_deg": 3.0
+}

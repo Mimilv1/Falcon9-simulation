@@ -39,6 +39,7 @@ would make a stationary point move when only the rocket turns.
 | `propulsion.py` | Steady engine fuel flow and ambient-pressure-dependent thrust |
 | `Aerodynamics.py` | Digitized Mach-dependent drag curve; drag through CG |
 | `ascent.py` / `main.py` | Connect A+B, propagate one phase segment, export C truth |
+| `prescribed_loads.py` | Explicit smooth force doublet for powered-attitude verification |
 | `config/powered_ascent.json` | Shared first-segment inputs and explicit assumptions |
 
 Read [the shared interface](docs/core_api.md), [powered dynamics and assumptions](docs/powered_dynamics.md),
@@ -54,6 +55,11 @@ Run `python main.py` for **30 seconds of early vertical powered ascent**.
 Results appear in `results/powered_ascent/`, including `truth_for_c.csv`, the
 configuration, source metadata and summary. See [the first segment guide](docs/first_ascent_segment.md)
 for assumptions, signal meanings and how C can use the output.
+
+Run `python main.py --config config/ascent_attitude_check.json` for the connected
+small-angle rotation check, writing `results/attitude_check/`. It adds an explicit
+verification force and a second virtual accelerometer; see [the attitude check](docs/attitude_check.md)
+for assumptions, moment signs and sensor lever-arm validation.
 
 `build_falcon9()` creates independent team objects. `vehicle.mass_model()` evaluates
 RK trial inventories without mutating Stage objects; use configuration=None.

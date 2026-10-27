@@ -27,6 +27,10 @@ The first implementation is `SteadyPoweredAscent` in `ascent.py`, connecting
 `propulsion.py`, `Environement.py` and `Aerodynamics.py`. It uses the existing
 vehicle profile; B can replace each model while keeping the Loads contract.
 See [the executable first segment](first_ascent_segment.md).
+It optionally assembles separate prescribed verification loads via
+`prescribed_loads.py`; these do not alter engine flow or represent a TVC model.
+The [attitude-check configuration](attitude_check.md) exercises nonzero rotation
+and fixed-sensor lever arms while keeping the same shared coordinate convention.
 
 `provider(time_s, trial_state) -> Loads` is evaluated at every RK4 stage.
 

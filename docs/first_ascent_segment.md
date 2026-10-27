@@ -95,6 +95,11 @@ It is not sufficient to validate attitude estimation or full navigation.
 
 ## Next A/B milestones
 
+A connected small-angle rotation case is now available in
+[the attitude-check guide](attitude_check.md). It checks the force/moment/attitude
+and sensor plumbing with explicit analytic loads. Physical gimbal and aerodynamic
+normal-force/moment models in the milestones below remain outstanding.
+
 1. Agree on the fixed sensor station and measurement-column contract with C.
 2. Add a controlled attitude-changing case and B's normal-force/moment/gimbal
    models, then verify signs, moments and sensor lever arms.
