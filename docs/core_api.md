@@ -23,72 +23,49 @@ transport term −ω×vᴮ. The quaternion records the changing basis.
 
 ## B inputs
 
-The first implementation is `SteadyPoweredAscent` in `ascent.py`, connecting
-`propulsion.py`, `Environement.py` and `Aerodynamics.py`. It uses the existing
-vehicle profile; B can replace each model while keeping the Loads contract.
-See [the executable first segment](first_ascent_segment.md).
-It optionally assembles separate prescribed verification loads via
-`prescribed_loads.py`; these do not alter engine flow or represent a TVC model.
-The [attitude-check configuration](attitude_check.md) exercises nonzero rotation
-and fixed-sensor lever arms while keeping the same shared coordinate convention.
-
-`provider(time_s, trial_state) -> Loads` is evaluated at every RK4 stage.
+`provider(time_s, trial_state) -> Loads` is evaluated at each RK4 stage.
+The temporary `SteadyPoweredAscent` provider in `ascent.py` connects the retained
+thrust, drag and environment models. It does not select a flight scenario.
 
 | Loads field | Definition |
 | --- | --- |
-| force_body_n | Net thrust plus aerodynamic force, gravity excluded; thrust already includes relative exhaust momentum/pressure reaction |
-| moment_body_nm | Net external moment about current CG |
-| gravity_body_mps2 | Gravity in CURRENT Body, added once |
-| consumption_kgps | Nonnegative [stage1,stage2] mass consumption |
-| exhaust_ports | Each port's stage index, fixed structural station, q, dq/dt and per-unit-mass exit gyration |
+| force_body_n | Net nongravitational force, N; thrust already includes exhaust momentum/pressure reaction |
+| moment_body_nm | External moment about current CG, N·m |
+| gravity_body_mps2 | Gravity in current Body, added once |
+| consumption_kgps | Nonnegative [stage1,stage2] consumption, kg/s |
+| exhaust_ports | Stage index, fixed exit station, flow, analytic flow derivative and exit gyration |
 
-Use `assemble_loads` to sum application-point forces and their r×F once.
-Supply gravity explicitly. A constant vector in an initial basis generally
-changes Body components as the rocket turns; do not hold gravity at [-g,0,0]
-through arbitrary rotation. B may use the generic quaternion operations for this
-physical direction calculation without introducing a geographic frame.
+`assemble_loads` sums station forces and r × F once. Do not add the same force
+moment again. Gravity direction must follow attitude in Body components.
+Port flows must match consumption. This core requires axial CG migration,
+balanced transverse exhaust centroids and fixed exit stations; gimbaling exit
+boundary motion and internal swirl are not implemented.
 
-Port flows must sum to each stage's consumption. The weighted transverse exit
-centroid and its derivative must vanish for this axial-flow model. Point ports
-use zero local gyration; `uniform_disk_gyration` is an explicit uniform-flux disk
-approximation. Swirl and moving/gimbaling exit-boundary kinematics are excluded.
+## A integration
 
-`dq/dt` is the total derivative along the trajectory. Zero is an assumption of
-locally constant flow, not an automatic derivative of a throttle function.
-Use smooth flow at ignition/cutoff and split scheduled smooth changes at
-`propagate(..., breakpoints_s=...)`. Abrupt jumps need an impulse/state map.
+`vehicle.mass_model()` evaluates trial fuel inventories without changing the
+accepted Stage objects. Use configuration=None. `vehicle.to_state(...)` and
+`vehicle.apply_state(...)` map structural-base and geometric-CG states, including
+CG migration. Supply matching consumption and derivative values to both maps;
+only synchronize accepted states.
 
-## Model and integration
+`propagate(..., breakpoints_s=...)` integrates smooth segments and stops at a
+limiting tank. It does not choose cutoff, separation or restart conditions.
+Supply consistent flow and dq/dt. Abrupt flow jumps need a separate impulse map.
 
-`model.mass_properties(configuration, propellant_kg, consumption_kgps,
-consumption_rate_kgps2=...)` returns MassProperties including CG migration rate,
-CG migration acceleration and mass second derivative. With VehicleMassAdapter,
-configuration=None and the attached Stage objects define the vehicle.
-`model.propellant_bounds(configuration)` returns lower/upper fuel limits.
+`SmoothShutdown(start_s,duration_s)` is an optional analytic envelope, not measured
+engine behavior; the caller must justify its parameters. No event times are set.
+`separate_coasting_vehicle(...)` requires zero flow/derivative and off engine
+commands. It returns two child states and a conservation audit without modifying
+the caller. The no-impulse/no-discard assumption must match the selected model.
 
-`propagate(start_s,state,end_s,step_s,model,configuration,provider,...)` returns
-times, accepted states and a stop reason. At a limiting tank it stops within
-inventory_tolerance_kg (default 1e-6 kg); it does not invent a negative inventory
-or automatic engine command. Continue with an appropriate next provider/phase.
+## C truth
 
-`SteadyPoweredAscent(..., command_envelope=SmoothShutdown(...))` optionally
-evaluates time-dependent flow and analytic dq/dt using an explicit shutdown
-verification envelope. Its nominal steady command stays unchanged during trials.
-`separate_coasting_vehicle(vehicle,state,time_s,loads)` requires zero flow, zero
-flow derivative and off engine commands. It returns lower/upper Vehicles, their
-mapped states and a conservation audit without mutating the caller. See
-[the connected sequence](shutdown_separation.md) for event and sensor-stream rules.
+`navigation_truth(state,loads)` provides CG position/velocity, relative-initial
+attitude, angular rate, nongravitational force and gravity in Body components.
+`acceleration_truth(...,sensor_station_body_m=...)` provides ideal specific force
+at a fixed structural sensor station. Use the same fixed station every time;
+CG coordinate acceleration is not a physical IMU measurement.
 
-## C outputs
-
-`navigation_truth` returns Body-component CG position/velocity, relative-initial
-attitude, Body angular rate, nongravitational force and Body gravity.
-`acceleration_truth(state,loads,properties,sensor_station_body_m=...)` returns
-geometric CG acceleration, fixed-sensor acceleration and ideal specific force.
-Pass the SAME structural sensor station every time for a physically fixed IMU.
-The default evaluates a fixed-body point coincident with CG at that instant;
-it does not describe a sensor that mechanically follows the moving CG.
-
-Body-coordinate acceleration is not the time derivative of its velocity
-components without the transport correction. Test fixtures exercise that
-distinction and compare against fixed-initial-basis conservation balances.
+Sensor errors, sampling and navigation estimation belong to C. Mission-specific
+initial states, event conditions and result export remain team integration work.

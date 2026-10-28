@@ -9,10 +9,24 @@ from propulsion import evaluate_steady_engine
 from Aerodynamics import DragOnlyAerodynamics,MachDragCurve
 from VehicleData import build_falcon9
 from dynamics import State
-from ascent import load_config,run_ascent,SteadyPoweredAscent
+from ascent import SteadyPoweredAscent
 
 
 class AscentModelChecks(unittest.TestCase):
+    def test_shared_load_provider_without_a_flight_scenario(self):
+        vehicle=build_falcon9()
+        for engine in vehicle.stages[0].engines:
+            engine.running=True
+            engine.throttle=1.0
+        environment=TroposphereEnvironment()
+        curve=MachDragCurve.from_json(Path(__file__).resolve().parents[1]/'data'/'drag_curve_pezent.json',21.08)
+        provider=SteadyPoweredAscent(vehicle,environment,DragOnlyAerodynamics(21.08,curve))
+        state=vehicle.to_state(consumption_by_stage={'stage1':provider.consumption_kgps[0]})
+        loads=provider(0,state)
+        np.testing.assert_allclose(loads.force_body_n,[9*845099,0,0],atol=1e-8)
+        np.testing.assert_allclose(loads.consumption_kgps,provider.consumption_kgps)
+        self.assertEqual(vehicle.stages[0].propellant_mass,410900)
+
     def test_drag_table_interpolation_and_supported_domain(self):
         curve=MachDragCurve([0,1,2],[.1,1.1,.9])
         self.assertAlmostEqual(curve(.5),.6)
@@ -59,20 +73,6 @@ class AscentModelChecks(unittest.TestCase):
         rest=State([100,0,0],[0,0,0],[1,0,0,0],[0,0,0],[410900,107500])
         np.testing.assert_allclose(aero.evaluate(rest,p,a,np.zeros(3)).force_body_n,[0,0,0])
 
-    def test_short_project_segment_produces_sensor_truth_and_climb(self):
-        cfg=load_config(Path(__file__).resolve().parents[1]/'config'/'powered_ascent.json')
-        cfg['duration_s']=1
-        rows,summary=run_ascent(cfg,step_s=.1)
-        self.assertEqual(summary['stop_reason'],'end_time')
-        self.assertGreater(summary['final']['base_altitude_m'],0)
-        self.assertGreater(summary['final']['thrust_n'],summary['initial']['thrust_n'])
-        flow=build_falcon9().parameters.stage1_mass_flow_max
-        self.assertAlmostEqual(summary['final']['total_mass_kg'],556300-flow,places=7)
-        self.assertAlmostEqual(summary['initial']['pressure_imu_pa'],101325)
-        self.assertGreater(summary['initial']['accelerometer_ideal_body_mps2_x'],9.80665)
-        self.assertIn('quaternion_body_to_initial_w',rows[0])
-        self.assertIn('gyro_ideal_body_radps_x',rows[0])
-        self.assertLess(summary['maximum_quaternion_norm_error'],1e-12)
 
 
 if __name__=='__main__':unittest.main()

@@ -83,12 +83,9 @@ Checks include the independent Tsiolkovsky velocity/position solution; equality
 with a separately assembled fixed-reference 6×6 coupled balance; geometric CG
 finite differences; roll angular momentum leaving with a finite exit; accepted
 base/CG state mapping; fixed-sensor kinematics; and limiting-tank stopping.
-A separate local 30 s prescribed-load case compares total linear/angular
-momentum budgets and halved integration steps. It is not flight-data validation.
-
-Runnable project configurations now include early ascent, attitude verification
-and [smooth shutdown/separation](shutdown_separation.md). Generated plots and
-outputs remain outside version control. The first B models are research
-surrogates; measured transients, separate-stage aerodynamics, fluid settling/slosh,
-variable O/F, navigation, guidance/control, geographic outputs and full mission
-validation remain separate.
+These are component and mathematical checks, not flight-data validation.
+The temporary B component models are retained. Mission initial states, event
+conditions and the full flight runner remain to be agreed and integrated.
+Measured transients, separate-stage aerodynamics, fluid settling/slosh,
+variable O/F, navigation, guidance/control and geographic outputs remain outside
+the current A core.
