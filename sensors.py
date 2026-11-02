@@ -1,4 +1,4 @@
-"""Sensors (IMU, GNSS): truth from dynamics + error models.
+"""Sensors (IMU, GNSS, LIDAR): truth from dynamics + error models.
 
 IMU, truth from dynamics.acceleration_truth:
 
@@ -33,7 +33,7 @@ def _cross_axis(value):
 @dataclass
 class IMUSpec:
     station_body_m: np.ndarray  # fixed structural station, Body, same datum as cg_station_body_m
-    rate_hz: float = 100.0
+    rate_hz: float = 200.0
     # white noise, 1-sigma per sample, PLACEHOLDER (datasheet)
     accel_sigma_mps2: float = 0.01
     gyro_sigma_radps: float = 1e-4
@@ -163,7 +163,7 @@ def quat_to_matrix(q):
 @dataclass
 class GNSSSpec:
     antenna_station_body_m: np.ndarray  # fixed structural station, Body, same datum as cg_station_body_m
-    rate_hz: float = 1.0  # typical 1-10 Hz
+    rate_hz: float = 10.0  # typical 1-10 Hz
     latency_s: float = 0.1  # sample at t reports truth at t - latency
     # position error, initial-frame axes (x = vertical at launch), 1-sigma, PLACEHOLDER (datasheet)
     pos_sigma_m: np.ndarray = field(default_factory=lambda: np.array([2.5, 1.5, 1.5]))  # white
@@ -291,6 +291,113 @@ class GNSS:
                 np.array([s.vel_true_mps for s in self.log]))
 
 
+@dataclass
+class LidarSpec:
+    station_body_m: np.ndarray  # fixed structural station, Body, same datum as cg_station_body_m
+    boresight_body: np.ndarray = field(default_factory=lambda: np.array([-1.0, 0.0, 0.0]))  # Body, -x = tail down at launch
+    rate_hz: float = 10.0
+    max_range_m: float = 1800.0  # reach, PLACEHOLDER (datasheet)
+    min_range_m: float = 1.0  # blind distance
+    planet_radius_m: float = 6_371_000.0  # spherical Earth, mean radius
+    # origin -> planet center, initial frame; None -> [-R, 0, 0] (origin on surface, x vertical at launch)
+    planet_center_init_m: Optional[np.ndarray] = None
+    range_sigma_m: float = 0.05  # constant noise part, 1-sigma, PLACEHOLDER
+    range_sigma_per_m: float = 1e-4  # noise proportional to range
+    range_bias_m: float = 0.0
+    range_scale_factor: float = 0.0  # dimensionless
+    dropout_prob: float = 0.0  # lost return (reflectivity, clouds), per sample
+
+    def __post_init__(self):
+        self.station_body_m = vector3(self.station_body_m).copy()
+        axis = vector3(self.boresight_body).astype(float)
+        if np.linalg.norm(axis) == 0.0:
+            raise ValueError("boresight_body must be nonzero")
+        self.boresight_body = axis / np.linalg.norm(axis)
+        if self.planet_center_init_m is None:
+            self.planet_center_init_m = np.array([-self.planet_radius_m, 0.0, 0.0])
+        self.planet_center_init_m = vector3(self.planet_center_init_m).copy()
+        if self.rate_hz <= 0 or self.planet_radius_m <= 0:
+            raise ValueError("rate_hz and planet_radius_m must be positive")
+        if not 0.0 <= self.min_range_m < self.max_range_m:
+            raise ValueError("need 0 <= min_range_m < max_range_m")
+        if not 0.0 <= self.dropout_prob <= 1.0:
+            raise ValueError("dropout_prob must be in [0, 1]")
+
+
+@dataclass(frozen=True)
+class LidarSample:
+    t: float
+    in_reach: bool  # sqrt(x2+y2+z2) < planet radius + max range
+    valid: bool  # return received
+    range_meas_m: float  # NaN if no return
+    range_true_m: float  # geometric range to surface along boresight, NaN if no hit
+    sigma_m: float  # reported 1-sigma at this range, NaN if no return
+
+
+class Lidar:
+    """Planet-ranging LIDAR: range along boresight to a spherical surface.
+
+    Gate: planet detectable only if distance to center < radius + max range.
+    Then ray-sphere hit within [min, max] range; error = scale factor, bias,
+    noise (constant + proportional to range), random dropouts.
+    """
+
+    def __init__(self, spec, seed=None):
+        self.spec = spec
+        self.rng = np.random.default_rng(seed)
+        self.period_s = 1.0 / spec.rate_hz
+        self.next_t = 0.0  # next sample time
+        self.log = []
+
+    def _geometry(self, state, properties):
+        """Sensor position relative to planet center + boresight, initial frame."""
+        s = self.spec
+        rot = quat_to_matrix(state.quaternion_body_to_initial_body_wxyz)
+        arm = s.station_body_m - properties.cg_station_body_m
+        rel = rot @ (state.position_body_m + arm) - s.planet_center_init_m
+        return rel, rot @ s.boresight_body
+
+    def measure(self, t, state, properties):
+        """One sample, no sampling-rate logic."""
+        s = self.spec
+        rel, d = self._geometry(state, properties)
+        radius = s.planet_radius_m
+        dist = float(np.sqrt(rel[0] ** 2 + rel[1] ** 2 + rel[2] ** 2))
+        in_reach = dist < radius + s.max_range_m
+        range_true = np.nan
+        if in_reach and dist > radius:  # above surface
+            b = float(rel @ d)
+            disc = b * b - (dist * dist - radius * radius)
+            if b < 0.0 and disc >= 0.0:  # surface ahead of the beam
+                hit = -b - np.sqrt(disc)
+                if s.min_range_m <= hit <= s.max_range_m:
+                    range_true = float(hit)
+        geometric = not np.isnan(range_true)
+        valid = geometric and not (s.dropout_prob > 0.0 and self.rng.random() < s.dropout_prob)
+        range_meas, sigma = np.nan, np.nan
+        if valid:
+            sigma = s.range_sigma_m + s.range_sigma_per_m * range_true
+            range_meas = (1.0 + s.range_scale_factor) * range_true + s.range_bias_m + self.rng.normal(0.0, sigma)
+        return LidarSample(t, bool(in_reach), bool(valid), range_meas, range_true, sigma)
+
+    def update(self, t, state, properties):
+        """Call on each ACCEPTED step; returns sample when due, else None. Needs step <= period."""
+        if t + 1e-9 < self.next_t:
+            return None
+        sample = self.measure(t, state, properties)
+        self.log.append(sample)
+        self.next_t += self.period_s
+        return sample
+
+    def to_arrays(self):
+        """Log -> (t, in_reach, valid, range_meas, range_true) numpy arrays."""
+        return (np.array([s.t for s in self.log]),
+                np.array([s.in_reach for s in self.log]),
+                np.array([s.valid for s in self.log]),
+                np.array([s.range_meas_m for s in self.log]),
+                np.array([s.range_true_m for s in self.log]))
+
+
 if __name__ == "__main__":
     # self-test: fake model, constant thrust along +x, no burn, no ports
     from types import SimpleNamespace
@@ -404,3 +511,54 @@ if __name__ == "__main__":
     print(f"pos err std (m): {np.round((pos_m - pos_t)[valid].std(axis=0), 2)}")
     print(f"vel err std (m/s): {np.round((vel_m - vel_t)[valid].std(axis=0), 3)}")
     print("GNSS OK")
+
+    # ---- LIDAR ----
+    LIDAR_STATION = [5.0, 0.0, 0.0]  # 5 m above base; CG starts at x = 20 m -> base on ground, sensor at 5 m
+
+    def run_lidar(spec, duration_s=60.0, dt=0.01, seed=0):
+        state = State([20, 0, 0], [0, 0, 0], [1, 0, 0, 0], [0, 0, 0], [0.0, 0.0])
+        lidar = Lidar(spec, seed=seed)
+        t = 0.0
+        loads, props = truth_inputs(t, state, model, configuration, provider)
+        lidar.update(t, state, props)  # sample at t=0
+        while t < duration_s - 1e-9:
+            state = rk4_step(t, state, dt, model, configuration, provider)  # accepted step
+            t += dt
+            loads, props = truth_inputs(t, state, model, configuration, provider)
+            lidar.update(t, state, props)
+        return lidar.to_arrays()
+
+    # 5) deterministic: nadir, no noise -> range = altitude while in reach, planet lost beyond max range
+    spec = LidarSpec(LIDAR_STATION, range_sigma_m=0.0, range_sigma_per_m=0.0)
+    ts, in_reach, valid, r_meas, r_true = run_lidar(spec, duration_s=60.0)
+    alt = 5.0 + 0.5 * a_x * ts ** 2
+    assert np.array_equal(in_reach, alt < spec.max_range_m), "reach gate mismatch"
+    assert np.array_equal(valid, in_reach), "nadir beam must hit whenever in reach"
+    assert np.allclose(r_meas[valid], alt[valid], atol=1e-3), "lidar range mismatch"
+    assert np.isnan(r_meas[~valid]).all()
+    print(f"lidar deterministic OK: range {r_meas[0]:.2f} m -> {r_meas[valid][-1]:.1f} m, "
+          f"planet lost at t = {ts[~valid][0]:.1f} s")
+
+    # 6) error model + dropouts, whole run in reach (18 s, altitude < max range)
+    spec = LidarSpec(LIDAR_STATION, range_scale_factor=1e-3, range_bias_m=0.1,
+                     range_sigma_m=0.05, range_sigma_per_m=1e-4, dropout_prob=0.2)
+    ts, in_reach, valid, r_meas, r_true = run_lidar(spec, duration_s=18.0)
+    assert in_reach.all()
+    z = ((r_meas - r_true)[valid] - (1e-3 * r_true[valid] + 0.1)) / (0.05 + 1e-4 * r_true[valid])
+    assert 0.65 < valid.mean() < 0.95, "dropout rate mismatch"
+    assert abs(z.std() - 1.0) < 0.3, "noise level mismatch"
+    print(f"lidar valid: {valid.mean():.2f} (dropout 0.2), normalized error std {z.std():.2f} (expect ~1)")
+
+    # 7) geometry: sideways beam sees no planet, 60 deg tilt -> range = altitude / cos(60 deg)
+    props0 = model.mass_properties(None, None, None)
+    state = State([20, 0, 0], [0, 0, 0], [1, 0, 0, 0], [0, 0, 0], [0.0, 0.0])
+    sample = Lidar(LidarSpec(LIDAR_STATION, boresight_body=[0.0, 1.0, 0.0])).measure(0.0, state, props0)
+    assert sample.in_reach and not sample.valid, "sideways beam must not hit"
+    q60 = [np.cos(np.pi / 6), 0.0, 0.0, np.sin(np.pi / 6)]  # 60 deg about z
+    pos_body = quat_to_matrix(q60).T @ [5.0, 0.0, 0.0] + [15.0, 0.0, 0.0]  # sensor at x = 5 m, initial frame
+    state = State(pos_body, [0, 0, 0], q60, [0, 0, 0], [0.0, 0.0])
+    spec = LidarSpec(LIDAR_STATION, range_sigma_m=0.0, range_sigma_per_m=0.0)
+    sample = Lidar(spec).measure(0.0, state, props0)
+    assert abs(sample.range_true_m - 5.0 / np.cos(np.pi / 3)) < 1e-3, "tilted range mismatch"
+    print(f"lidar geometry OK: tilted range {sample.range_true_m:.3f} m (expected 10)")
+    print("LIDAR OK")
