@@ -1,6 +1,6 @@
 # Falcon9-simulation
 
-Project 2 shared vehicle model, A dynamics core and temporary B load models.
+Project 2 CRS-10 vehicle model, A dynamics core and temporary B load models.
 Team mission conditions and the integrated flight runner are pending.
 
 ## Current team convention
@@ -55,8 +55,8 @@ Private flight checks, configurations and generated results are not included.
 - Team: select representative phases and one reference flight/data set; define
   cutoff, separation and restart conditions from evidence or explicit assumptions.
 
-Public research values form a mixed-source model, not a reconstruction of one
-Falcon 9 mission. Remaining fuel at the numerical tank limit is not a known
+CRS-10 is the default configuration; Dragon mass is estimated and CG/inertia are
+assumed from an equivalent cylinder. Stage/engine values remain mixed-source. Remaining fuel at the numerical tank limit is not a known
 landing reserve. Mission timing, separate-stage loads and free-flight liquid
 behavior have not been agreed or validated.
 

@@ -1,5 +1,5 @@
 {
-  "description": "Provisional Falcon-9-like model; literature masses are not verified Block 5 measurements.",
+  "description": "CRS-10 nominal configuration; loaded Dragon mass is an external estimate and CG/inertia use a uniform-cylinder assumption. Stage and engine values remain mixed-source research estimates.",
   "literature_set": "Pezent 2024, Table 2.17, printed p.77 (PDF p.94)",
   "literature_url": "https://ir-api.ua.edu/api/core/bitstreams/cafcf02b-b6e7-47d8-a41b-24b1ba12a154/content",
   "geometry_url": "https://www.spacex.com/assets/media/falcon-users-guide-2025-05-09.pdf",
@@ -9,24 +9,6 @@
       "class": "K",
       "source": "SpaceX 2025 guide, Table 2-1, p.9",
       "attribute": "body_diameter",
-      "unit": "m",
-      "source_ids": [
-        "S1"
-      ]
-    },
-    "fairing_diameter_m": {
-      "class": "K",
-      "source": "SpaceX 2025 guide, section 4.1.3, p.16",
-      "attribute": "fairing_diameter",
-      "unit": "m",
-      "source_ids": [
-        "S1"
-      ]
-    },
-    "fairing_length_m": {
-      "class": "K",
-      "source": "SpaceX 2025 guide, section 4.1.3, p.16",
-      "attribute": "fairing_height",
       "unit": "m",
       "source_ids": [
         "S1"
@@ -86,22 +68,15 @@
         "S2"
       ]
     },
-    "fairing_mass_kg": {
+    "payload_mass_kg": {
+      "attribute": "payload_mass",
       "class": "E",
-      "source": "S2 Table 2.17, printed p.77 / PDF p.94; literature mass set P",
-      "attribute": "fairing_mass",
       "unit": "kg",
       "source_ids": [
-        "S2"
-      ]
-    },
-    "payload_mass_kg": {
-      "class": "A",
-      "source": "Example mission; replace when a flight is selected",
-      "attribute": "payload_mass",
-      "unit": "kg",
-      "source_ids": [],
-      "condition": "Legacy full-stack demonstration only; a mission-specific value has not been established. Excluded from the new first-stage rotation diagnostic."
+        "S11"
+      ],
+      "method": "8430 kg loaded assembly including cargo; cargo is not added again. External approximate estimate, not a measured mission mass.",
+      "source": "Ed Kyle, SpaceX Falcon 9 v1.2 Data Sheet, NASA-hosted copy"
     },
     "stage2_cg_station_m": {
       "class": "A",
@@ -112,37 +87,35 @@
       "condition": "Equivalent-cylinder upper stage, not a measured CG",
       "method": "42.6+12.6/2 = 48.9"
     },
-    "fairing_cg_station_m": {
-      "class": "A",
-      "source": "Uniform equivalent cylinder ending at 70 m; not detailed fairing geometry",
-      "attribute": "fairing_cg_station",
-      "unit": "m",
-      "source_ids": [],
-      "condition": "Legacy full-stack demonstration only; a mission-specific value has not been established. Excluded from the new first-stage rotation diagnostic."
-    },
     "payload_cg_station_m": {
-      "class": "A",
-      "source": "Example payload position above the vehicle base datum",
       "attribute": "payload_cg_station",
+      "class": "A",
       "unit": "m",
-      "source_ids": [],
-      "condition": "Legacy full-stack demonstration only; a mission-specific value has not been established. Excluded from the new first-stage rotation diagnostic."
+      "source_ids": [
+        "S12"
+      ],
+      "method": "Uniform axial mass distribution, contiguous attachment above assumed stage lengths: 42.6+12.6+7.2/2 = 58.8 m. Not measured CG; no empirical confidence interval.",
+      "source": "NASA/SpaceX CRS-1 press kit, October 2012"
     },
     "payload_length_m": {
-      "class": "A",
-      "source": "Equivalent uniform-cylinder payload",
       "attribute": "payload_length",
+      "class": "E/A",
       "unit": "m",
-      "source_ids": [],
-      "condition": "Legacy full-stack demonstration only; a mission-specific value has not been established. Excluded from the new first-stage rotation diagnostic."
+      "source_ids": [
+        "S12"
+      ],
+      "method": "4.4 + 2.8 = 7.2 m envelope. Uniform solid cylinder is an inertia approximation; source is an earlier Dragon 1.",
+      "source": "NASA/SpaceX CRS-1 press kit, October 2012"
     },
     "payload_radius_m": {
-      "class": "A",
-      "source": "Equivalent uniform-cylinder payload",
       "attribute": "payload_radius",
+      "class": "E/A",
       "unit": "m",
-      "source_ids": [],
-      "condition": "Legacy full-stack demonstration only; a mission-specific value has not been established. Excluded from the new first-stage rotation diagnostic."
+      "source_ids": [
+        "S12"
+      ],
+      "method": "3.66/2 = 1.83 m; uniform solid-cylinder approximation.",
+      "source": "NASA/SpaceX CRS-1 press kit, October 2012"
     },
     "stage1_dry_cg_station_m": {
       "attribute": "stage1_dry_cg",
@@ -452,6 +425,16 @@
       "source": "Upstream 5b61a45 ring geometry estimate",
       "source_ids": [],
       "condition": ""
+    },
+    "cargo_mass_kg": {
+      "attribute": "cargo_mass_kg",
+      "class": "K",
+      "unit": "kg",
+      "source_ids": [
+        "S10"
+      ],
+      "method": "1530 kg pressurized with packaging + 960 kg unpressurized = 2490 kg; subset of loaded payload_mass.",
+      "source": "SpaceX CRS-10 Mission Overview, NASA"
     }
   },
   "mass_model_assumptions": {
@@ -462,7 +445,7 @@
     "liquid_motion": "Quasi-steady settled columns updated during powered integration. Coast slosh, flip, reverse acceleration and feed-system transients are not resolved.",
     "dry_geometry": "S4 shell/fins/engines/folded legs; S2 minus these masses leaves 6450 kg. Uniform thin shell over x=4..40.8 m is an explicit residual-allocation A. Other localized groups are equivalent disks of body radius.",
     "cross_vehicle_use": "S2 mass budget, S3 FT structure, S4 generic RFZ group estimates and S6 reference fluid conditions form a mixed-source research surrogate. Not a reconstructed Falcon 9 variant.",
-    "upper_vehicle": "Stage2/fairing/payload equivalent geometry remains A in full-stack mass properties; not measured CG/inertia for a specific mission.",
+    "upper_vehicle": "CRS-10 Dragon loaded assembly represented by a 7.2 m x 3.66 m uniform solid cylinder. Mass 8430 kg is an external E; midpoint CG is A. Existing stage lengths define a conditional attachment datum. No separate satellite fairing.",
     "rates": "Analytical geometric mass/CG/inertia derivatives, including CG and mass second derivatives; coupled to explicit exhaust momentum terms.",
     "integration": "Body-only powered integration with explicit balanced exhaust flow, CG migration and angular-momentum outflow; smooth flow required. See docs/powered_dynamics.md.",
     "inventory": "Fixed initial loading and flow ratio allow total-mass state reconstruction. No venting, variable mixture, refilling or restart-specific ratio schedules.",
@@ -473,7 +456,7 @@
   "numeric_source": "Falcon9Parameters in vehicle_parameters.py; Vehicle factory references these values",
   "team_repository": "https://github.com/Mimilv1/Falcon9-simulation",
   "team_base_commit": "5b61a45b07766fbd458d4410a1034977da824837",
-  "revision": "Body-only shared vectors, +x axial, explicit exhaust flow and moving-CG dynamics",
+  "revision": "CRS-10 is the sole default; separate profile and satellite fairing removed.",
   "sources": {
     "S1": {
       "title": "SpaceX Falcon User Guide, May 2025",
@@ -532,6 +515,24 @@
       "url": "https://www.faa.gov/about/office_org/headquarters_offices/ast/media/2018_AST_Compendium.pdf",
       "locator": "Falcon 9 FT fact sheet",
       "scope": "Legacy FT geometry; stage/interstage boundary applicability remains unresolved. Not used for v3 internal tank section lengths."
+    },
+    "S10": {
+      "title": "SpaceX CRS-10 Mission Overview, NASA",
+      "url": "https://www.nasa.gov/wp-content/uploads/2018/07/spacex_crs-10_mission_overview_0.pdf",
+      "locator": "TOTAL CARGO table",
+      "scope": "2490 kg cargo only, not the loaded spacecraft total"
+    },
+    "S11": {
+      "title": "Ed Kyle, SpaceX Falcon 9 v1.2 Data Sheet, NASA-hosted copy",
+      "url": "https://sma.nasa.gov/LaunchVehicle/assets/spacex-falcon-9-v1.2-data-sheet.pdf",
+      "locator": "Falcon 9 Debuts from KSC / CRS-10 Dragon paragraph",
+      "scope": "Original external estimate about 8430 kg including cargo; not an official SpaceX or NASA measured launch mass. Text retrieval verified through indexed copy; direct PDF retrieval was blocked. The document contains vehicle-number inconsistencies; only the explicitly estimated mass is adopted as a provisional E input."
+    },
+    "S12": {
+      "title": "NASA/SpaceX CRS-1 press kit, October 2012",
+      "url": "https://www.nasa.gov/wp-content/uploads/2015/06/694074main_spacexcrs-1presskit.pdf",
+      "locator": "Printed p.26 / PDF p.27, Dragon Spacecraft, Dimensions",
+      "scope": "Dragon 4.4 m tall and trunk 2.8 m tall, both 3.66 m diameter. Earlier Dragon 1 dimensions transferred to CRS-10, not measured CRS-10 geometry."
     }
   },
   "coordinate_convention": {
@@ -548,5 +549,7 @@
     "gravity": "Current Body vector from B; rotate its direction as attitude changes",
     "inertia_order": "Ixx axial; Iyy/Izz transverse",
     "geographic_transformations": "ENU/ECEF deferred, absent from active propagation API"
-  }
+  },
+  "mission": "CRS-10",
+  "mission_scope": "Full stack until stage separation; track only the first-stage booster afterward. No trajectory or event schedule is embedded."
 }

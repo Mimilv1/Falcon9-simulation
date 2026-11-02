@@ -26,9 +26,9 @@ def main():
             continue
         rows.append({"target_time_s": target, "time_s": time_s,
                      "speed_mps": speed_mps, "altitude_m": altitude_m})
-    output = Path(__file__).resolve().parents[1] / "data" / "crs10"
+    output = Path(__file__).resolve().parents[1] / "data"
     output.mkdir(parents=True, exist_ok=True)
-    with (output / "ascent_reference.csv").open("w", newline="", encoding="utf-8") as stream:
+    with (output / "crs10_ascent_reference.csv").open("w", newline="", encoding="utf-8") as stream:
         writer = csv.DictWriter(stream, fieldnames=list(rows[0]))
         writer.writeheader()
         writer.writerows(rows)
@@ -50,7 +50,7 @@ def main():
         "speed_reference_frame": "Not independently established; not automatically air-relative speed.",
         "limitations": "No new video-frame verification performed. Display quantization, OCR errors and stage mixing remain source risks. Published analysed trajectory/acceleration are not treated as measurements."
     }
-    (output / "ascent_reference_source.json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
+    (output / "crs10_ascent_reference_source.json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({"rows": len(rows), "first": rows[0], "last": rows[-1]}, indent=2))
 
 

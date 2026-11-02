@@ -20,7 +20,7 @@ class VehicleIntegrationChecks(unittest.TestCase):
 
     def test_total_mass_without_duplicate_engines(self):
         v = build_falcon9()
-        self.assertEqual(v.getmass(),556300)
+        self.assertEqual(v.getmass(),553030)
         self.assertEqual(v.get_mass_properties().mass_kg,v.getmass())
 
     def test_dry_budget_and_axis_order(self):

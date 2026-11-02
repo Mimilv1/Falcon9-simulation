@@ -1,4 +1,4 @@
-# Adopted Vehicle Parameters and Supporting Evidence
+# CRS-10 Vehicle Parameters and Supporting Evidence
 
 K = authoritative known value; E = literature estimate; A = explicit modeling assumption.
 E/A denotes a derived estimate that depends on a stated geometric or allocation assumption.
@@ -9,7 +9,6 @@ All axial distances follow **Body +x toward the nose**. All shared vectors are e
 | Body outer diameter | 3.66 m | K | [SpaceX guide, Table 2-1](https://www.spacex.com/assets/media/falcon-users-guide-2025-05-09.pdf) |
 | Stage dry masses | Stage 1: 22,200 kg; Stage 2: 4,000 kg | E | [Pezent, Table 2.17](https://ir-api.ua.edu/api/core/bitstreams/cafcf02b-b6e7-47d8-a41b-24b1ba12a154/content) |
 | Initial stage propellant | Stage 1: 410,900 kg; Stage 2: 107,500 kg | E | [Pezent, Table 2.17](https://ir-api.ua.edu/api/core/bitstreams/cafcf02b-b6e7-47d8-a41b-24b1ba12a154/content) |
-| Fairing mass | 1,700 kg | E | [Pezent, Table 2.17](https://ir-api.ua.edu/api/core/bitstreams/cafcf02b-b6e7-47d8-a41b-24b1ba12a154/content); separate from stage dry budgets |
 | Initial RP-1 / LOX inventory | 123,500 kg / 287,400 kg | E | [Romero-Calvo, Table 1, p.215](https://hanspeterschaub.info/PapersPrivate/RomeroCalvo2023.pdf); sum = 410,900 kg |
 | Loaded O/F mass ratio | 2.3271255 | E | Calculated from the initial inventory in [S5](https://hanspeterschaub.info/PapersPrivate/RomeroCalvo2023.pdf) |
 | Consumption O/F mass ratio | 2.35 | E | [Bykerk, sec.2.2](https://www.eucass.eu/doi/EUCASS2023-018.pdf); constant research-engine operating model |
@@ -34,8 +33,6 @@ All axial distances follow **Body +x toward the nose**. All shared vectors are e
 | --- | --- | --- | --- |
 | Stage lengths / stage-2 base offset | 42.6 m / 12.6 m / 42.6 m | E/A | Legacy FT geometry plus the team's contiguous-stage model; actual interstage boundaries remain unresolved. |
 | Stage-2 dry CG | 6.3 m from its own base; 48.9 m in the full vehicle | A | Uniform-cylinder midpoint and stage offset; not measured CG. |
-| Fairing CG | 63.4 m from original base | A | Equivalent 13.2 m cylinder ending at 70 m. |
-| Payload mass / CG / shape | 10,000 kg / 62.0 m / 4.0 m length, 1.2 m radius | A | Mission placeholder; replace after selecting a flight/payload. |
 | Engine-ring radius | 1.3 m | A | Retained team layout; independent dimensional evidence unresolved. |
 | Engine pivot axial stations | Stage 1: 1.0 m; stage 2: 0.5 m | A | Retained team force-application stations; these are not engine CGs. |
 | Gimbal limit | 5° | A | Retained team assumption; verified actuator specification unavailable. |
@@ -55,7 +52,7 @@ states are required for variable O/F, venting or refilling.
 
 The engine/mass set is from Pezent; geometry, dry-group distribution and fluid
 conditions come from other research vehicles/versions. This is an explicitly
-mixed-source Falcon-9-like model, not one identified Block 5 mission. RFZ full
+CRS-10-configured model with mixed-source stage/engine inputs, not measured mission internals. RFZ full
 tank rows include tank weight and were not used as pure propellant or empty-tank
 masses. Source RFZ x-axial stations now match the agreed Body +x convention.
 
@@ -79,3 +76,20 @@ These component models do not define a team flight schedule.
 - **S7** [Huber, Lemmon and Bruno, Effect of RP-1 Compositional Variability on Thermophysical Properties, NIST, 2009](https://tsapps.nist.gov/publication/get_pdf.cfm?pub_id=902380). Table 5, journal p.5553 / PDF p.4. Cross-check only: model density 808.1 kg/m³ at 288.7 K, 101.325 kPa. Not substituted for cold RP-1.
 - **S8** Course Module 4 Simulation Examples. pp.10-13. NED/body state and rigid-body equations; numerical examples are not measured Falcon parameters
 - **S9** [FAA Annual Compendium of Commercial Space Transportation, 2018](https://www.faa.gov/about/office_org/headquarters_offices/ast/media/2018_AST_Compendium.pdf). Falcon 9 FT fact sheet. Legacy FT geometry; stage/interstage boundary applicability remains unresolved. Not used for v3 internal tank section lengths.
+
+## CRS-10 upper assembly
+
+| Parameter | Adopted value | Class | Evidence / method |
+| --- | --- | --- | --- |
+| Dragon loaded assembly | 8,430 kg | E | [Ed Kyle data sheet, NASA-hosted copy](https://sma.nasa.gov/LaunchVehicle/assets/spacex-falcon-9-v1.2-data-sheet.pdf), CRS-10 paragraph: approximate liftoff mass including cargo; external estimate, not a SpaceX/NASA measured mass. Source contains vehicle-number inconsistencies, so this remains provisional. |
+| Cargo, included in loaded assembly | 2,490 kg | K | [NASA CRS-10 overview](https://www.nasa.gov/wp-content/uploads/2018/07/spacex_crs-10_mission_overview_0.pdf): 1530 kg pressurized with packaging + 960 kg unpressurized. Not added again. |
+| Equivalent assembly length | 7.2 m | E/A | [SpaceX/NASA CRS-1 press kit](https://www.nasa.gov/wp-content/uploads/2015/06/694074main_spacexcrs-1presskit.pdf), printed p.26 / PDF p.27: Dragon 4.4 m + trunk 2.8 m; earlier Dragon 1 dimensions transferred to CRS-10. |
+| Equivalent radius | 1.83 m | E/A | Same source: diameter 3.66 m. Solid uniform cylinder is an inertia approximation. |
+| Assembly CG | 58.8 m from rocket base | A | Assumed contiguous attachment after the existing 42.6 m and 12.6 m stages; uniform distribution gives 42.6+12.6+7.2/2. Not a measured CG. |
+| Model envelope height | 62.4 m | E/A | Sum of assumed stage lengths and equivalent assembly length; not a measured CRS-10 overall height. |
+| Initial model mass | 553,030 kg | E/A | 22,200+410,900+4,000+107,500+8,430. Inherited stage budgets remain estimates. |
+
+The generic satellite fairing and separate CRS10Parameters class are removed.
+Falcon9Parameters is the only default. No new mission run or event schedule is
+introduced. Temporary force models remain unchanged; their fairing-based drag
+curve still requires reconciliation with Dragon geometry before flight validation.
