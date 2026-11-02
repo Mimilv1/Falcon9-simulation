@@ -1,0 +1,24 @@
+{
+  "classification": "E",
+  "origin": "Reprocessed author-published webcast digitization, not a new direct video extraction or onboard telemetry release.",
+  "source_url": "https://raw.githubusercontent.com/shahar603/Telemetry-Data/b245d3b81aa36b7941ec10f3f4b508999d106a6d/SpaceX%20CRS-10/JSON/SpaceX%20CRS-10%20raw.json",
+  "source_revision": "b245d3b81aa36b7941ec10f3f4b508999d106a6d",
+  "source_sha256": "005abeb4b2c1116a31364959710d4b5e346febf49821a04aaf0da9d7f87838c5",
+  "source_readme": "https://github.com/shahar603/Telemetry-Data/blob/b245d3b81aa36b7941ec10f3f4b508999d106a6d/README.md",
+  "source_mission_readme": "https://github.com/shahar603/Telemetry-Data/blob/b245d3b81aa36b7941ec10f3f4b508999d106a6d/SpaceX%20CRS-10/README.md",
+  "source_columns": {
+    "time": "s",
+    "velocity": "m/s",
+    "altitude": "km"
+  },
+  "processing": "Nearest available sample within 0.15 s of each integer target second; actual source time retained; altitude multiplied by 1000; no interpolation or smoothing.",
+  "source_rows": 12776,
+  "exported_rows": 140,
+  "coverage": "Only 0..140 s, conservatively before the author's estimated MECO at 143 s; combined stack ascent. No post-separation booster reference.",
+  "speed_reference_frame": "Not independently established; not automatically air-relative speed.",
+  "limitations": "No new video-frame verification performed. Display quantization, OCR errors and stage mixing remain source risks. Published analysed trajectory/acceleration are not treated as measurements.",
+  "missing_target_seconds": [
+    11
+  ],
+  "reference_video_url": "https://www.youtube.com/watch?v=rUDLxFUMC9c"
+}

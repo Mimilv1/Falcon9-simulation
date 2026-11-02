@@ -110,3 +110,29 @@ class Falcon9Parameters:
         self.stage1_engine_ring_radius = 1.3  # A, retained team layout
         self.stage1_engine_pivot_axial = 1.0  # A, pivot is not engine CG
         self.stage2_engine_pivot_axial = 0.5  # A
+
+
+class CRS10Parameters(Falcon9Parameters):
+    def __init__(self, *, dragon_loaded_mass_kg, dragon_cg_station_m,
+                 dragon_equivalent_length_m, dragon_equivalent_radius_m):
+        super().__init__()
+        values = (dragon_loaded_mass_kg, dragon_cg_station_m,
+                  dragon_equivalent_length_m, dragon_equivalent_radius_m)
+        if not all(math.isfinite(value) for value in values):
+            raise ValueError("CRS-10 inputs must be finite.")
+        if dragon_loaded_mass_kg <= 2490 or min(dragon_equivalent_length_m, dragon_equivalent_radius_m) <= 0:
+            raise ValueError("Supply loaded Dragon mass above cargo mass and positive equivalent dimensions.")
+        upper_base = self.stage1_length + self.stage2_length
+        if not upper_base <= dragon_cg_station_m <= upper_base + dragon_equivalent_length_m:
+            raise ValueError("Dragon CG must lie inside its equivalent axial envelope.")
+        self.mission = "CRS-10"
+        self.cargo_mass_kg = 2490.0
+        self.fairing_attached = False
+        self.fairing_mass = 0.0
+        self.payload_mass = float(dragon_loaded_mass_kg)
+        self.payload_cg_station = float(dragon_cg_station_m)
+        self.payload_length = float(dragon_equivalent_length_m)
+        self.payload_radius = float(dragon_equivalent_radius_m)
+        self.height = upper_base + self.payload_length
+        self.mass = (self.stage1_dry_mass + self.stage1_propellant
+                     + self.stage2_dry_mass + self.stage2_propellant + self.payload_mass)

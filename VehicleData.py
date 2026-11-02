@@ -258,6 +258,7 @@ def build_falcon9(parameters=None):
                    engines=[Engine(spec2,np.array([p.stage2_engine_pivot_axial,0,0]))],
                    offset=p.stage1_length,name='stage2')
     return Vehicle([stage1,stage2],p.fairing_mass,p.payload_mass,parameters=p,
+                   fairing_attached=getattr(p,'fairing_attached',True),
                    quaternion=np.array(p.quaternion_body_to_initial_body_wxyz))
 
 

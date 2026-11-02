@@ -34,8 +34,9 @@ class VehicleModel:
         for key, record in self.parameters.items():
             value = (getattr(self.inputs, record["attribute"])
                      if "attribute" in record else record["value"])
-            if not np.isfinite(value) or value <= 0:
-                raise ValueError(f"{key} must be a finite positive value.")
+            zero_allowed = key == "fairing_mass_kg"
+            if not np.isfinite(value) or value < 0 or (value == 0 and not zero_allowed):
+                raise ValueError(f"Invalid value for {key}.")
             self.value[key] = float(value)
         if not np.isclose(self.value["stage1_rp1_initial_kg"]+self.value["stage1_lox_initial_kg"],
                           self.value["stage1_propellant_initial_kg"], rtol=0, atol=1e-6):
