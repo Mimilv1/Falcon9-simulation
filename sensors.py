@@ -150,7 +150,7 @@ def truth_inputs(t, state, model, configuration, provider):
     return loads, properties
 
 
-def _quat_to_matrix(q):
+def quat_to_matrix(q):
     """Quaternion wxyz (Body -> initial Body) -> rotation matrix."""
     w, x, y, z = np.asarray(q, dtype=float) / np.linalg.norm(q)
     return np.array([
@@ -215,7 +215,7 @@ class GNSS:
 
     def _truth(self, state, properties):
         """Antenna position/velocity, initial frame."""
-        rot = _quat_to_matrix(state.quaternion_body_to_initial_body_wxyz)
+        rot = quat_to_matrix(state.quaternion_body_to_initial_body_wxyz)
         arm = self.spec.antenna_station_body_m - properties.cg_station_body_m
         cg_rate = np.zeros(3) if properties.cg_rate_body_mps is None else properties.cg_rate_body_mps
         p_body = state.position_body_m + arm
@@ -380,7 +380,7 @@ if __name__ == "__main__":
 
     # quaternion convention: 90 deg about z maps x -> y
     q90 = [np.cos(np.pi / 4), 0.0, 0.0, np.sin(np.pi / 4)]
-    assert np.allclose(_quat_to_matrix(q90) @ [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]), "quaternion convention"
+    assert np.allclose(quat_to_matrix(q90) @ [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]), "quaternion convention"
 
     a_x = THRUST_N / MASS_KG - G  # inertial acceleration, gravity included
     antenna = [30.0, 0.0, 0.0]  # arm = +10 m from CG (cg station 20 m)
