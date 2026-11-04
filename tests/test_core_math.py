@@ -6,7 +6,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from mass_properties import fixed_cylinder, combine_components
-from frames import body_to_initial_body_matrix
+from frames import body_to_ecef_matrix
 from load_interface import AppliedForce, assemble_loads
 from dynamics import State, Loads, rk4_step
 
@@ -34,8 +34,8 @@ class CoreMathChecks(unittest.TestCase):
         loads = assemble_loads(p,[AppliedForce([0,1000,0],[0,0,0])],gravity_body_mps2=[0,0,0])
         np.testing.assert_allclose(loads.moment_body_nm,[0,0,-20000])
 
-    def test_identity_is_the_initial_body_orientation(self):
-        np.testing.assert_allclose(body_to_initial_body_matrix([1,0,0,0]),np.eye(3))
+    def test_identity_quaternion_maps_body_axes_onto_ecef(self):
+        np.testing.assert_allclose(body_to_ecef_matrix([1,0,0,0]),np.eye(3))
 
     def test_free_fall(self):
         model = FixedModel()
@@ -43,7 +43,7 @@ class CoreMathChecks(unittest.TestCase):
         provider = lambda t,s: Loads([0,0,0],[0,0,0],[-10,0,0],[0,0])
         result = rk4_step(0,state,1,model,None,provider)
         np.testing.assert_allclose(result.position_body_m,[95,0,0],atol=1e-12)
-        np.testing.assert_allclose(body_to_initial_body_matrix(result.quaternion_body_to_initial_body_wxyz)
+        np.testing.assert_allclose(body_to_ecef_matrix(result.quaternion_body_to_ecef_wxyz)
                                    @ result.velocity_body_mps,[-10,0,0],atol=1e-12)
 
     def test_constant_moment_rotation(self):
@@ -53,7 +53,7 @@ class CoreMathChecks(unittest.TestCase):
         provider = lambda t,s: assemble_loads(p,[AppliedForce([0,1000,0],[0,0,0])],gravity_body_mps2=[0,0,0])
         alpha = -20000/p.inertia_body_kgm2[2,2]
         for k in range(200): state = rk4_step(k*.01,state,.01,model,None,provider)
-        nose = body_to_initial_body_matrix(state.quaternion_body_to_initial_body_wxyz)[:,0]
+        nose = body_to_ecef_matrix(state.quaternion_body_to_ecef_wxyz)[:,0]
         tilt = np.arctan2(np.linalg.norm(nose[1:]),nose[0])
         self.assertAlmostEqual(tilt,abs(alpha)*2,places=10)
         self.assertAlmostEqual(state.omega_body_radps[2],alpha*2,places=10)
@@ -63,7 +63,7 @@ class CoreMathChecks(unittest.TestCase):
         state=State([100,0,0],[10,0,0],[1,0,0,0],[0,0,1],[0,0])
         provider=lambda t,s:Loads([0,0,0],[0,0,0],[0,0,0],[0,0])
         for k in range(100): state=rk4_step(k*.01,state,.01,model,None,provider)
-        rotation=body_to_initial_body_matrix(state.quaternion_body_to_initial_body_wxyz)
+        rotation=body_to_ecef_matrix(state.quaternion_body_to_ecef_wxyz)
         np.testing.assert_allclose(rotation@state.position_body_m,[110,0,0],atol=2e-7)
         np.testing.assert_allclose(rotation@state.velocity_body_mps,[10,0,0],atol=2e-8)
 

@@ -1,23 +1,27 @@
 # Shared A/B/C contract — Body +x
 
 All shared vectors use current Body axes; +x is axial toward the nose, Ixx is
-axial inertia, and Iyy/Izz are transverse. No ENU/ECEF state fields or Earth
-coordinate helpers are in the active API. Initial quaternion [1,0,0,0] maps current
-Body to the fixed initial Body basis. Geographic heading remains unspecified.
+axial inertia, and Iyy/Izz are transverse. The fixed reference frame is ECEF:
+the Earth centre is the origin (0,0,0) and the launch site sits at
+(0,0,earth_radius) on the +z axis. Earth rotation is not modeled in v0 — the
+ECEF axes are treated as non-rotating (inertial). The quaternion maps current
+Body to ECEF; at the pad the vehicle is vertical, Body +x along ECEF +z, given
+by frames.LAUNCH_QUATERNION_BODY_TO_ECEF_WXYZ ([sqrt(0.5), 0, -sqrt(0.5), 0]).
+Geographic heading remains unspecified.
 
 ## Origins and state meanings
 
 | Quantity | Origin / meaning |
 | --- | --- |
-| State.position_body_m | Fixed initial origin -> instantaneous CG, expressed in CURRENT Body axes |
+| State.position_body_m | Earth centre -> instantaneous CG, expressed in CURRENT Body axes |
 | State.velocity_body_mps | Inertial/geometric CG velocity, expressed in CURRENT Body axes |
-| Vehicle.position / velocity | Same fixed origin and current Body axes, but tracking the structural base |
+| Vehicle.position / velocity | Same Earth-centre origin and current Body axes, but tracking the structural base |
 | CG/component stations | Distance from the vehicle structural base, along Body +x |
 | AppliedForce.station_body_m | Fixed vehicle structural station, not a CG arm |
 | ExhaustPort.station_body_m | Fixed nozzle-exit station from the same structural datum; not necessarily the engine pivot |
 | Moment/inertia | About instantaneous CG, Body components |
 
-Fixed-origin position does not become zero because Body axes rotate. Its stored
+Earth-centre position does not become zero because Body axes rotate. Its stored
 components change through ṙᴮ=vᴮ−ω×rᴮ. Velocity components similarly require the
 transport term −ω×vᴮ. The quaternion records the changing basis.
 
@@ -61,7 +65,7 @@ the caller. The no-impulse/no-discard assumption must match the selected model.
 
 ## C truth
 
-`navigation_truth(state,loads)` provides CG position/velocity, relative-initial
+`navigation_truth(state,loads)` provides CG position/velocity, Body-to-ECEF
 attitude, angular rate, nongravitational force and gravity in Body components.
 `acceleration_truth(...,sensor_station_body_m=...)` provides ideal specific force
 at a fixed structural sensor station. Use the same fixed station every time;

@@ -538,17 +538,18 @@
   "coordinate_convention": {
     "shared_vectors": "Current Body components; Body +x points toward nose",
     "body_transverse_axes": "Right handed; ring angle zero is +y, +90 degrees is +z; no geographic heading assigned",
-    "quaternion": "Hamilton [w,x,y,z], current Body -> fixed initial Body basis",
+    "fixed_reference_frame": "ECEF: Earth centre at (0,0,0); launch site at (0,0,earth_radius) on the +z axis; Earth rotation not modeled in v0 (axes treated as non-rotating/inertial)",
+    "quaternion": "Hamilton [w,x,y,z], current Body -> ECEF",
     "initial_quaternion_wxyz": [
-      1,
-      0,
-      0,
-      0
+      0.7071067811865476,
+      0.0,
+      -0.7071067811865476,
+      0.0
     ],
-    "position": "Vector from fixed initial origin to current CG, expressed in CURRENT Body, not CG relative to itself",
+    "position": "Vector from the Earth centre (ECEF origin) to current CG, expressed in CURRENT Body, not CG relative to itself",
     "gravity": "Current Body vector from B; rotate its direction as attitude changes",
     "inertia_order": "Ixx axial; Iyy/Izz transverse",
-    "geographic_transformations": "ENU/ECEF deferred, absent from active propagation API"
+    "geographic_transformations": "ECEF adopted project-wide; Earth rotation and ENU helpers deferred"
   },
   "mission": "CRS-10",
   "mission_scope": "Full stack until stage separation; track only the first-stage booster afterward. No trajectory or event schedule is embedded."

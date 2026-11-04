@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from VehicleData import build_falcon9, VehicleModel, Configuration
-from frames import body_to_initial_body_matrix
+from frames import body_to_ecef_matrix
 from dynamics import Loads, rk4_step
 
 
@@ -52,7 +52,7 @@ class VehicleIntegrationChecks(unittest.TestCase):
         v = build_falcon9()
         v.position=np.array([10.,20.,30.]); v.velocity=np.array([1.,2.,3.])
         v.omega=np.array([.02,-.03,.04]); v.quaternion=np.array([.6,.2,-.3,.7])
-        rotation=body_to_initial_body_matrix(v.quaternion)
+        rotation=body_to_ecef_matrix(v.quaternion)
         cut=v.stages[1].offset
         local_point=np.array([.5,0,0]); original_point=local_point+np.array([cut,0,0])
         lower,upper=v.separate()

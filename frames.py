@@ -1,8 +1,12 @@
-"""Body +x vector/quaternion operations; geographic transformations are deferred.
+"""Body +x vector/quaternion operations; the fixed reference frame is ECEF.
 
-The initial Body orientation defines a fixed, nongeographic mathematical
-reference. Quaternions map current Body components into this initial basis.
-The reference is needed for attitude bookkeeping, not an ENU/ECEF interface.
+ECEF convention (project-wide): the Earth centre is the origin (0,0,0) and the
+vehicle launches from (0,0,earth_radius) on the +z axis. Earth rotation is not
+modeled in v0: the ECEF axes are treated as non-rotating (inertial), so only
+the datum changes relative to the former launch-point origin. Quaternions map
+current Body components into ECEF. At launch the vehicle stands vertical,
+Body +x toward the nose along ECEF +z; that fixed alignment is
+LAUNCH_QUATERNION_BODY_TO_ECEF_WXYZ below.
 """
 
 import numpy as np
@@ -36,7 +40,29 @@ def quaternion_product(left, right):
     ])
 
 
-def body_to_initial_body_matrix(quaternion_wxyz):
+# Fixed launch alignment: -90 degree rotation about the common Body/ECEF y axis
+# maps Body +x (nose) onto ECEF +z (radially up at the launch site), Body y
+# onto ECEF y and Body z onto ECEF x.
+LAUNCH_TILT_RAD = -np.pi / 2
+LAUNCH_QUATERNION_BODY_TO_ECEF_WXYZ = np.array([
+    np.cos(LAUNCH_TILT_RAD / 2), 0.0, np.sin(LAUNCH_TILT_RAD / 2), 0.0
+])
+
+
+def launch_position_body_m(earth_radius_m, height_above_site_m=0.0):
+    """ECEF launch point (0,0,R) plus a height h, in Body components at launch attitude.
+
+    With the launch attitude, Body +x is ECEF +z, so the vector from the Earth
+    centre to a point h above the launch site is [R+h, 0, 0] in Body components.
+    """
+    radius = float(earth_radius_m)
+    height = float(height_above_site_m)
+    if not np.isfinite(radius) or radius <= 0 or not np.isfinite(height):
+        raise ValueError("Expected a positive finite Earth radius and a finite height.")
+    return np.array([radius + height, 0.0, 0.0])
+
+
+def body_to_ecef_matrix(quaternion_wxyz):
     w, x, y, z = normalize_quaternion(quaternion_wxyz)
     return np.array([
         [1-2*(y*y+z*z), 2*(x*y-w*z), 2*(x*z+w*y)],
@@ -45,8 +71,8 @@ def body_to_initial_body_matrix(quaternion_wxyz):
     ])
 
 
-def quaternion_rate_body_to_initial_body(quaternion_wxyz, omega_body_radps):
-    """Body/initial-Body rate in Body components; Earth rotation is zero in v0."""
+def quaternion_rate_body_to_ecef(quaternion_wxyz, omega_body_radps):
+    """Body/ECEF rate in Body components; Earth rotation is zero in v0."""
     return 0.5 * quaternion_product(
         normalize_quaternion(quaternion_wxyz), np.r_[0.0, vector3(omega_body_radps)]
     )

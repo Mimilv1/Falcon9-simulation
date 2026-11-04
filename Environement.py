@@ -6,24 +6,30 @@ asks back.
 
 Envelope and assumptions, each replaceable without touching callers:
 - Atmosphere: dry US Standard Atmosphere 1976 layers, 0..84852 m, extended by an
-  explicit isothermal tail, 84852..120000 m. Local geometric height is used as
-  geopotential height (A); the deviation grows with altitude and is documented
-  in first_ascent_segment.md. Queries outside 0..120000 m are rejected, never
-  extrapolated.
-- Gravity: direction fixed along the initial up axis (flat-Earth convention).
-  Magnitude is constant by default, or inverse-square from the configured
-  surface value when an Earth radius is supplied.
-- Wind: one fixed vector expressed in the initial Body basis; air above ~50 km
+  explicit isothermal tail to the 2000 km model ceiling. Local geometric height is
+  used as geopotential height (A); the deviation grows with altitude and is
+  documented in first_ascent_segment.md. Above ~100 km the tail is a documented
+  near-vacuum placeholder, not thermospheric physics. Queries outside
+  0..2000000 m are rejected, never extrapolated.
+- Gravity: a vector. The surface gravity magnitude at the launch site plus
+  the planet radius define a spherical planet whose centre is the ECEF origin
+  (0,0,0); the launch site sits at (0,0,earth_radius) on the +z axis. Earth is
+  assimilated to a point of constant mass at that centre: gravity is mu/d^2
+  along the normalized vector from the centre to the vehicle, so its direction
+  follows the vehicle around the planet.
+- Wind: one fixed vector expressed in ECEF; air above ~50 km
   is too thin for wind to matter at this fidelity.
-- Ground: a single plane of constant altitude along the initial up axis.
+- Ground: a sphere concentric with the planet; the launch site sits
+  ground_altitude_m above it.
 
 Shared position, velocity and force vectors are current Body components; Body
 +x points toward the nose. Quaternion is Hamilton [w,x,y,z] mapping current
-Body to the fixed initial Body basis.
+Body to ECEF. Earth rotation is not modeled in v0: the ECEF axes are treated
+as non-rotating (inertial).
 """
 from dataclasses import dataclass
 import numpy as np
-from frames import body_to_initial_body_matrix, vector3
+from frames import body_to_ecef_matrix, vector3
 
 # Standard-atmosphere constants (USSA 1976 / ISO 2533).
 SEA_LEVEL_TEMPERATURE_K=288.15
@@ -31,6 +37,7 @@ SEA_LEVEL_PRESSURE_PA=101325.0
 DRY_AIR_GAS_CONSTANT_JPKGK=287.05287
 AIR_HEAT_CAPACITY_RATIO=1.4
 STANDARD_GRAVITY_MPS2=9.80665
+EARTH_MEAN_RADIUS_M=6371000.0
 
 # USSA 1976 layers: (base altitude [m], base temperature [K], lapse rate [K/m]).
 STANDARD_LAYERS=(
@@ -43,19 +50,21 @@ STANDARD_LAYERS=(
     (71000.0,214.65,-0.002),
 )
 MESOPAUSE_ALTITUDE_M=84852.0
-# The 120 km ceiling is a modeling limit, not an arbitrary knob:
-# - The isothermal tail assumes constant temperature (187 K) and uniform air
-#   composition; above ~100 km the thermosphere heats to 600..1000+ K and the
-#   constituents separate by mass, so R and gamma are no longer valid there.
-# - Between 120 km and any higher ceiling, drag and ambient-pressure thrust
-#   are already negligible, so a taller table would have no consumers.
-# - Beyond ~120 km trajectories become orbital, which this simulation's
-#   flat-Earth frame cannot represent (fixed gravity direction, no Earth
-#   rotation, altitude above a ground plane). Answering there would produce
-#   plausible numbers from an invalid model; per team convention, unmodeled
-#   regimes are rejected instead. Orbital phases require a new frame model
-#   and environment class, decided at team level.
-ATMOSPHERE_CEILING_M=120000.0
+# The 2000 km ceiling is the mission envelope, and two properties make it safe:
+# - Below ~100 km the table is USSA 1976 evidence; above the mesopause the
+#   isothermal tail decays to numerical vacuum (density < 1e-150 by 2000 km),
+#   so drag and ambient-pressure thrust read as exactly negligible there
+#   instead of wrong-but-plausible values. The tail is a placeholder, not
+#   thermospheric physics: thermosphere temperature and composition above
+#   ~100 km are not modeled.
+# - The former 120 km rejection guarded the flat-Earth frame, in which high
+#   arcs produced plausible-but-wrong trajectories. Gravity and altitude are
+#   now spherical (see gravity_body), so suborbital arcs to 2000 km are
+#   represented honestly. The ECEF datum is adopted project-wide (origin at
+#   the Earth centre, launch site at (0,0,earth_radius)); Earth rotation and
+#   orbital phases remain out of scope. Per team convention, unmodeled
+#   regimes are rejected.
+ATMOSPHERE_CEILING_M=2000000.0
 
 
 @dataclass(frozen=True)
@@ -76,22 +85,27 @@ class TroposphereEnvironment:
     the layered extension and is kept for import stability.
     """
 
-    def __init__(self,*,gravity_mps2=STANDARD_GRAVITY_MPS2,gravity_earth_radius_m=None,
-                 ground_altitude_m=0.0,up_initial_body=(1,0,0),
-                 wind_initial_body_mps=(0,0,0)):
-        up=vector3(up_initial_body)
-        wind=vector3(wind_initial_body_mps)
-        radius=None if gravity_earth_radius_m is None else float(gravity_earth_radius_m)
-        if (not np.all(np.isfinite([gravity_mps2,ground_altitude_m]))
-                or gravity_mps2 < 0 or np.linalg.norm(up) < 1e-12
-                or not np.all(np.isfinite(wind))
-                or (radius is not None and (not np.isfinite(radius) or radius <= 0))):
-            raise ValueError('Invalid gravity, ground altitude or initial vertical.')
-        self.gravity_mps2=float(gravity_mps2)
-        self.gravity_earth_radius_m=radius
+    def __init__(self,*,surface_gravity_mps2=STANDARD_GRAVITY_MPS2,
+                 earth_radius_m=EARTH_MEAN_RADIUS_M,ground_altitude_m=0.0,
+                 wind_ecef_mps=(0,0,0)):
+        gravity=float(surface_gravity_mps2)
+        wind=vector3(wind_ecef_mps)
+        radius=float(earth_radius_m)
+        if (not np.all(np.isfinite([ground_altitude_m,radius]))
+                or gravity < 1e-12 or not np.all(np.isfinite(wind))
+                or radius <= 0):
+            raise ValueError('Invalid surface gravity, Earth radius, ground altitude or wind.')
+        # ECEF convention: the planet centre is the origin (0,0,0) and the
+        # launch site sits at (0,0,earth_radius); surface gravity there points
+        # toward the centre, along -z.
+        self.planet_center_ecef_m=np.zeros(3)
+        self.launch_site_ecef_m=np.array([0.0,0.0,radius])
+        self.surface_gravity_ecef_mps2=np.array([0.0,0.0,-gravity])
+        self.earth_radius_m=radius
+        # mu = g_surface * R^2 reproduces the configured magnitude at the launch site.
+        self.gravity_mu_m3ps2=gravity*radius*radius
         self.ground_altitude_m=float(ground_altitude_m)
-        self.up_initial_body=up/np.linalg.norm(up)
-        self.wind_initial_body_mps=wind.copy()
+        self.wind_ecef_mps=wind.copy()
 
     @staticmethod
     def atmosphere(altitude_m):
@@ -101,12 +115,12 @@ class TroposphereEnvironment:
         ISO 2533, geopotential height). Above the mesopause the air is modeled
         as isothermal at the mesopause temperature with hydrostatic exponential
         decay (B); at those densities the choice only refines where drag is
-        already negligible. Altitude outside 0..120000 m is unmodeled and
+        already negligible. Altitude outside 0..2000000 m is unmodeled and
         rejected; the clamp only absorbs sub-micrometre roundoff at the ground.
         """
         h=float(altitude_m)
         if not np.isfinite(h) or h < -1e-6 or h > ATMOSPHERE_CEILING_M:
-            raise ValueError('The environment model supports altitude 0..120000 m.')
+            raise ValueError('The environment model supports altitude 0..2000000 m.')
         h=max(0.0,h)
         # Layer containing h; pressure bases are walked from sea level.
         index=len(STANDARD_LAYERS)-1
@@ -135,28 +149,32 @@ class TroposphereEnvironment:
         return Atmosphere(float(temperature),float(pressure),float(density),float(sound_speed))
 
     def altitude(self,state,properties,station_body_m=None):
-        """Height of the CG, or of an optional structural station, above the ground plane."""
+        """Height of the CG, or of an optional structural station, above the spherical ground."""
         position=self._station_position_body(state,properties,station_body_m)
-        return float(self._height_along_up(state,position))
+        return float(self._height_above_ground(state,position))
 
     def gravity_body(self,state):
-        """Gravity in current Body components; fixed direction along the up axis.
+        """Gravity in current Body components; Newtonian point-mass attraction.
 
-        Magnitude is the configured surface value, or that value scaled
-        inverse-square with the CG height along the up axis when an Earth
-        radius is configured.
+        Earth is assimilated to a point of constant mass at the ECEF origin
+        (no gravity field computation): gravity is mu/d^2 along the normalized
+        vector from the centre to the vehicle, where d is the distance between
+        the two and mu = g_surface * R^2 is the point-mass parameter fixed
+        by the configured surface gravity magnitude at the launch site
+        (0,0,earth_radius).
         """
-        rotation=self._rotation_to_initial_body(state)
-        height=self.ground_altitude_m+self.up_initial_body@(rotation@state.position_body_m)
-        magnitude=self.gravity_mps2
-        if self.gravity_earth_radius_m is not None:
-            magnitude*= (self.gravity_earth_radius_m/(self.gravity_earth_radius_m+height))**2
-        return -magnitude*(rotation.T@self.up_initial_body)
+        position_ecef=self._position_ecef(state,state.position_body_m)
+        distance=np.linalg.norm(position_ecef)
+        if distance < 1e-6:
+            raise ValueError('Gravity is undefined at the planet centre.')
+        # Normalized vector from the planet centre to the vehicle.
+        direction=position_ecef/distance
+        magnitude=self.gravity_mu_m3ps2/distance**2
+        return self._rotation_to_ecef(state).T@(-magnitude*direction)
 
     def wind_body(self,state):
-        """Fixed initial-basis wind expressed in current Body components."""
-        rotation=self._rotation_to_initial_body(state)
-        return rotation.T@self.wind_initial_body_mps
+        """Fixed ECEF wind expressed in current Body components."""
+        return self._rotation_to_ecef(state).T@self.wind_ecef_mps
 
     @staticmethod
     def _layer_pressure(base_pressure,base_temperature,lapse,height_above_base):
@@ -168,13 +186,18 @@ class TroposphereEnvironment:
         return base_pressure*(temperature/base_temperature)**(-STANDARD_GRAVITY_MPS2
                                                               /(DRY_AIR_GAS_CONSTANT_JPKGK*lapse))
 
-    def _height_along_up(self,state,position_body_m):
-        rotation=self._rotation_to_initial_body(state)
-        return self.ground_altitude_m+self.up_initial_body@(rotation@position_body_m)
+    def _height_above_ground(self,state,position_body_m):
+        """Radial distance from the planet centre minus the ground-sphere radius."""
+        position_ecef=self._position_ecef(state,position_body_m)
+        return np.linalg.norm(position_ecef)-self.earth_radius_m+self.ground_altitude_m
+
+    def _position_ecef(self,state,position_body_m):
+        """Position vector in ECEF; the planet centre is the origin."""
+        return self._rotation_to_ecef(state)@position_body_m
 
     @staticmethod
-    def _rotation_to_initial_body(state):
-        return body_to_initial_body_matrix(state.quaternion_body_to_initial_body_wxyz)
+    def _rotation_to_ecef(state):
+        return body_to_ecef_matrix(state.quaternion_body_to_ecef_wxyz)
 
     @staticmethod
     def _station_position_body(state,properties,station_body_m):
