@@ -33,8 +33,8 @@ def separate_coasting_vehicle(vehicle,state,time_s,loads, *, index=1,tolerance=1
     children=(lower,upper)
     states=tuple(child.to_state() for child in children)
     props=tuple(child.get_mass_properties() for child in children)
-    attitude_error=max(min(np.linalg.norm(s.quaternion_body_to_initial_body_wxyz-state.quaternion_body_to_initial_body_wxyz),
-                           np.linalg.norm(s.quaternion_body_to_initial_body_wxyz+state.quaternion_body_to_initial_body_wxyz)) for s in states)
+    attitude_error=max(min(np.linalg.norm(s.quaternion_body_to_ecef_wxyz-state.quaternion_body_to_ecef_wxyz),
+                           np.linalg.norm(s.quaternion_body_to_ecef_wxyz+state.quaternion_body_to_ecef_wxyz)) for s in states)
     omega_error=max(np.linalg.norm(s.omega_body_radps-state.omega_body_radps) for s in states)
     if max(attitude_error,omega_error)>1e-12:
         raise ValueError('No-impulse separation must preserve attitude and angular rate.')
@@ -79,5 +79,5 @@ def separate_coasting_vehicle(vehicle,state,time_s,loads, *, index=1,tolerance=1
            'structural_velocity_continuity_error_mps':float(velocity_error),
            'quaternion_continuity_error':float(attitude_error),'angular_rate_continuity_error_radps':float(omega_error),
            'upper_base_original_station_m':upper.datum_shift_m,
-           'note':'Child CG coordinates are different tracking points; shared fixed origin and initial attitude basis are retained.'}
+           'note':'Child CG coordinates are different tracking points; the shared ECEF origin and attitude basis are retained.'}
     return SeparationResult(lower,upper,*states,audit)

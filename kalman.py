@@ -1,15 +1,15 @@
-"""Navigation Kalman filter V1: IMU propagation + GNSS update + LIDAR update, initial frame.
+"""Navigation Kalman filter V1: IMU propagation + GNSS update + LIDAR update, ECEF.
 
 State x = [p(3), v(3), b_a(3)]
-  p, v : IMU station position/velocity, initial frame
+  p, v : IMU station position/velocity, ECEF (origin at the Earth centre)
   b_a  : accelerometer bias, Body
-Predict : bias-corrected specific force rotated to initial frame + gravity
+Predict : bias-corrected specific force rotated to ECEF + gravity
 GNSS    : antenna position/velocity, lever arm + latency compensation (linear)
 LIDAR   : range along boresight to spherical planet, used only when a return is valid
           (planet within reach), lever arm, EKF (Jacobian on position)
 V1 limits : attitude supplied externally (truth), no gyro bias, no scale factor / misalignment states,
             no LIDAR bias / scale factor states, constant gravity vector, spherical planet,
-            GNSS correlated error not modeled
+            GNSS correlated error not modeled, Earth rotation not modeled (ECEF treated as inertial)
 """
 
 import numpy as np
@@ -21,13 +21,13 @@ P_SL, V_SL, B_SL = slice(0, 3), slice(3, 6), slice(6, 9)
 
 
 class NavigationKF:
-    def __init__(self, p0, v0, sigma0, gravity_init=(-9.81, 0.0, 0.0), accel_psd=1e-6,
+    def __init__(self, p0, v0, sigma0, gravity_ecef=(0.0, 0.0, -9.81), accel_psd=1e-6,
                  accel_bias_rw=0.0, ba0=None):
         """sigma0: 9 initial 1-sigma [p, v, b_a]; accel_psd: (m/s2)^2*s white noise PSD."""
         self.x = np.r_[np.asarray(p0, float), np.asarray(v0, float),
                        np.zeros(3) if ba0 is None else np.asarray(ba0, float)]
         self.P = np.diag(np.asarray(sigma0, dtype=float) ** 2)
-        self.g = np.asarray(gravity_init, dtype=float)
+        self.g = np.asarray(gravity_ecef, dtype=float)
         self.accel_psd = float(accel_psd)
         self.accel_bias_rw = float(accel_bias_rw)  # m/s2/sqrt(s)
         self.last_accel = np.zeros(3)  # initial-frame acceleration estimate, for latency compensation
@@ -43,7 +43,7 @@ class NavigationKF:
                    accel_bias_rw=imu_spec.accel_bias_rw, **kwargs)
 
     def predict(self, f_meas, rot, dt):
-        """Propagate over dt with IMU specific force (Body) and attitude rot (Body -> initial)."""
+        """Propagate over dt with IMU specific force (Body) and attitude rot (Body -> ECEF)."""
         p, v, ba = self.x[P_SL].copy(), self.x[V_SL].copy(), self.x[B_SL].copy()
         a = rot @ (f_meas - ba) + self.g
         self.x[P_SL] = p + v * dt + 0.5 * a * dt ** 2
@@ -123,9 +123,12 @@ if __name__ == "__main__":
     from types import SimpleNamespace
     from dynamics import State, Loads, rk4_step
     from sensors import IMU, IMUSpec, GNSS, GNSSSpec, Lidar, LidarSpec, truth_inputs
+    from frames import (LAUNCH_QUATERNION_BODY_TO_ECEF_WXYZ as Q_LAUNCH,
+                        launch_position_body_m)
 
+    EARTH_RADIUS_M = 6_371_000.0
     THRUST_N, MASS_KG, G, TORQUE = 20000.0, 1000.0, 9.81, 2.0e4
-    G_INIT = np.array([-G, 0.0, 0.0])  # x = vertical at launch
+    G_ECEF = np.array([0.0, 0.0, -G])  # ECEF: z = vertical at the launch site (0,0,R)
     CG = np.array([20.0, 0.0, 0.0])
     IMU_STATION, ANTENNA_STATION, LIDAR_STATION = [10.0, 0.0, 0.0], [30.0, 0.0, 0.0], [3.0, 0.0, 0.0]
 
@@ -139,14 +142,14 @@ if __name__ == "__main__":
     )
 
     def provider(t, s):
-        rot = quat_to_matrix(s.quaternion_body_to_initial_body_wxyz)
+        rot = quat_to_matrix(s.quaternion_body_to_ecef_wxyz)
         torque = TORQUE if t < 3.0 else (-TORQUE if t < 6.0 else 0.0)  # pitch up then stop rotation
         return Loads(force_body_n=[THRUST_N, 0, 0], moment_body_nm=[0, 0, torque],
-                     gravity_body_mps2=rot.T @ G_INIT, consumption_kgps=[0.0, 0.0])
+                     gravity_body_mps2=rot.T @ G_ECEF, consumption_kgps=[0.0, 0.0])
 
     def structural_truth(state, props, station):
-        """Truth position/velocity of a fixed structural point, initial frame."""
-        rot = quat_to_matrix(state.quaternion_body_to_initial_body_wxyz)
+        """Truth position/velocity of a fixed structural point, ECEF."""
+        rot = quat_to_matrix(state.quaternion_body_to_ecef_wxyz)
         arm = np.asarray(station) - props.cg_station_body_m
         return (rot @ (state.position_body_m + arm),
                 rot @ (state.velocity_body_mps + np.cross(state.omega_body_radps, arm) - props.cg_rate_body_mps))
@@ -155,23 +158,23 @@ if __name__ == "__main__":
         imu_spec = IMUSpec(IMU_STATION, accel_bias_mps2=[0.05, -0.03, 0.02], accel_scale_factor=1e-3,
                            accel_bias_rw=1e-4, gyro_bias_radps=[0.0, 0.0, 1e-4])  # PLACEHOLDER errors
         gnss_spec = GNSSSpec(ANTENNA_STATION, outages=((20.0, 30.0),))  # no fix 20-30 s
-        lidar_spec = LidarSpec(LIDAR_STATION)  # default reach / noise, planet center [-R, 0, 0]
+        lidar_spec = LidarSpec(LIDAR_STATION)  # default reach / noise, planet center at the ECEF origin
         dt = 1.0 / imu_spec.rate_hz if dt is None else dt  # one step per IMU sample
         imu, gnss, lidar = IMU(imu_spec, seed=1), GNSS(gnss_spec, seed=2), Lidar(lidar_spec, seed=3)
         gnss_arm = np.asarray(ANTENNA_STATION) - np.asarray(IMU_STATION)
         lidar_arm = np.asarray(LIDAR_STATION) - np.asarray(IMU_STATION)
 
-        state = State([20.0, 0, 0], [0, 0, 0], [1, 0, 0, 0], [0, 0, 0], [0.0, 0.0])  # CG 20 m up: base on ground
+        state = State(launch_position_body_m(EARTH_RADIUS_M, 20.0), [0, 0, 0], Q_LAUNCH, [0, 0, 0], [0.0, 0.0])  # CG 20 m up: base at the launch site
         t = 0.0
         loads, props = truth_inputs(t, state, model, None, provider)
         p_true0, v_true0 = structural_truth(state, props, IMU_STATION)
         kf = NavigationKF.from_imu_spec(  # initial error: pad survey offset, at rest
             imu_spec, p_true0 + [1.0, -1.0, 0.5], v_true0, [2, 2, 2, 0.05, 0.05, 0.05, 0.1, 0.1, 0.1],
-            gravity_init=G_INIT)
+            gravity_ecef=G_ECEF)
         truth_log, nis_log, lidar_nis_log, gnss_log, lidar_valid_t, last = [], [], [], [], [], {"t": None}
 
         def process(t, state, loads, props):
-            rot = quat_to_matrix(state.quaternion_body_to_initial_body_wxyz)  # attitude = truth (V1)
+            rot = quat_to_matrix(state.quaternion_body_to_ecef_wxyz)  # attitude = truth (V1)
             s = imu.update(t, state, loads, props)
             if s is not None:
                 if last["t"] is not None:
@@ -190,7 +193,7 @@ if __name__ == "__main__":
             if lid is not None and lid.valid:  # valid return = planet within reach
                 lidar_valid_t.append(t)
                 if use_lidar and kf.update_lidar(lid.range_meas_m, rot, lidar_arm, lidar_spec.boresight_body,
-                                                 lidar_spec.planet_center_init_m, lidar_spec.planet_radius_m,
+                                                 lidar_spec.planet_center_ecef_m, lidar_spec.planet_radius_m,
                                                  lid.sigma_m) is not None:
                     lidar_nis_log.append(kf.last_lidar_nis)
             if s is not None:
@@ -219,9 +222,9 @@ if __name__ == "__main__":
         rms = lambda e: np.sqrt((e ** 2).sum(axis=1).mean())
         print(f"[{label:<18}] final pos err {np.linalg.norm(err_p[-1]):7.2f} m, vel err {np.linalg.norm(err_v[-1]):6.3f} m/s, "
               f"pos rms {rms(err_p):6.2f} m, rms in outage {rms(err_p[outage]):6.2f} m, "
-              f"rms t<={t_low:.1f}s {rms(err_p[low]):5.2f} m (vertical {np.sqrt((err_p[low, 0] ** 2).mean()):5.2f} m), "
+              f"rms t<={t_low:.1f}s {rms(err_p[low]):5.2f} m (vertical {np.sqrt((err_p[low, 2] ** 2).mean()):5.2f} m), "
               f"in 3-sigma {np.mean(np.abs(err_p) < 3 * SIG[:, 0:3]):.2f}")
-        return np.linalg.norm(err_p[-1]), np.sqrt((err_p[low, 0] ** 2).mean())
+        return np.linalg.norm(err_p[-1]), np.sqrt((err_p[low, 2] ** 2).mean())
 
     final_ins, _ = report("IMU only", runs["ins"])
 
@@ -231,7 +234,7 @@ if __name__ == "__main__":
     print(f"[{'GNSS only':<18}] final pos err {np.linalg.norm(ge_p[-1]):7.2f} m, vel err {np.linalg.norm(ge_v[-1]):6.3f} m/s, "
           f"pos rms {np.sqrt((ge_p ** 2).sum(axis=1).mean()):6.2f} m, rms in outage    n/a, "
           f"rms t<={t_low:.1f}s {np.sqrt((ge_p[low] ** 2).sum(axis=1).mean()):5.2f} m "
-          f"(vertical {np.sqrt((ge_p[low, 0] ** 2).mean()):5.2f} m), {len(ga)} fixes, no solution in outage")
+          f"(vertical {np.sqrt((ge_p[low, 2] ** 2).mean()):5.2f} m), {len(ga)} fixes, no solution in outage")
 
     final_kf, vert_kf = report("IMU + GNSS", runs["gnss"])
     print(f"  mean NIS {runs['gnss']['nis'].mean():.2f} (6 dof expected ~6), "

@@ -151,7 +151,7 @@ def truth_inputs(t, state, model, configuration, provider):
 
 
 def quat_to_matrix(q):
-    """Quaternion wxyz (Body -> initial Body) -> rotation matrix."""
+    """Quaternion wxyz (Body -> ECEF) -> rotation matrix."""
     w, x, y, z = np.asarray(q, dtype=float) / np.linalg.norm(q)
     return np.array([
         [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
@@ -165,9 +165,9 @@ class GNSSSpec:
     antenna_station_body_m: np.ndarray  # fixed structural station, Body, same datum as cg_station_body_m
     rate_hz: float = 10.0  # typical 1-10 Hz
     latency_s: float = 0.1  # sample at t reports truth at t - latency
-    # position error, initial-frame axes (x = vertical at launch), 1-sigma, PLACEHOLDER (datasheet)
-    pos_sigma_m: np.ndarray = field(default_factory=lambda: np.array([2.5, 1.5, 1.5]))  # white
-    pos_gm_sigma_m: np.ndarray = field(default_factory=lambda: np.array([1.0, 0.6, 0.6]))  # correlated
+    # position error, ECEF axes (z = vertical at launch), 1-sigma, PLACEHOLDER (datasheet)
+    pos_sigma_m: np.ndarray = field(default_factory=lambda: np.array([1.5, 1.5, 2.5]))  # white
+    pos_gm_sigma_m: np.ndarray = field(default_factory=lambda: np.array([0.6, 0.6, 1.0]))  # correlated
     gm_tau_s: float = 300.0  # Gauss-Markov correlation time (atmosphere, multipath, ephemeris)
     vel_sigma_mps: np.ndarray = field(default_factory=lambda: np.full(3, 0.1))  # Doppler, white
     first_fix_time_s: float = 0.0  # time to first fix, no valid output before
@@ -189,8 +189,8 @@ class GNSSSpec:
 class GNSSSample:
     t: float
     valid: bool  # fix available
-    pos_meas_m: np.ndarray  # initial frame, NaN if no fix
-    vel_meas_mps: np.ndarray  # initial frame, NaN if no fix
+    pos_meas_m: np.ndarray  # ECEF, NaN if no fix
+    vel_meas_mps: np.ndarray  # ECEF, NaN if no fix
     pos_true_m: np.ndarray  # truth at t - latency
     vel_true_mps: np.ndarray
     pos_sigma_m: np.ndarray  # reported 1-sigma (white + correlated), for filter R
@@ -198,7 +198,7 @@ class GNSSSample:
 
 
 class GNSS:
-    """GNSS receiver: antenna position/velocity in initial frame.
+    """GNSS receiver: antenna position/velocity in ECEF (origin at Earth centre).
 
     Lever arm + CG migration, latency, white + Gauss-Markov position error,
     Doppler velocity noise, TTFF / outages / random dropouts.
@@ -214,8 +214,8 @@ class GNSS:
         self.log = []
 
     def _truth(self, state, properties):
-        """Antenna position/velocity, initial frame."""
-        rot = quat_to_matrix(state.quaternion_body_to_initial_body_wxyz)
+        """Antenna position/velocity, ECEF (origin at the Earth centre)."""
+        rot = quat_to_matrix(state.quaternion_body_to_ecef_wxyz)
         arm = self.spec.antenna_station_body_m - properties.cg_station_body_m
         cg_rate = np.zeros(3) if properties.cg_rate_body_mps is None else properties.cg_rate_body_mps
         p_body = state.position_body_m + arm
@@ -299,8 +299,8 @@ class LidarSpec:
     max_range_m: float = 1800.0  # reach, PLACEHOLDER (datasheet)
     min_range_m: float = 1.0  # blind distance
     planet_radius_m: float = 6_371_000.0  # spherical Earth, mean radius
-    # origin -> planet center, initial frame; None -> [-R, 0, 0] (origin on surface, x vertical at launch)
-    planet_center_init_m: Optional[np.ndarray] = None
+    # planet center in ECEF; None -> (0,0,0), the ECEF origin (Earth centre)
+    planet_center_ecef_m: Optional[np.ndarray] = None
     range_sigma_m: float = 0.05  # constant noise part, 1-sigma, PLACEHOLDER
     range_sigma_per_m: float = 1e-4  # noise proportional to range
     range_bias_m: float = 0.0
@@ -313,9 +313,9 @@ class LidarSpec:
         if np.linalg.norm(axis) == 0.0:
             raise ValueError("boresight_body must be nonzero")
         self.boresight_body = axis / np.linalg.norm(axis)
-        if self.planet_center_init_m is None:
-            self.planet_center_init_m = np.array([-self.planet_radius_m, 0.0, 0.0])
-        self.planet_center_init_m = vector3(self.planet_center_init_m).copy()
+        if self.planet_center_ecef_m is None:
+            self.planet_center_ecef_m = np.zeros(3)
+        self.planet_center_ecef_m = vector3(self.planet_center_ecef_m).copy()
         if self.rate_hz <= 0 or self.planet_radius_m <= 0:
             raise ValueError("rate_hz and planet_radius_m must be positive")
         if not 0.0 <= self.min_range_m < self.max_range_m:
@@ -350,11 +350,11 @@ class Lidar:
         self.log = []
 
     def _geometry(self, state, properties):
-        """Sensor position relative to planet center + boresight, initial frame."""
+        """Sensor position relative to the planet center + boresight, ECEF."""
         s = self.spec
-        rot = quat_to_matrix(state.quaternion_body_to_initial_body_wxyz)
+        rot = quat_to_matrix(state.quaternion_body_to_ecef_wxyz)
         arm = s.station_body_m - properties.cg_station_body_m
-        rel = rot @ (state.position_body_m + arm) - s.planet_center_init_m
+        rel = rot @ (state.position_body_m + arm) - s.planet_center_ecef_m
         return rel, rot @ s.boresight_body
 
     def measure(self, t, state, properties):
@@ -402,7 +402,10 @@ if __name__ == "__main__":
     # self-test: fake model, constant thrust along +x, no burn, no ports
     from types import SimpleNamespace
     from dynamics import State, Loads, rk4_step
+    from frames import (LAUNCH_QUATERNION_BODY_TO_ECEF_WXYZ as Q_LAUNCH,
+                        body_to_ecef_matrix, launch_position_body_m, quaternion_product)
 
+    EARTH_RADIUS_M = 6_371_000.0  # matches the default LIDAR planet radius
     THRUST_N, MASS_KG, G = 20000.0, 1000.0, 9.81  # expected specific force = 20 m/s2
 
     model = SimpleNamespace(
@@ -427,7 +430,7 @@ if __name__ == "__main__":
     )
 
     def run(spec, duration_s=5.0, dt=0.01, seed=0):
-        state = State([0, 0, 0], [0, 0, 0], [1, 0, 0, 0], [0, 0, 0], [0.0, 0.0])
+        state = State(launch_position_body_m(EARTH_RADIUS_M), [0, 0, 0], Q_LAUNCH, [0, 0, 0], [0.0, 0.0])
         imu = IMU(spec, seed=seed)
         t = 0.0
         loads, props = truth_inputs(t, state, model, configuration, provider)
@@ -473,7 +476,7 @@ if __name__ == "__main__":
 
     # ---- GNSS ----
     def run_gnss(spec, duration_s=5.0, dt=0.01, seed=0):
-        state = State([0, 0, 0], [0, 0, 0], [1, 0, 0, 0], [0, 0, 0], [0.0, 0.0])
+        state = State(launch_position_body_m(EARTH_RADIUS_M), [0, 0, 0], Q_LAUNCH, [0, 0, 0], [0.0, 0.0])
         gnss = GNSS(spec, seed=seed)
         t = 0.0
         loads, props = truth_inputs(t, state, model, configuration, provider)
@@ -497,9 +500,10 @@ if __name__ == "__main__":
     ts, valid, pos_m, vel_m, pos_t, vel_t = run_gnss(spec)
     t_q = np.maximum(ts - 0.2, 0.0)
     assert valid.all()
-    assert np.allclose(pos_m[:, 0], 0.5 * a_x * t_q ** 2 + 10.0, atol=1e-3), "gnss position mismatch"
-    assert np.allclose(vel_m[:, 0], a_x * t_q, atol=1e-3), "gnss velocity mismatch"
-    print(f"gnss deterministic OK: pos x {pos_m[0, 0]:.3f} -> {pos_m[-1, 0]:.3f}")
+    # Thrust along Body +x = ECEF +z at launch: the antenna climbs along +z.
+    assert np.allclose(pos_m[:, 2], EARTH_RADIUS_M + 0.5 * a_x * t_q ** 2 + 10.0, rtol=0, atol=1e-3), "gnss position mismatch"
+    assert np.allclose(vel_m[:, 2], a_x * t_q, rtol=0, atol=1e-3), "gnss velocity mismatch"
+    print(f"gnss deterministic OK: pos z {pos_m[0, 2]:.3f} -> {pos_m[-1, 2]:.3f}")
 
     # 4) fix logic + full error model, PLACEHOLDER values
     spec = GNSSSpec(antenna, rate_hz=1.0, first_fix_time_s=2.0, outages=((10.0, 12.0),))
@@ -513,10 +517,10 @@ if __name__ == "__main__":
     print("GNSS OK")
 
     # ---- LIDAR ----
-    LIDAR_STATION = [5.0, 0.0, 0.0]  # 5 m above base; CG starts at x = 20 m -> base on ground, sensor at 5 m
+    LIDAR_STATION = [5.0, 0.0, 0.0]  # 5 m above base; CG at 20 m -> base at the launch site, sensor at 5 m
 
     def run_lidar(spec, duration_s=60.0, dt=0.01, seed=0):
-        state = State([20, 0, 0], [0, 0, 0], [1, 0, 0, 0], [0, 0, 0], [0.0, 0.0])
+        state = State(launch_position_body_m(EARTH_RADIUS_M, 20.0), [0, 0, 0], Q_LAUNCH, [0, 0, 0], [0.0, 0.0])
         lidar = Lidar(spec, seed=seed)
         t = 0.0
         loads, props = truth_inputs(t, state, model, configuration, provider)
@@ -551,12 +555,14 @@ if __name__ == "__main__":
 
     # 7) geometry: sideways beam sees no planet, 60 deg tilt -> range = altitude / cos(60 deg)
     props0 = model.mass_properties(None, None, None)
-    state = State([20, 0, 0], [0, 0, 0], [1, 0, 0, 0], [0, 0, 0], [0.0, 0.0])
+    state = State(launch_position_body_m(EARTH_RADIUS_M, 20.0), [0, 0, 0], Q_LAUNCH, [0, 0, 0], [0.0, 0.0])
     sample = Lidar(LidarSpec(LIDAR_STATION, boresight_body=[0.0, 1.0, 0.0])).measure(0.0, state, props0)
     assert sample.in_reach and not sample.valid, "sideways beam must not hit"
-    q60 = [np.cos(np.pi / 6), 0.0, 0.0, np.sin(np.pi / 6)]  # 60 deg about z
-    pos_body = quat_to_matrix(q60).T @ [5.0, 0.0, 0.0] + [15.0, 0.0, 0.0]  # sensor at x = 5 m, initial frame
-    state = State(pos_body, [0, 0, 0], q60, [0, 0, 0], [0.0, 0.0])
+    q60 = [np.cos(np.pi / 6), 0.0, 0.0, np.sin(np.pi / 6)]  # 60 deg about Body z, on top of the launch attitude
+    q_tilt = quaternion_product(Q_LAUNCH, q60)
+    sensor_ecef = np.array([0.0, 0.0, EARTH_RADIUS_M + 5.0])  # sensor 5 m above the site, ECEF
+    pos_body = body_to_ecef_matrix(q_tilt).T @ sensor_ecef + np.array([15.0, 0.0, 0.0])  # CG 15 m further along Body +x
+    state = State(pos_body, [0, 0, 0], q_tilt, [0, 0, 0], [0.0, 0.0])
     spec = LidarSpec(LIDAR_STATION, range_sigma_m=0.0, range_sigma_per_m=0.0)
     sample = Lidar(spec).measure(0.0, state, props0)
     assert abs(sample.range_true_m - 5.0 / np.cos(np.pi / 3)) < 1e-3, "tilted range mismatch"

@@ -42,16 +42,18 @@ exhaust speed as a second thrust would count propulsion twice.
 
 ## Body-only state derivatives
 
-Let rᴮ be the vector from a fixed initial origin to CG, expressed in CURRENT
-Body axes. Let vᴮ be CG velocity in the same axes. Then:
+Let rᴮ be the vector from the Earth centre (the ECEF origin) to CG, expressed in
+CURRENT Body axes. Let vᴮ be CG velocity in the same axes. Then:
 
 - ṙᴮ = vᴮ − ω × rᴮ.
 - v̇ᴮ = aᴮ − ω × vᴮ.
-- q̇ = ½ q ⊗ [0,ω]; quaternion q maps current Body to initial Body.
+- q̇ = ½ q ⊗ [0,ω]; quaternion q maps current Body to ECEF.
 - Each stage fuel derivative is minus its consumption rate.
 
-The initial Body basis is a mathematical reference with no specified geographic
-orientation. Initial q=[1,0,0,0]. ENU/ECEF conversion is deferred.
+The fixed reference frame is ECEF: origin at the Earth centre (0,0,0), launch
+site at (0,0,earth_radius). Earth rotation is not modeled in v0, so the ECEF
+axes are treated as non-rotating (inertial). At the pad the vehicle is vertical:
+initial q = frames.LAUNCH_QUATERNION_BODY_TO_ECEF_WXYZ, Body +x along ECEF +z.
 
 ## Geometric derivatives and sensors
 

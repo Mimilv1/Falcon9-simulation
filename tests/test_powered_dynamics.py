@@ -9,7 +9,7 @@ from dynamics import State, Loads, rk4_step, accelerations, acceleration_truth
 from mass_properties import MassProperties
 from mass_flow import ExhaustPort, uniform_disk_gyration
 from propagation import propagate
-from frames import body_to_initial_body_matrix
+from frames import body_to_ecef_matrix
 
 
 class LumpedRocket:
@@ -68,7 +68,7 @@ class PoweredDynamicsChecks(unittest.TestCase):
 
     def test_cg_equations_match_fixed_reference_coupled_balance(self):
         v=build_falcon9(); model=v.mass_model(); state=v.to_state(); omega=np.array([.01,.02,-.015])
-        state=State(state.position_body_m,state.velocity_body_mps,state.quaternion_body_to_initial_body_wxyz,omega,state.propellant_kg)
+        state=State(state.position_body_m,state.velocity_body_mps,state.quaternion_body_to_ecef_wxyz,omega,state.propellant_kg)
         loads=centered_provider(2000,40,6e6)(0,state)
         p=model.mass_properties(None,state.propellant_kg,[2000,0],consumption_rate_kgps2=[40,0])
         a,alpha=accelerations(state,loads,p)
@@ -114,11 +114,13 @@ class PoweredDynamicsChecks(unittest.TestCase):
         truth=acceleration_truth(state,loads,p,sensor_station_body_m=[0,0,0])
         h=1e-3; plus=rk4_step(0,state,h,model,None,centered_provider(1000,thrust=3e6))
         pplus=model.mass_properties(None,plus.propellant_kg,[1000,0])
-        R=body_to_initial_body_matrix(state.quaternion_body_to_initial_body_wxyz)
-        Rp=body_to_initial_body_matrix(plus.quaternion_body_to_initial_body_wxyz)
+        R=body_to_ecef_matrix(state.quaternion_body_to_ecef_wxyz)
+        Rp=body_to_ecef_matrix(plus.quaternion_body_to_ecef_wxyz)
         u=R@(state.velocity_body_mps-p.cg_rate_body_mps)
         up=Rp@(plus.velocity_body_mps-pplus.cg_rate_body_mps)
-        np.testing.assert_allclose((up-u)/h,truth['sensor_acceleration_body_mps2'],rtol=1e-5,atol=2e-5)
+        # Attitude is constant (no moment): the ECEF finite difference of the
+        # base velocity equals the Body sensor acceleration rotated into ECEF.
+        np.testing.assert_allclose((up-u)/h,R@truth['sensor_acceleration_body_mps2'],rtol=1e-5,atol=2e-5)
 
     def test_rising_flow_fuel_event_is_resolved_without_negative_inventory(self):
         lower,_=build_falcon9().separate()

@@ -10,24 +10,24 @@ from typing import Callable
 import numpy as np
 
 from frames import (
-    vector3, normalize_quaternion, quaternion_rate_body_to_initial_body,
+    vector3, normalize_quaternion, quaternion_rate_body_to_ecef,
 )
 from mass_flow import ExhaustPort, point_gyration, validate_ports, PropellantLimitError
 
 
 @dataclass(frozen=True)
 class State:
-    position_body_m: np.ndarray  # initial fixed origin -> CG, expressed in CURRENT Body
+    position_body_m: np.ndarray  # Earth centre -> CG, expressed in CURRENT Body
     velocity_body_mps: np.ndarray
-    quaternion_body_to_initial_body_wxyz: np.ndarray  # current Body -> initial Body basis
+    quaternion_body_to_ecef_wxyz: np.ndarray  # current Body -> ECEF basis
     omega_body_radps: np.ndarray
     propellant_kg: np.ndarray  # [Stage 1, attached Stage 2]
 
     def __post_init__(self):
         for field in ("position_body_m", "velocity_body_mps", "omega_body_radps"):
             object.__setattr__(self, field, vector3(getattr(self, field)).copy())
-        object.__setattr__(self, "quaternion_body_to_initial_body_wxyz",
-                           normalize_quaternion(self.quaternion_body_to_initial_body_wxyz))
+        object.__setattr__(self, "quaternion_body_to_ecef_wxyz",
+                           normalize_quaternion(self.quaternion_body_to_ecef_wxyz))
         prop = np.asarray(self.propellant_kg, dtype=float)
         if prop.shape != (2,) or not np.all(np.isfinite(prop)) or np.any(prop < -1e-7):
             raise ValueError("State needs nonnegative [Stage 1, Stage 2] propellant masses.")
@@ -35,7 +35,7 @@ class State:
 
     def to_vector(self):
         return np.r_[self.position_body_m, self.velocity_body_mps,
-                     self.quaternion_body_to_initial_body_wxyz, self.omega_body_radps,
+                     self.quaternion_body_to_ecef_wxyz, self.omega_body_radps,
                      self.propellant_kg]
 
     @classmethod
@@ -90,7 +90,7 @@ def state_derivative(time_s, state_vector, model, configuration, provider):
     position_rate = state.velocity_body_mps-np.cross(omega,state.position_body_m)
     acceleration_body,angular_rate = accelerations(state,loads,properties)
     body_velocity_rate = acceleration_body-np.cross(omega,state.velocity_body_mps)
-    attitude_rate = quaternion_rate_body_to_initial_body(state.quaternion_body_to_initial_body_wxyz, omega)
+    attitude_rate = quaternion_rate_body_to_ecef(state.quaternion_body_to_ecef_wxyz, omega)
     return np.r_[position_rate, body_velocity_rate, attitude_rate, angular_rate,
                  -loads.consumption_kgps]
 
@@ -143,8 +143,8 @@ def navigation_truth(state, loads):
     return {
         "position_body_m": state.position_body_m.copy(),
         "velocity_body_mps": state.velocity_body_mps.copy(),
-        "quaternion_body_to_initial_body_wxyz": state.quaternion_body_to_initial_body_wxyz.copy(),
-        # Angular velocity relative to the fixed initial basis; Earth rotation omitted.
+        "quaternion_body_to_ecef_wxyz": state.quaternion_body_to_ecef_wxyz.copy(),
+        # Angular velocity relative to the ECEF basis; Earth rotation omitted.
         "omega_body_radps": state.omega_body_radps.copy(),
         "force_nongrav_body_n": loads.force_body_n.copy(),
         "gravity_body_mps2": loads.gravity_body_mps2.copy(),

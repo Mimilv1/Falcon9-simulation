@@ -1,23 +1,34 @@
 # Environment model: envelope, limits and the 175 km requirement
 
-This note summarizes what `Environement.py` models today, why its ceiling is
+This note summarizes what `Environement.py` models today, why its ceiling was
 120 km, what breaks if trajectories reach 175 km, and what the upgrade path
 is. It is the reasoning behind the ceiling comment in `Environement.py`.
 
-## What the model covers today
+**Status update:** the minimal spherical upgrade described under "Team
+decision" has since been implemented, and the team ECEF decision has been
+adopted project-wide: the Earth centre is the frame origin (0,0,0) and the
+launch site sits at (0,0,earth_radius) on the +z axis. Gravity is a vector:
+the surface gravity magnitude at the launch site plus the planet radius place
+a spherical planet centered on the ECEF origin; gravity is inverse-square
+toward that centre and altitude is measured above the curved surface. The
+atmosphere envelope is 0..2000 km, with the isothermal tail above the
+mesopause acting as a documented near-vacuum placeholder. Earth rotation (the
+orbital half of the upgrade) remains open: the ECEF axes are currently treated
+as non-rotating (inertial). The sections below are kept as the rationale for
+that change.
+
+## What the model covers
 
 | Piece | Model | Envelope |
 | --- | --- | --- |
-| Atmosphere | USSA 1976 layers 0..84.852 km plus an explicit isothermal tail | 0..120 km, rejected outside |
-| Gravity | Fixed direction along the initial up axis; constant magnitude, or inverse-square when an Earth radius is configured | flat-Earth convention |
-| Wind | One fixed vector in the initial Body basis | scenario assumption |
-| Ground | A single plane of constant altitude along the up axis | no terrain, no contact |
+| Atmosphere | USSA 1976 layers 0..84.852 km plus an explicit isothermal tail to the ceiling | 0..2000 km, rejected outside |
+| Gravity | Spherical: inverse-square toward the planet centre (the ECEF origin), configured by the surface gravity magnitude at the launch site (0,0,earth_radius) and the planet radius | vector, position-dependent direction |
+| Wind | One fixed vector in ECEF | scenario assumption |
+| Ground | A sphere concentric with the planet; the launch site (0,0,earth_radius) sits `ground_altitude_m` above it | no terrain, no contact |
 
-This covers launch, ascent, staging, coast, reentry and landing arcs that
-stay below 120 km. Queries outside the envelope raise; the model never
-extrapolates.
+Queries outside the envelope raise; the model never extrapolates.
 
-## Why the ceiling is 120 km and not higher
+## Why the ceiling was 120 km before the spherical upgrade
 
 Three independent reasons:
 
@@ -89,13 +100,12 @@ must become a globe.
    assertion that values below the mesopause are unchanged.
 3. **Team decision (frame upgrade):** a geocentric or ECEF frame, at minimum a
    spherical Earth: gravity toward the planet centre, altitude above a curved
-   surface, eventually Earth rotation. This means a new environment class
-   alongside the current one with the same four method names
-   (`atmosphere`, `altitude`, `gravity_body`, `wind_body`), plus an interface
-   change the whole team must agree on (`gravity_body` and `altitude` need the
-   state expressed in, or convertible to, an Earth-fixed frame). The current
-   flat class stays as a verification baseline: the same low-altitude
-   trajectory in both frames must agree.
+   surface, eventually Earth rotation. The ECEF datum is now adopted
+   project-wide (origin at the Earth centre, launch site at (0,0,earth_radius),
+   Body-to-ECEF quaternions); Earth rotation and orbital-capable dynamics
+   remain open. The former flat class is gone; the low-altitude agreement
+   between the old and new conventions is covered by the ECEF rewrite of the
+   gravity/altitude tests.
 
 ## Open question for the team
 

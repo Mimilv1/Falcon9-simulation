@@ -7,13 +7,17 @@ Team mission conditions and the integrated flight runner are pending.
 
 All shared position, velocity, force, moment, gravity and angular-rate vectors
 use **current Body components**. **Body +x points toward the nose**. The frame is
-right handed; engine-ring angle zero is +y and +90° is +z. Geographic heading,
-ENU and ECEF transforms are deferred.
+right handed; engine-ring angle zero is +y and +90° is +z. Geographic heading
+remains unspecified.
 
-The quaternion is Hamilton [w,x,y,z], mapping current Body to the fixed initial
-Body basis. Initial q=[1,0,0,0]. This is not a geographic reference.
+The fixed reference frame is **ECEF**: the Earth centre is the origin (0,0,0) and
+the vehicle launches from **(0,0,earth_radius)** on the +z axis. Earth rotation
+is not modeled in v0, so the ECEF axes are treated as non-rotating (inertial).
+The quaternion is Hamilton [w,x,y,z], mapping current Body to ECEF. At the pad
+the vehicle is vertical, Body +x along ECEF +z: initial
+q=[sqrt(0.5), 0, -sqrt(0.5), 0] (`frames.LAUNCH_QUATERNION_BODY_TO_ECEF_WXYZ`).
 
-`State.position_body_m` means the vector **from a fixed initial origin to CG,
+`State.position_body_m` means the vector **from the Earth centre to CG,
 expressed in current Body axes**. It is not CG position relative to itself.
 Position and velocity derivatives include rotating-basis transport terms.
 

@@ -11,7 +11,10 @@ class Falcon9Parameters:
         self.body_diameter = 3.66
         self.radius = self.body_diameter / 2
 
-        self.quaternion_body_to_initial_body_wxyz = (1.0, 0.0, 0.0, 0.0)
+        # Vertical on the pad: Body +x (nose) along ECEF +z at the launch site
+        # (0,0,earth_radius); matches frames.LAUNCH_QUATERNION_BODY_TO_ECEF_WXYZ.
+        _launch = math.sqrt(0.5)
+        self.quaternion_body_to_ecef_wxyz = (_launch, 0.0, -_launch, 0.0)
 
         self.stage1_length = 42.6
         self.stage2_length = 12.6

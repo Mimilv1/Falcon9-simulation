@@ -3,15 +3,16 @@
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
 import numpy as np
-from frames import body_to_initial_body_matrix, normalize_quaternion, vector3
+from frames import body_to_ecef_matrix, normalize_quaternion, vector3
+from Environement import EARTH_MEAN_RADIUS_M
 from mass_properties import combine_components, fixed_cylinder
 from vehicle_parameters import Falcon9Parameters
 from vehicle_mass_model import VehicleModel, Configuration
 
 
 def quat_rotate(q, v):
-    """Rotate current Body components into the fixed initial Body basis."""
-    return body_to_initial_body_matrix(q) @ vector3(v)
+    """Rotate current Body components into ECEF."""
+    return body_to_ecef_matrix(q) @ vector3(v)
 
 
 @dataclass(frozen=True)
@@ -153,13 +154,13 @@ class Vehicle:
     t: float = 0.0
     position: np.ndarray = field(
         default_factory=lambda: np.zeros(3)
-    )  # initial origin -> structural base, CURRENT Body m
+    )  # Earth centre -> structural base, CURRENT Body m
     velocity: np.ndarray = field(
         default_factory=lambda: np.zeros(3)
-    )  # base velocity relative to initial origin, CURRENT Body m/s
+    )  # base velocity in ECEF, CURRENT Body m/s
     quaternion: np.ndarray = field(
         default_factory=lambda: np.array([1.0, 0.0, 0.0, 0.0])
-    )
+    )  # current Body -> ECEF [w,x,y,z]
     omega: np.ndarray = field(default_factory=lambda: np.zeros(3))  # Body rad/s
     parameters: object | None = field(default=None, repr=False)
     datum_shift_m: float = 0.0  # current base station relative to original datum
@@ -275,7 +276,7 @@ class Vehicle:
             - np.cross(state.omega_body_radps, arm)
             - properties.cg_rate_body_mps
         )
-        self.quaternion = state.quaternion_body_to_initial_body_wxyz.copy()
+        self.quaternion = state.quaternion_body_to_ecef_wxyz.copy()
         self.omega = state.omega_body_radps.copy()
         for stage in self.stages:
             stage.propellant_mass = float(prop[stage.name])
@@ -440,7 +441,10 @@ def build_falcon9(parameters=None):
         [stage1, stage2],
         payload_mass=p.payload_mass,
         parameters=p,
-        quaternion=np.array(p.quaternion_body_to_initial_body_wxyz),
+        # Default pad placement: base at the ECEF launch site (0,0,earth_radius),
+        # expressed in launch-attitude Body components as [R, 0, 0].
+        position=np.array([EARTH_MEAN_RADIUS_M, 0.0, 0.0]),
+        quaternion=np.array(p.quaternion_body_to_ecef_wxyz),
     )
 
 
