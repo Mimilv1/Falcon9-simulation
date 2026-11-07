@@ -3,6 +3,7 @@ from dataclasses import dataclass
 import numpy as np
 from propulsion import steady_mass_flow,evaluate_steady_engine,scale_shutdown_output
 from load_interface import AppliedForce,assemble_loads
+from Aerodynamics import Aerodynamics
 
 
 @dataclass(frozen=True)
@@ -19,11 +20,18 @@ class AscentEvaluation:
 class SteadyPoweredAscent:
     """Steady engine commands; B can replace this provider without changing A."""
     def __init__(self,vehicle,environment,aerodynamics, *, nozzle_exit_axial_m=0.0,
-                 max_angle_of_attack_rad=None,command_envelope=None):
+                 max_angle_of_attack_rad=None,command_envelope=None,
+                 aero_configuration='full_stack'):
         self.vehicle=vehicle
         self.model=vehicle.mass_model()
         self.environment=environment
         self.aerodynamics=aerodynamics
+        if isinstance(aerodynamics,Aerodynamics):
+            self.aero_configuration=aero_configuration
+            if aero_configuration not in aerodynamics.configurations:
+                raise ValueError('Unknown aero configuration for this provider: '+str(aero_configuration))
+        else:
+            self.aero_configuration=None
         self.nozzle_exit_axial_m=float(nozzle_exit_axial_m)
         self.command_envelope=command_envelope
         self.max_angle_of_attack_rad=max_angle_of_attack_rad
@@ -55,12 +63,21 @@ class SteadyPoweredAscent:
             if self.command_envelope is not None:
                 result=scale_shutdown_output(result,*self.command_envelope(time_s))
             forces.append(result.applied_force);ports.append(result.exhaust_port);thrust+=result.thrust_n
-        aero=self.aerodynamics.evaluate(state,properties,atmosphere,self.environment.wind_body(state))
+        wind=self.environment.wind_body(state)
+        if self.aero_configuration is not None:
+            aero=self.aerodynamics.evaluate(state,properties,atmosphere,wind,self.aero_configuration)
+        else:
+            aero=self.aerodynamics.evaluate(state,properties,atmosphere,wind)
         if self.max_angle_of_attack_rad is not None and aero.relative_speed_mps>1e-6 and aero.angle_of_attack_rad>self.max_angle_of_attack_rad:
             raise ValueError('Attitude check exceeded its declared angle-of-attack limit.')
-        # Drag-through-CG is an explicit first-model assumption: no aero moment.
+        # Aero force through the CG plus the model's free moment about the CG;
+        # a drag-only model contributes no free moment.
         forces.append(AppliedForce(aero.force_body_n,properties.cg_station_body_m))
+        aero_moment=aero.free_moment_body_nm
+        if aero_moment is None:
+            aero_moment=np.zeros(3)
         loads=assemble_loads(properties,forces,gravity_body_mps2=self.environment.gravity_body(state),
+                              free_moment_body_nm=aero_moment,
                               consumption_kgps=consumption,exhaust_ports=ports)
         return AscentEvaluation(loads,properties,atmosphere,aero,thrust,altitude,
                                  self.environment.altitude(state,properties,[0,0,0]))
