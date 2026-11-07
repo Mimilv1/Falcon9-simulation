@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 import numpy as np
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from Environement import TroposphereEnvironment
+from Environement import Environment
 from propulsion import evaluate_steady_engine
 from Aerodynamics import DragOnlyAerodynamics,MachDragCurve
 from VehicleData import build_falcon9
@@ -20,7 +20,7 @@ class AscentModelChecks(unittest.TestCase):
         for engine in vehicle.stages[0].engines:
             engine.running=True
             engine.throttle=1.0
-        environment=TroposphereEnvironment()
+        environment=Environment()
         curve=MachDragCurve.from_json(Path(__file__).resolve().parents[1]/'data'/'drag_curve_pezent.json',21.08)
         provider=SteadyPoweredAscent(vehicle,environment,DragOnlyAerodynamics(21.08,curve))
         state=vehicle.to_state(consumption_by_stage={'stage1':provider.consumption_kgps[0]})
@@ -41,18 +41,18 @@ class AscentModelChecks(unittest.TestCase):
         self.assertLess(actual(.4),.15)
 
     def test_standard_atmosphere_reference_points(self):
-        a=TroposphereEnvironment.atmosphere(0)
+        a=Environment.atmosphere(0)
         self.assertEqual(a.temperature_k,288.15)
         self.assertEqual(a.pressure_pa,101325)
         self.assertAlmostEqual(a.density_kgm3,1.225,places=5)
-        a=TroposphereEnvironment.atmosphere(1000)
+        a=Environment.atmosphere(1000)
         self.assertAlmostEqual(a.temperature_k,281.65)
         self.assertAlmostEqual(a.pressure_pa,89874.5705,delta=.05)
         self.assertAlmostEqual(a.density_kgm3,1.1116,delta=1e-4)
 
     def test_environment_rejects_unmodeled_altitudes(self):
-        with self.assertRaises(ValueError):TroposphereEnvironment.atmosphere(2000001)
-        with self.assertRaises(ValueError):TroposphereEnvironment.atmosphere(-1)
+        with self.assertRaises(ValueError):Environment.atmosphere(2000001)
+        with self.assertRaises(ValueError):Environment.atmosphere(-1)
 
     def test_layered_atmosphere_checkpoint_values(self):
         # USSA 1976 geopotential-height checkpoints above the troposphere.
@@ -64,21 +64,21 @@ class AscentModelChecks(unittest.TestCase):
             51000:(270.65,66.939,0.000862),
         }
         for altitude,(temperature,pressure,density) in checkpoints.items():
-            sample=TroposphereEnvironment.atmosphere(altitude)
+            sample=Environment.atmosphere(altitude)
             self.assertAlmostEqual(sample.temperature_k,temperature,delta=.01)
             self.assertAlmostEqual(sample.pressure_pa,pressure,delta=2e-3*pressure)
             self.assertAlmostEqual(sample.density_kgm3,density,delta=3e-3*density)
 
     def test_atmosphere_is_continuous_at_layer_breakpoints(self):
         for altitude in (11000,20000,32000,47000,51000,71000,84852):
-            below=TroposphereEnvironment.atmosphere(altitude-.5)
-            above=TroposphereEnvironment.atmosphere(altitude+.5)
+            below=Environment.atmosphere(altitude-.5)
+            above=Environment.atmosphere(altitude+.5)
             self.assertAlmostEqual(below.temperature_k,above.temperature_k,delta=.01)
             self.assertAlmostEqual(below.pressure_pa,above.pressure_pa,delta=1e-3*below.pressure_pa)
 
     def test_gravity_points_down_at_the_ecef_launch_site(self):
         radius=6371000.0
-        env=TroposphereEnvironment(earth_radius_m=radius)
+        env=Environment(earth_radius_m=radius)
         np.testing.assert_allclose(env.launch_site_ecef_m,[0,0,radius])
         np.testing.assert_allclose(env.planet_center_ecef_m,[0,0,0])
         # Launch attitude: Body +x along ECEF +z, so site gravity is [-g,0,0] in Body.
@@ -88,7 +88,7 @@ class AscentModelChecks(unittest.TestCase):
 
     def test_gravity_changes_body_components_when_attitude_turns(self):
         radius=6371000.0
-        env=TroposphereEnvironment(earth_radius_m=radius)
+        env=Environment(earth_radius_m=radius)
         # 90 deg yaw about Body z on top of the launch attitude; the vehicle
         # stays at the ECEF launch site (0,0,R), only its heading changes.
         yawed=quaternion_product(LAUNCH_QUATERNION_BODY_TO_ECEF_WXYZ,[np.sqrt(.5),0,0,np.sqrt(.5)])
@@ -98,7 +98,7 @@ class AscentModelChecks(unittest.TestCase):
 
     def test_inverse_square_gravity_falloff(self):
         radius=6371008.8
-        env=TroposphereEnvironment(earth_radius_m=radius)
+        env=Environment(earth_radius_m=radius)
         at_ground=State(launch_position_body_m(radius),[0,0,0],
                          LAUNCH_QUATERNION_BODY_TO_ECEF_WXYZ,[0,0,0],[0,0])
         np.testing.assert_allclose(env.gravity_body(at_ground),[-9.80665,0,0],atol=1e-12)
@@ -107,20 +107,20 @@ class AscentModelChecks(unittest.TestCase):
                         LAUNCH_QUATERNION_BODY_TO_ECEF_WXYZ,[0,0,0],[0,0])
         np.testing.assert_allclose(env.gravity_body(at_radius),[-9.80665/4,0,0],atol=1e-12)
         with self.assertRaises(ValueError):
-            TroposphereEnvironment(earth_radius_m=-1.0)
+            Environment(earth_radius_m=-1.0)
 
     def test_surface_gravity_magnitude_and_launch_site_geometry(self):
-        env=TroposphereEnvironment(surface_gravity_mps2=3.7,earth_radius_m=1e6)
+        env=Environment(surface_gravity_mps2=3.7,earth_radius_m=1e6)
         pad=State(launch_position_body_m(1e6),[0,0,0],
                   LAUNCH_QUATERNION_BODY_TO_ECEF_WXYZ,[0,0,0],[0,0])
         np.testing.assert_allclose(env.gravity_body(pad),[-3.7,0,0],atol=1e-12)
         self.assertAlmostEqual(env.altitude(pad,None),0.0,places=9)
         with self.assertRaises(ValueError):
-            TroposphereEnvironment(surface_gravity_mps2=0.0)
+            Environment(surface_gravity_mps2=0.0)
 
     def test_gravity_tilts_toward_the_planet_centre_downrange(self):
         radius=6371000.0
-        env=TroposphereEnvironment(earth_radius_m=radius)
+        env=Environment(earth_radius_m=radius)
         # One radius downrange of the site, ECEF (R, 0, R): gravity points at the
         # centre, not along the site vertical, with inverse-square magnitude g0/2.
         downrange_ecef=np.array([radius,0.0,radius])
@@ -132,7 +132,7 @@ class AscentModelChecks(unittest.TestCase):
 
     def test_altitude_follows_the_curved_surface(self):
         radius=6371000.0
-        env=TroposphereEnvironment(earth_radius_m=radius)
+        env=Environment(earth_radius_m=radius)
         pad=State(launch_position_body_m(radius),[0,0,0],
                   LAUNCH_QUATERNION_BODY_TO_ECEF_WXYZ,[0,0,0],[0,0])
         self.assertAlmostEqual(env.altitude(pad,None),0.0,places=9)
@@ -147,7 +147,7 @@ class AscentModelChecks(unittest.TestCase):
         self.assertAlmostEqual(env.altitude(apogee,None),2000000.0,places=6)
 
     def test_atmosphere_tail_reaches_the_2000_km_ceiling_as_vacuum(self):
-        sample=TroposphereEnvironment.atmosphere(2000000)
+        sample=Environment.atmosphere(2000000)
         self.assertLess(sample.density_kgm3,1e-30)
         self.assertLess(sample.pressure_pa,1e-30)
         self.assertGreater(sample.temperature_k,0)
@@ -161,7 +161,7 @@ class AscentModelChecks(unittest.TestCase):
         self.assertEqual(vac.mass_flow_kgps,sea.mass_flow_kgps)
 
     def test_drag_opposes_relative_velocity_and_vanishes_at_rest(self):
-        v=build_falcon9();p=v.get_mass_properties();a=TroposphereEnvironment.atmosphere(0)
+        v=build_falcon9();p=v.get_mass_properties();a=Environment.atmosphere(0)
         aero=DragOnlyAerodynamics(21.08,.8)
         state=State([100,0,0],[100,20,-5],[1,0,0,0],[0,0,0],[410900,107500])
         result=aero.evaluate(state,p,a,np.zeros(3))
