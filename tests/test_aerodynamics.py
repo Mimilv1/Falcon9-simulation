@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 import numpy as np
 
-from Aerodynamics import (Aerodynamics,AeroConfiguration,SideSegment,
+from Aerodynamics import (Aerodynamics,AeroConfiguration,SideSegment,GridFinControl,
                            DragOnlyAerodynamics,MachDragCurve)
 from Environement import Environment
 from dynamics import State
@@ -344,6 +344,242 @@ class TestHypersonicExtension(unittest.TestCase):
                for t,s in zip(result.times_s[::4],result.states[::4])]
         self.assertGreater(max(machs),7.0)
         self.assertLessEqual(max(machs),10.0+1e-9)
+
+
+def fin_control_configuration():
+    """Isolated fin control: no potential force, no crossflow, no damping."""
+    return AeroConfiguration(name='fins',reference_area_m2=10.52,
+        reference_length_m=42.6,axial_drag=MachDragCurve([0.0,1.0],[0.4,0.4]),
+        potential_normal_slope_per_rad=0.0,potential_center_station_m=21.0,
+        side_segments=(SideSegment(0.0,42.6,3.66,0.0),),
+        pitch_damping_coefficient=0.0,roll_damping_coefficient=0.0,
+        grid_fin_control=GridFinControl(fin_count=4,
+            azimuths_rad=(0.0,np.pi/2,np.pi,3*np.pi/2),
+            fin_area_m2=2.0,lift_slope_per_rad=1.0,pivot_radius_m=2.0,
+            station_m=40.0,maximum_deflection_rad=0.3))
+
+
+class TestGridFinControl(unittest.TestCase):
+    """Fin increments: tangential force at the mount station, one moment each."""
+
+    def test_single_fin_force_and_moment_at_mount_station(self):
+        model=Aerodynamics({'fins':fin_control_configuration()})
+        result=model.evaluate(state([300.0,0.0,0.0]),properties(),ATMOSPHERE,
+                              np.zeros(3),'fins',[0.2,0.0,0.0,0.0])
+        dynamic_pressure=.5*ATMOSPHERE.density_kgm3*300.0**2
+        magnitude=dynamic_pressure*2.0*1.0*0.2
+        expected_force=np.array([0.0,0.0,magnitude])
+        expected_moment=np.cross(np.array([40.0,2.0,0.0])-properties().cg_station_body_m,
+                                 expected_force)
+        self.assertAlmostEqual(result.force_body_n[2],magnitude,places=6)
+        np.testing.assert_allclose(result.free_moment_body_nm,expected_moment,rtol=1e-12)
+        self.assertAlmostEqual(result.grid_fin_control_force_n,magnitude,places=6)
+
+    def test_equal_deflections_give_pure_roll_moment(self):
+        model=Aerodynamics({'fins':fin_control_configuration()})
+        result=model.evaluate(state([300.0,0.0,0.0]),properties(),ATMOSPHERE,
+                              np.zeros(3),'fins',[0.2,0.2,0.2,0.2])
+        single=.5*ATMOSPHERE.density_kgm3*300.0**2*2.0*0.2
+        np.testing.assert_allclose(result.force_body_n[1:],np.zeros(2),atol=1e-8)
+        np.testing.assert_allclose(result.free_moment_body_nm,
+                                   np.array([4*2.0*single,0.0,0.0]),
+                                   rtol=1e-9,atol=1e-6)
+
+    def test_opposite_pair_differential_gives_pure_pitch(self):
+        model=Aerodynamics({'fins':fin_control_configuration()})
+        result=model.evaluate(state([300.0,0.0,0.0]),properties(),ATMOSPHERE,
+                              np.zeros(3),'fins',[0.2,0.0,-0.2,0.0])
+        single=.5*ATMOSPHERE.density_kgm3*300.0**2*2.0*0.2
+        # The axial aero force stays untouched; only the fin increment steers.
+        self.assertAlmostEqual(result.force_body_n[2],2.0*single,places=6)
+        self.assertAlmostEqual(result.force_body_n[1],0.0,places=8)
+        np.testing.assert_allclose(result.free_moment_body_nm,
+                                   np.array([0.0,-2.0*(40.0-21.0)*single,0.0]),
+                                   rtol=1e-9,atol=1e-6)
+
+    def test_control_force_scales_with_dynamic_pressure(self):
+        model=Aerodynamics({'fins':fin_control_configuration()})
+        commands=[0.2,0.0,0.0,0.0]
+        slow=model.evaluate(state([150.0,0.0,0.0]),properties(),ATMOSPHERE,
+                            np.zeros(3),'fins',commands)
+        fast=model.evaluate(state([300.0,0.0,0.0]),properties(),ATMOSPHERE,
+                            np.zeros(3),'fins',commands)
+        self.assertAlmostEqual(fast.grid_fin_control_force_n,
+                                4.0*slow.grid_fin_control_force_n)
+
+    def test_single_fin_across_all_declared_azimuths(self):
+        model=Aerodynamics({'fins':fin_control_configuration()})
+        cg=properties().cg_station_body_m
+        dynamic_pressure=.5*ATMOSPHERE.density_kgm3*300.0**2
+        for index,azimuth in enumerate((0.0,np.pi/2,np.pi,3*np.pi/2)):
+            commands=[0.0,0.0,0.0,0.0]
+            commands[index]=0.2
+            result=model.evaluate(state([300.0,0.0,0.0]),properties(),ATMOSPHERE,
+                                  np.zeros(3),'fins',commands)
+            fin_force=(np.array([0.0,-np.sin(azimuth),np.cos(azimuth)])
+                                 *dynamic_pressure*2.0*1.0*0.2)
+            fin_station=np.array([40.0,2.0*np.cos(azimuth),2.0*np.sin(azimuth)])
+            np.testing.assert_allclose(
+                result.free_moment_body_nm,
+                np.cross(fin_station-cg,fin_force),rtol=1e-9,atol=1e-6)
+            np.testing.assert_allclose(
+                result.force_body_n[1:],fin_force[1:],rtol=1e-9,atol=1e-6)
+
+    def test_fin_control_reverses_in_retro_flow(self):
+        model=Aerodynamics({'fins':fin_control_configuration()})
+        commands=[0.2,0.0,0.0,0.0]
+        nose=model.evaluate(state([300.0,0.0,0.0]),properties(),ATMOSPHERE,
+                            np.zeros(3),'fins',commands)
+        retro=model.evaluate(state([-300.0,0.0,0.0]),properties(),ATMOSPHERE,
+                             np.zeros(3),'fins',commands)
+        # Same speed, mirrored through-flow: the fin increment flips sign.
+        self.assertAlmostEqual(retro.force_body_n[2],-nose.force_body_n[2],
+                               places=6)
+        np.testing.assert_allclose(retro.free_moment_body_nm,
+                                   -nose.free_moment_body_nm,rtol=1e-9,atol=1e-6)
+        self.assertAlmostEqual(retro.grid_fin_control_force_n,
+                                nose.grid_fin_control_force_n,places=3)
+
+    def test_fin_control_follows_the_axial_flow_share(self):
+        model=Aerodynamics({'fins':fin_control_configuration()})
+        commands=[0.2,0.0,0.0,0.0]
+        result45=model.evaluate(state([200.0,200.0,0.0]),properties(),ATMOSPHERE,
+                                np.zeros(3),'fins',commands)
+        cos45=np.cos(np.pi/4)
+        dynamic_pressure=.5*ATMOSPHERE.density_kgm3*(200.0**2+200.0**2)
+        expected=dynamic_pressure*2.0*1.0*0.2*cos45*abs(cos45)
+        self.assertAlmostEqual(result45.force_body_n[2],expected,places=6)
+        result90=model.evaluate(state([0.0,150.0,0.0]),properties(),ATMOSPHERE,
+                                np.zeros(3),'fins',commands)
+        self.assertEqual(result90.grid_fin_control_force_n,0.0)
+
+    def test_control_adds_exactly_to_uncommanded_flight(self):
+        model=Aerodynamics.from_json(CONFIGURATIONS)
+        flight=state([300.0,-20.0,0.0])
+        commanded=[0.15,0.0,-0.15,0.0]
+        uncommanded=model.evaluate(flight,properties(),ATMOSPHERE,np.zeros(3),
+                                   'booster_landing')
+        steered=model.evaluate(flight,properties(),ATMOSPHERE,np.zeros(3),
+                               'booster_landing',commanded)
+        control=model.configurations['booster_landing'].grid_fin_control
+        direction=flight.velocity_body_mps/np.linalg.norm(flight.velocity_body_mps)
+        share=direction[0]*abs(direction[0])
+        dynamic_pressure=.5*ATMOSPHERE.density_kgm3*np.dot(flight.velocity_body_mps,
+                                                           flight.velocity_body_mps)
+        increment=0.0
+        expected_force=np.zeros(3); expected_moment=np.zeros(3)
+        cg=properties().cg_station_body_m
+        for azimuth,deflection in zip(control.azimuths_rad,commanded):
+            if deflection==0.0:
+                continue
+            magnitude=dynamic_pressure*control.fin_area_m2\
+                      *control.lift_slope_per_rad*deflection*share
+            fin_force=np.array([0.0,-np.sin(azimuth),np.cos(azimuth)])*magnitude
+            fin_station=np.array([control.station_m,
+                                    control.pivot_radius_m*np.cos(azimuth),
+                                    control.pivot_radius_m*np.sin(azimuth)])
+            expected_force+=fin_force
+            expected_moment+=np.cross(fin_station-cg,fin_force)
+        np.testing.assert_allclose(steered.force_body_n-uncommanded.force_body_n,
+                                   expected_force,rtol=1e-9,atol=1e-6)
+        np.testing.assert_allclose(steered.free_moment_body_nm
+                                   -uncommanded.free_moment_body_nm,
+                                   expected_moment,rtol=1e-9,atol=1e-6)
+
+    def test_boundary_deflection_is_accepted_and_beyond_rejected(self):
+        model=Aerodynamics({'fins':fin_control_configuration()})
+        flight=state([300.0,0.0,0.0])
+        model.evaluate(flight,properties(),ATMOSPHERE,np.zeros(3),
+                       'fins',[0.3,0.0,0.0,0.0])
+        model.evaluate(flight,properties(),ATMOSPHERE,np.zeros(3),
+                       'fins',[-0.3,0.0,0.0,0.0])
+        with self.assertRaises(ValueError):
+            model.evaluate(flight,properties(),ATMOSPHERE,np.zeros(3),
+                            'fins',[0.3000001,0.0,0.0,0.0])
+
+    def test_rest_with_valid_commands_returns_zero_loads(self):
+        model=Aerodynamics({'fins':fin_control_configuration()})
+        result=model.evaluate(state([0.0,0.0,0.0]),properties(),ATMOSPHERE,
+                              np.zeros(3),'fins',[0.2,0.2,0.2,0.2])
+        np.testing.assert_allclose(result.force_body_n,np.zeros(3))
+        np.testing.assert_allclose(result.free_moment_body_nm,np.zeros(3))
+        self.assertEqual(result.grid_fin_control_force_n,0.0)
+
+    def test_roll_command_accelerates_roll_in_the_dynamics_core(self):
+        from mass_properties import MassProperties
+        from load_interface import AppliedForce,assemble_loads
+        from dynamics import accelerations
+        model=Aerodynamics({'fins':fin_control_configuration()})
+        flight=state([300.0,0.0,0.0])
+        mass=MassProperties(mass_kg=25000.0,
+                            cg_station_body_m=np.array([21.0,0.0,0.0]),
+                            inertia_body_kgm2=np.diag([100000.0,1e6,1e6]),
+                            inertia_rate_body_kgm2ps=np.zeros((3,3)),
+                            cg_rate_body_mps=np.zeros(3))
+        result=model.evaluate(flight,mass,ATMOSPHERE,np.zeros(3),
+                               'fins',[0.2,0.2,0.2,0.2])
+        loads=assemble_loads(mass,[AppliedForce(result.force_body_n,
+                                                mass.cg_station_body_m)],
+                            gravity_body_mps2=np.zeros(3),
+                            free_moment_body_nm=result.free_moment_body_nm)
+        _,angular=accelerations(flight,loads,mass)
+        self.assertGreater(angular[0],0.0)
+        self.assertAlmostEqual(angular[0],
+                               result.free_moment_body_nm[0]/100000.0,places=6)
+        self.assertAlmostEqual(angular[1],0.0,places=6)
+        self.assertAlmostEqual(angular[2],0.0,places=6)
+
+    def test_command_contract_is_enforced(self):
+        model=Aerodynamics.from_json(CONFIGURATIONS)
+        flight=state([300.0,0.0,0.0])
+        with self.assertRaises(ValueError):
+            model.evaluate(flight,properties(),ATMOSPHERE,np.zeros(3),
+                           'booster_landing',[0.1,0.1,0.1])
+        with self.assertRaises(ValueError):
+            model.evaluate(flight,properties(),ATMOSPHERE,np.zeros(3),
+                           'booster_landing',[0.5,0.1,0.1,0.1])
+        with self.assertRaises(ValueError):
+            model.evaluate(flight,properties(),ATMOSPHERE,np.zeros(3),
+                           'booster_landing',[float('nan'),0.0,0.0,0.0])
+        with self.assertRaises(ValueError):
+            model.evaluate(flight,properties(),ATMOSPHERE,np.zeros(3),
+                           'booster_alone',[0.1,0.1,0.1,0.1])
+        model.evaluate(flight,properties(),ATMOSPHERE,np.zeros(3),
+                       'booster_alone',[0.0,0.0,0.0,0.0])
+
+    def test_zero_commands_match_the_undeflected_model(self):
+        model=Aerodynamics.from_json(CONFIGURATIONS)
+        flight=state([200.0,15.0,0.0])
+        undeflected=model.evaluate(flight,properties(),ATMOSPHERE,np.zeros(3),
+                                   'booster_landing')
+        zeros=model.evaluate(flight,properties(),ATMOSPHERE,np.zeros(3),
+                             'booster_landing',[0.0,0.0,0.0,0.0])
+        np.testing.assert_array_equal(undeflected.force_body_n,zeros.force_body_n)
+        np.testing.assert_array_equal(undeflected.free_moment_body_nm,
+                                      zeros.free_moment_body_nm)
+
+    def test_only_booster_landing_declares_fin_control(self):
+        model=Aerodynamics.from_json(CONFIGURATIONS)
+        for name in ('full_stack','booster_alone','second_stack'):
+            self.assertIsNone(model.configurations[name].grid_fin_control)
+        control=model.configurations['booster_landing'].grid_fin_control
+        self.assertEqual(control.fin_count,4)
+        self.assertEqual(len(control.azimuths_rad),4)
+
+    def test_invalid_fin_declarations_are_rejected(self):
+        with self.assertRaises(ValueError):
+            GridFinControl(fin_count=0,azimuths_rad=(),fin_area_m2=1.0,
+                           lift_slope_per_rad=1.0,pivot_radius_m=1.0,
+                           station_m=39.0,maximum_deflection_rad=0.3)
+        with self.assertRaises(ValueError):
+            AeroConfiguration(name='bad',reference_area_m2=10.52,reference_length_m=42.6,
+                axial_drag=MachDragCurve([0.0,1.0],[0.4,0.4]),
+                potential_normal_slope_per_rad=0.0,potential_center_station_m=21.0,
+                side_segments=(SideSegment(0.0,42.6,3.66,1.1),),
+                pitch_damping_coefficient=-20.0,
+                grid_fin_control=GridFinControl(fin_count=1,azimuths_rad=(0.0,),
+                    fin_area_m2=1.0,lift_slope_per_rad=1.0,pivot_radius_m=1.0,
+                    station_m=50.0,maximum_deflection_rad=0.3))
 
 
 class TestProviderIntegration(unittest.TestCase):

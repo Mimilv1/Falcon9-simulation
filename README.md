@@ -67,6 +67,7 @@ behavior have not been agreed or validated.
 ## References
 
 - [A/B/C interface](docs/core_api.md)
+- [Aerodynamics model](docs/aero_model.md)
 - [Mass and engine parameter evidence](docs/parameter_evidence.md)
 - [Powered dynamics equations and limitations](docs/powered_dynamics.md)
 - `data/drag_curve_pezent.json`: temporary drag-table evidence and readout method
@@ -74,4 +75,6 @@ behavior have not been agreed or validated.
   declared-estimate knots so full-mission ascents pass the Mach 7 evidence ceiling
 - `data/aero_configurations.json`: declared per-configuration aerodynamic records
   (full stack, booster alone, booster with grid fins and legs, second stack);
-  only the full-stack axial curve is sourced, all other coefficients are documented estimates
+  only the full-stack axial curve is sourced, all other coefficients are documented
+  estimates; `booster_landing` additionally declares a linearized grid-fin
+  control increment (per-fin deflection commands accepted by the aero model)

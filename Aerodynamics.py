@@ -20,6 +20,11 @@ Moments about the current CG:
   (overlapping segments are incremental, e.g. grid fins on top of the body).
   rotary damping: M = c * qbar*S_ref*L_ref^2/(2*V) * omega about each axis,
   with per-configuration pitch (yaw, by symmetry) and roll coefficients.
+Grid fin control (optional per configuration): validated per-fin deflection
+commands add a linearized control force at the fin's 3-D mount station, so the
+axial lever carries pitch/yaw and the radial offset carries roll. Configurations
+without declared fins reject nonzero commands; commands beyond the declared
+travel raise, like the Mach domain.
 Approximation classes follow the project evidence convention: only the
 full_stack axial curve is sourced (Pezent 2024 readout, 0 deg AoA); every other
 coefficient is a declared estimate, documented in data/aero_configurations.json.
@@ -65,6 +70,7 @@ class AeroOutput:
     drag_coefficient: float
     normal_force_coefficient: float = 0.0
     free_moment_body_nm: np.ndarray | None = None
+    grid_fin_control_force_n: float = 0.0
 
 
 class DragOnlyAerodynamics:
@@ -116,6 +122,47 @@ class SideSegment:
 
 
 @dataclass(frozen=True)
+class GridFinControl:
+    """Linearized deflection-controlled grid-fin increments (declared values).
+
+    Fins ring the body at azimuths about Body +x, measured from +y toward +z.
+    Fin i acts at the 3-D station (station_m, pivot_radius_m*cos(azimuth_i),
+    pivot_radius_m*sin(azimuth_i)). A positive deflection produces a control
+    force along the tangential direction (0, -sin(azimuth_i), cos(azimuth_i))
+    with magnitude qbar*fin_area_m2*lift_slope_per_rad*deflection, scaled by
+    the axial-flow share cos(a)*|cos(a)|: full nose-first, full but reversed
+    engine-first (retro), zero at 90 degrees total angle. The 3-D
+    station carries the full moment: the axial lever gives pitch/yaw control,
+    the radial offset gives roll control. No Mach/alpha dependence, no
+    interference with the passive crossflow segments, and no deflection
+    axial-drag increment: declared approximations. Deflection-rate and travel
+    dynamics belong upstream, not here; this module validates magnitudes only.
+    """
+    fin_count: int
+    azimuths_rad: tuple
+    fin_area_m2: float
+    lift_slope_per_rad: float
+    pivot_radius_m: float
+    station_m: float
+    maximum_deflection_rad: float
+
+    def __post_init__(self):
+        azimuths=tuple(self.azimuths_rad)
+        if (not isinstance(self.fin_count,int) or self.fin_count < 1
+                or len(azimuths)!=self.fin_count
+                or not np.all(np.isfinite(azimuths))
+                or not np.all(np.isfinite([self.fin_area_m2,self.lift_slope_per_rad,
+                                            self.pivot_radius_m,self.station_m,
+                                            self.maximum_deflection_rad]))
+                or not self.fin_area_m2 > 0
+                or not self.lift_slope_per_rad > 0
+                or not self.pivot_radius_m >= 0
+                or not self.maximum_deflection_rad > 0):
+            raise ValueError('Invalid grid fin control declaration.')
+        object.__setattr__(self,'azimuths_rad',azimuths)
+
+
+@dataclass(frozen=True)
 class AeroConfiguration:
     """One vehicle shape; stations in the phase's structural datum (base=0)."""
     name: str
@@ -127,6 +174,7 @@ class AeroConfiguration:
     side_segments: tuple[SideSegment, ...]
     pitch_damping_coefficient: float
     roll_damping_coefficient: float = 0.0
+    grid_fin_control: "GridFinControl | None" = None
 
     def __post_init__(self):
         segments=tuple(self.side_segments)
@@ -156,6 +204,11 @@ class AeroConfiguration:
                     or segment.width_m <= 0
                     or not 0 <= segment.crossflow_drag_coefficient):
                 raise ValueError('Invalid configuration side segment.')
+        fin=self.grid_fin_control
+        if fin is not None and (not isinstance(fin,GridFinControl)
+                                 or not 0 <= fin.station_m <= self.reference_length_m):
+            raise ValueError('The grid fin control station must be a GridFinControl '
+                             'station within the configuration length.')
         object.__setattr__(self,'side_segments',segments)
 
 
@@ -193,6 +246,15 @@ class Aerodynamics:
                                       segment['width_m'],
                                       segment['crossflow_drag_coefficient'])
                           for segment in spec['side_segments'])
+            fin_spec=spec.get('grid_fin_control')
+            grid_fin=(None if fin_spec is None else GridFinControl(
+                fin_count=fin_spec['fin_count'],
+                azimuths_rad=tuple(fin_spec['azimuths_rad']),
+                fin_area_m2=fin_spec['fin_area_m2'],
+                lift_slope_per_rad=fin_spec['lift_slope_per_rad'],
+                pivot_radius_m=fin_spec['pivot_radius_m'],
+                station_m=fin_spec['station_m'],
+                maximum_deflection_rad=fin_spec['maximum_deflection_rad']))
             configurations[name]=AeroConfiguration(
                 name=name,
                 reference_area_m2=spec['reference_area_m2'],
@@ -203,13 +265,35 @@ class Aerodynamics:
                 side_segments=segments,
                 pitch_damping_coefficient=spec['pitch_damping_coefficient'],
                 roll_damping_coefficient=spec.get('roll_damping_coefficient',0.0),
+                grid_fin_control=grid_fin,
             )
         return cls(configurations)
 
-    def evaluate(self,state,properties,atmosphere,wind_body_mps,configuration_name):
+    @staticmethod
+    def _validated_fin_commands(configuration,grid_fin_deflections_rad):
+        """Validated per-fin deflections; None or zeros mean undeflected."""
+        control=configuration.grid_fin_control
+        if grid_fin_deflections_rad is None:
+            return np.zeros(0 if control is None else control.fin_count)
+        values=np.asarray(grid_fin_deflections_rad,dtype=float)
+        if control is None:
+            if values.size and np.any(values):
+                raise ValueError('This configuration declares no grid fin control.')
+            return np.zeros(0)
+        if values.shape != (control.fin_count,):
+            raise ValueError('Grid fin commands need one deflection per declared fin.')
+        if not np.all(np.isfinite(values)):
+            raise ValueError('Grid fin commands must be finite.')
+        if np.any(np.abs(values)>control.maximum_deflection_rad):
+            raise ValueError('Grid fin commands exceed the declared deflection travel.')
+        return values
+
+    def evaluate(self,state,properties,atmosphere,wind_body_mps,configuration_name,
+                 grid_fin_deflections_rad=None):
         configuration=self.configurations.get(configuration_name)
         if configuration is None:
             raise ValueError('Unknown aerodynamic configuration: '+str(configuration_name))
+        fin_commands=self._validated_fin_commands(configuration,grid_fin_deflections_rad)
         # Velocity of the fixed-body point coincident with CG at this instant,
         # not geometric-CG migration through the structure.
         migration=properties.cg_rate_body_mps
@@ -218,7 +302,7 @@ class Aerodynamics:
         reference_area=configuration.reference_area_m2
         if speed<=1e-10:
             return AeroOutput(np.zeros(3),0.0,0.0,0.0,0.0,
-                              float(configuration.axial_drag(0.0)),0.0,np.zeros(3))
+                              float(configuration.axial_drag(0.0)),0.0,np.zeros(3),0.0)
         direction=relative/speed
         cosine=float(direction[0])
         sine=float(np.linalg.norm(direction[1:]))
@@ -263,5 +347,25 @@ class Aerodynamics:
             configuration.roll_damping_coefficient*omega[0],
             configuration.pitch_damping_coefficient*omega[1],
             configuration.pitch_damping_coefficient*omega[2]])
+        # Grid fin control increments at the fin mount stations. The 3-D
+        # arm carries pitch/yaw through the axial lever and roll through the
+        # radial offset, exactly once per fin.
+        fin_control_force=0.0
+        control=configuration.grid_fin_control
+        if control is not None:
+            for azimuth,deflection in zip(control.azimuths_rad,fin_commands):
+                if deflection==0.0:
+                    continue
+                magnitude=(dynamic_pressure*control.fin_area_m2
+                           *control.lift_slope_per_rad*deflection
+                           *cosine*abs(cosine))
+                fin_force=np.array([0.0,-np.sin(azimuth),np.cos(azimuth)])*magnitude
+                fin_station=np.array([control.station_m,
+                                        control.pivot_radius_m*np.cos(azimuth),
+                                        control.pivot_radius_m*np.sin(azimuth)])
+                force+=fin_force
+                moment+=np.cross(fin_station-cg,fin_force)
+                fin_control_force+=abs(magnitude)
         return AeroOutput(force,speed,mach,dynamic_pressure,total_angle,axial_coefficient,
-                          normal_force/(dynamic_pressure*reference_area),moment)
+                          normal_force/(dynamic_pressure*reference_area),moment,
+                          fin_control_force)
