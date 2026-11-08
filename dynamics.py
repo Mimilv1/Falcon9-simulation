@@ -5,7 +5,7 @@ ports supply convective and rotational outflow terms, not a second thrust.
 The open-system equations assume axial CG migration and balanced axial outflow.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable
 import numpy as np
 
@@ -53,10 +53,14 @@ class Loads:
     gravity_body_mps2: np.ndarray   # Current Body gravity, added exactly once by A.
     consumption_kgps: np.ndarray   # Nonnegative [Stage 1, Stage 2] consumption.
     exhaust_ports: tuple[ExhaustPort, ...] = ()
+    # Rotating-Earth pseudo-acceleration at the CG (Coriolis + centrifugal), Body
+    # components, added exactly once by A next to gravity. Zero = inertial ECEF.
+    frame_acceleration_body_mps2: np.ndarray = field(default_factory=lambda: np.zeros(3))
 
     def __post_init__(self):
-        for field in ("force_body_n", "moment_body_nm", "gravity_body_mps2"):
-            object.__setattr__(self, field, vector3(getattr(self, field)).copy())
+        for name in ("force_body_n", "moment_body_nm", "gravity_body_mps2",
+                     "frame_acceleration_body_mps2"):
+            object.__setattr__(self, name, vector3(getattr(self, name)).copy())
         rate = np.asarray(self.consumption_kgps, dtype=float)
         if rate.shape != (2,) or not np.all(np.isfinite(rate)) or np.any(rate < 0):
             raise ValueError("Consumption is a nonnegative two-component vector in kg/s.")
@@ -118,7 +122,8 @@ def accelerations(state,loads,properties):
         mddot = -port.mass_flow_rate_kgps2
         correction += 2*mdot*(np.cross(omega,arm)-migration)+mddot*arm
         angular_flux += mdot*(point_gyration(arm)+port.gyration_body_m2)
-    acceleration = loads.force_body_n/mass+loads.gravity_body_mps2+correction/mass
+    acceleration = (loads.force_body_n/mass+loads.gravity_body_mps2
+                    +loads.frame_acceleration_body_mps2+correction/mass)
     angular = np.linalg.solve(properties.inertia_body_kgm2,
         loads.moment_body_nm-np.cross(omega,properties.inertia_body_kgm2@omega)
         - properties.inertia_rate_body_kgm2ps@omega+angular_flux@omega)
@@ -156,6 +161,8 @@ def acceleration_truth(state, loads, properties, sensor_station_body_m=None):
 
     Supply the same sensor station at every time for a physically fixed IMU.
     Default: fixed-body point coincident with CG at this instant.
+    Acceleration is relative to ECEF; specific force is the inertial one (the
+    CG pseudo-acceleration is used for the sensor station, lever-arm effect negligible).
     """
     acceleration,angular = accelerations(state,loads,properties)
     station = properties.cg_station_body_m if sensor_station_body_m is None else vector3(sensor_station_body_m)
@@ -165,7 +172,10 @@ def acceleration_truth(state, loads, properties, sensor_station_body_m=None):
     sensor_acceleration = (acceleration+np.cross(angular,arm)
                            +np.cross(state.omega_body_radps,np.cross(state.omega_body_radps,arm))
                            -2*np.cross(state.omega_body_radps,migration)-migration_acceleration)
-    specific_force = sensor_acceleration-loads.gravity_body_mps2
+    # An accelerometer senses inertial acceleration minus gravity. `acceleration` is
+    # relative to the rotating Earth, so the Coriolis/centrifugal part is removed.
+    specific_force = (sensor_acceleration-loads.gravity_body_mps2
+                      -loads.frame_acceleration_body_mps2)
     return {
         "specific_force_body_mps2": specific_force,
         "acceleration_body_mps2": acceleration,

@@ -61,7 +61,8 @@ class SteadyPoweredAscent:
         # Drag-through-CG is an explicit first-model assumption: no aero moment.
         forces.append(AppliedForce(aero.force_body_n,properties.cg_station_body_m))
         loads=assemble_loads(properties,forces,gravity_body_mps2=self.environment.gravity_body(state),
-                              consumption_kgps=consumption,exhaust_ports=ports)
+                              consumption_kgps=consumption,exhaust_ports=ports,
+                              frame_acceleration_body_mps2=self.environment.frame_acceleration_body(state))
         return AscentEvaluation(loads,properties,atmosphere,aero,thrust,altitude,
                                  self.environment.altitude(state,properties,[0,0,0]))
 

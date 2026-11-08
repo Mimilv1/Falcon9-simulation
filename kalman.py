@@ -3,13 +3,16 @@
 State x = [p(3), v(3), b_a(3)]
   p, v : IMU station position/velocity, ECEF (origin at the Earth centre)
   b_a  : accelerometer bias, Body
-Predict : bias-corrected specific force rotated to ECEF + gravity
+Predict : bias-corrected specific force rotated to ECEF + gravity g(p) (inverse-square,
+          taken from Environement.Environment.gravity_ecef) + Coriolis/centrifugal of the
+          rotating Earth (Environment.frame_acceleration_ecef); F carries their gradients
 GNSS    : antenna position/velocity, lever arm + latency compensation (linear)
 LIDAR   : range along boresight to spherical planet, used only when a return is valid
           (planet within reach), lever arm, EKF (Jacobian on position)
 V1 limits : attitude supplied externally (truth), no gyro bias, no scale factor / misalignment states,
-            no LIDAR bias / scale factor states, constant gravity vector, spherical planet,
-            GNSS correlated error not modeled, Earth rotation not modeled (ECEF treated as inertial)
+            no LIDAR bias / scale factor states, spherical planet, GNSS correlated error not
+            modeled. Without `environment` the filter falls back to a constant gravity vector
+            and an inertial ECEF.
 """
 
 import numpy as np
@@ -22,12 +25,18 @@ P_SL, V_SL, B_SL = slice(0, 3), slice(3, 6), slice(6, 9)
 
 class NavigationKF:
     def __init__(self, p0, v0, sigma0, gravity_ecef=(0.0, 0.0, -9.81), accel_psd=1e-6,
-                 accel_bias_rw=0.0, ba0=None):
-        """sigma0: 9 initial 1-sigma [p, v, b_a]; accel_psd: (m/s2)^2*s white noise PSD."""
+                 accel_bias_rw=0.0, ba0=None, environment=None):
+        """sigma0: 9 initial 1-sigma [p, v, b_a]; accel_psd: (m/s2)^2*s white noise PSD.
+
+        environment: object of Environement.Environment (duck-typed). When given, gravity
+        is g(p) = -mu p/|p|^3 evaluated at the estimated position, and Coriolis/centrifugal
+        terms are added. gravity_ecef is then ignored (constant fallback only).
+        """
         self.x = np.r_[np.asarray(p0, float), np.asarray(v0, float),
                        np.zeros(3) if ba0 is None else np.asarray(ba0, float)]
         self.P = np.diag(np.asarray(sigma0, dtype=float) ** 2)
         self.g = np.asarray(gravity_ecef, dtype=float)
+        self.environment = environment
         self.accel_psd = float(accel_psd)
         self.accel_bias_rw = float(accel_bias_rw)  # m/s2/sqrt(s)
         self.last_accel = np.zeros(3)  # initial-frame acceleration estimate, for latency compensation
@@ -42,17 +51,30 @@ class NavigationKF:
                    accel_psd=imu_spec.accel_sigma_mps2 ** 2 / imu_spec.rate_hz,
                    accel_bias_rw=imu_spec.accel_bias_rw, **kwargs)
 
+    def _model_acceleration(self, p, v):
+        """Non-specific-force acceleration (gravity + rotating-frame) and its gradients (d/dp, d/dv)."""
+        env = self.environment
+        if env is None:
+            return self.g, np.zeros((3, 3)), np.zeros((3, 3))
+        d_cent, d_cor = env.frame_acceleration_gradients_ecef()
+        return (env.gravity_ecef(p) + env.frame_acceleration_ecef(p, v),
+                env.gravity_gradient_ecef(p) + d_cent, d_cor)
+
     def predict(self, f_meas, rot, dt):
         """Propagate over dt with IMU specific force (Body) and attitude rot (Body -> ECEF)."""
         p, v, ba = self.x[P_SL].copy(), self.x[V_SL].copy(), self.x[B_SL].copy()
-        a = rot @ (f_meas - ba) + self.g
+        model_a, d_dp, d_dv = self._model_acceleration(p, v)
+        a = rot @ (f_meas - ba) + model_a
         self.x[P_SL] = p + v * dt + 0.5 * a * dt ** 2
         self.x[V_SL] = v + a * dt
         self.last_accel = a
 
         eye = np.eye(3)
         F = np.eye(N)
-        F[P_SL, V_SL] = eye * dt
+        F[P_SL, P_SL] = eye + 0.5 * d_dp * dt ** 2
+        F[P_SL, V_SL] = eye * dt + 0.5 * d_dv * dt ** 2
+        F[V_SL, P_SL] = d_dp * dt
+        F[V_SL, V_SL] = eye + d_dv * dt
         F[P_SL, B_SL] = -0.5 * rot * dt ** 2
         F[V_SL, B_SL] = -rot * dt
         S = self.accel_psd
@@ -125,10 +147,11 @@ if __name__ == "__main__":
     from sensors import IMU, IMUSpec, GNSS, GNSSSpec, Lidar, LidarSpec, truth_inputs
     from frames import (LAUNCH_QUATERNION_BODY_TO_ECEF_WXYZ as Q_LAUNCH,
                         launch_position_body_m)
+    from Environement import Environment
 
     EARTH_RADIUS_M = 6_371_000.0
     THRUST_N, MASS_KG, G, TORQUE = 20000.0, 1000.0, 9.81, 2.0e4
-    G_ECEF = np.array([0.0, 0.0, -G])  # ECEF: z = vertical at the launch site (0,0,R)
+    ENV = Environment(surface_gravity_mps2=G, earth_radius_m=EARTH_RADIUS_M)  # 1/r^2 gravity + Earth rotation
     CG = np.array([20.0, 0.0, 0.0])
     IMU_STATION, ANTENNA_STATION, LIDAR_STATION = [10.0, 0.0, 0.0], [30.0, 0.0, 0.0], [3.0, 0.0, 0.0]
 
@@ -142,10 +165,10 @@ if __name__ == "__main__":
     )
 
     def provider(t, s):
-        rot = quat_to_matrix(s.quaternion_body_to_ecef_wxyz)
         torque = TORQUE if t < 3.0 else (-TORQUE if t < 6.0 else 0.0)  # pitch up then stop rotation
         return Loads(force_body_n=[THRUST_N, 0, 0], moment_body_nm=[0, 0, torque],
-                     gravity_body_mps2=rot.T @ G_ECEF, consumption_kgps=[0.0, 0.0])
+                     gravity_body_mps2=ENV.gravity_body(s), consumption_kgps=[0.0, 0.0],
+                     frame_acceleration_body_mps2=ENV.frame_acceleration_body(s))
 
     def structural_truth(state, props, station):
         """Truth position/velocity of a fixed structural point, ECEF."""
@@ -170,7 +193,7 @@ if __name__ == "__main__":
         p_true0, v_true0 = structural_truth(state, props, IMU_STATION)
         kf = NavigationKF.from_imu_spec(  # initial error: pad survey offset, at rest
             imu_spec, p_true0 + [1.0, -1.0, 0.5], v_true0, [2, 2, 2, 0.05, 0.05, 0.05, 0.1, 0.1, 0.1],
-            gravity_ecef=G_ECEF)
+            environment=ENV)
         truth_log, nis_log, lidar_nis_log, gnss_log, lidar_valid_t, last = [], [], [], [], [], {"t": None}
 
         def process(t, state, loads, props):

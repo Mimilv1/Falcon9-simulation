@@ -8,6 +8,7 @@ from Environement import EARTH_MEAN_RADIUS_M
 from mass_properties import combine_components, fixed_cylinder
 from vehicle_parameters import Falcon9Parameters
 from vehicle_mass_model import VehicleModel, Configuration
+from kalman import NavigationKF
 
 
 def quat_rotate(q, v):
@@ -164,6 +165,9 @@ class Vehicle:
     omega: np.ndarray = field(default_factory=lambda: np.zeros(3))  # Body rad/s
     parameters: object | None = field(default=None, repr=False)
     datum_shift_m: float = 0.0  # current base station relative to original datum
+    # On-board navigation filter (IMU + GNSS + LIDAR); None until attach_navigation().
+    navigation: NavigationKF | None = field(default=None, repr=False)
+    navigation_imu_station_body_m: np.ndarray | None = field(default=None, repr=False)
 
     def __post_init__(self):
         self.position = vector3(self.position).copy()
@@ -184,9 +188,67 @@ class Vehicle:
         for stage in upper.stages:
             stage.offset -= cut
         upper.datum_shift_m += cut
+        lower.navigation = upper.navigation = None  # parent filter is invalid for either child
+        lower.navigation_imu_station_body_m = upper.navigation_imu_station_body_m = None
         upper.position = self.position + r_body
         upper.velocity = self.velocity + np.cross(self.omega, r_body)
         return lower, upper
+
+    def structural_point_ecef(self, station_body_m):
+        """Truth position/velocity (ECEF) of a fixed structural station, e.g. the IMU.
+
+        Station in current-base Body coordinates (same datum as cg_station_body_m).
+        """
+        station = vector3(station_body_m)
+        rotation = body_to_ecef_matrix(self.quaternion)
+        return (rotation @ (self.position + station),
+                rotation @ (self.velocity + np.cross(self.omega, station)))
+
+    def attach_navigation(self, imu_spec, sigma0, *, environment, position_error_m=(0, 0, 0),
+                          velocity_error_mps=(0, 0, 0), accel_bias0_mps2=None):
+        """Create the on-board Kalman filter at the IMU station of this vehicle.
+
+        State: IMU-station position/velocity in ECEF + accelerometer bias. The initial
+        estimate is the current structural truth plus the given initial errors.
+        Gravity (1/r^2) and the Coriolis/centrifugal terms come from `environment`
+        (Environement.Environment), the single place where they are computed.
+        """
+        p_true, v_true = self.structural_point_ecef(imu_spec.station_body_m)
+        self.navigation = NavigationKF.from_imu_spec(
+            imu_spec, p_true + vector3(position_error_m), v_true + vector3(velocity_error_mps),
+            sigma0, ba0=accel_bias0_mps2, environment=environment)
+        self.navigation_imu_station_body_m = np.array(imu_spec.station_body_m, dtype=float)
+        return self.navigation
+
+    def _require_navigation(self):
+        if self.navigation is None:
+            raise ValueError("No navigation filter: call attach_navigation() first.")
+        return self.navigation
+
+    def navigation_predict(self, imu_sample, previous_time_s, rotation):
+        """IMU propagation with one IMUSample; rotation = Body -> ECEF matrix (attitude truth in V1)."""
+        kf = self._require_navigation()
+        kf.predict(imu_sample.accel_meas_mps2, rotation, imu_sample.t - previous_time_s)
+
+    def navigation_update_gnss(self, gnss_sample, gnss_spec, rotation, omega_meas_radps):
+        """GNSS update (no-op without a valid fix); lever arm = antenna station - IMU station."""
+        kf = self._require_navigation()
+        if not gnss_sample.valid:
+            return None
+        arm = gnss_spec.antenna_station_body_m - self.navigation_imu_station_body_m
+        return kf.update_gnss(gnss_sample.pos_meas_m, gnss_sample.vel_meas_mps, rotation,
+                              omega_meas_radps, arm, gnss_sample.pos_sigma_m,
+                              gnss_sample.vel_sigma_mps, gnss_spec.latency_s)
+
+    def navigation_update_lidar(self, lidar_sample, lidar_spec, rotation):
+        """LIDAR range update (no-op without a valid return); lever arm = LIDAR station - IMU station."""
+        kf = self._require_navigation()
+        if not lidar_sample.valid:
+            return None
+        arm = lidar_spec.station_body_m - self.navigation_imu_station_body_m
+        return kf.update_lidar(lidar_sample.range_meas_m, rotation, arm, lidar_spec.boresight_body,
+                               lidar_spec.planet_center_ecef_m, lidar_spec.planet_radius_m,
+                               lidar_sample.sigma_m)
 
     def getmass(self):
         return (

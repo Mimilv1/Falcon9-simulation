@@ -4,10 +4,14 @@ never asks back. Evaluators are pure; queries outside the modeled envelope
 raise, never extrapolate.
 
 Frame convention (project-wide, see docs/env_issues.md): the ECEF origin is
-the Earth centre (0,0,0), the launch site sits at (0,0,earth_radius) on +z,
-and Earth rotation is not modeled: ECEF axes are treated as inertial. Shared
-vectors are current Body components, Body +x toward the nose; quaternion is
-Hamilton [w,x,y,z] mapping Body to ECEF.
+the Earth centre (0,0,0) and the launch site sits at (0,0,earth_radius) on +z.
+The ECEF axes are treated as non-rotating for the attitude/quaternion kinematics,
+but Earth rotation is reproduced in the translational dynamics through the two
+rotating-frame pseudo-accelerations (Coriolis and centrifugal), see
+frame_acceleration_*. Rotation axis convention: launch latitude phi, north =
++x ECEF, up = +z ECEF, so Omega_ecef = Omega*[cos(phi), 0, sin(phi)] (east = -y).
+Shared vectors are current Body components, Body +x toward the nose; quaternion
+is Hamilton [w,x,y,z] mapping Body to ECEF.
 """
 from dataclasses import dataclass
 import numpy as np
@@ -20,6 +24,8 @@ DRY_AIR_GAS_CONSTANT_JPKGK=287.05287
 AIR_HEAT_CAPACITY_RATIO=1.4
 STANDARD_GRAVITY_MPS2=9.80665
 EARTH_MEAN_RADIUS_M=6371000.0
+EARTH_ROTATION_RATE_RADPS=7.2921150e-5  # sidereal rotation rate
+DEFAULT_LAUNCH_LATITUDE_DEG=28.6  # LC-39A latitude, CRS-10 launch site (assumption, override per scenario)
 STANDARD_LAYERS=(
     (0.0,SEA_LEVEL_TEMPERATURE_K,-0.0065),
     (11000.0,216.65,0.0),
@@ -45,6 +51,12 @@ class Atmosphere:
     sound_speed_mps: float
 
 
+def _skew(vector):
+    """Cross-product matrix: _skew(a) @ b == cross(a, b)."""
+    x,y,z=vector
+    return np.array([[0.0,-z,y],[z,0.0,-x],[-y,x,0.0]])
+
+
 def _layer_pressure(base_pressure,base_temperature,lapse,height_above_base):
     """Hydrostatic pressure within one standard-atmosphere layer."""
     if lapse==0.0:
@@ -60,14 +72,20 @@ class Environment:
 
     def __init__(self,*,surface_gravity_mps2=STANDARD_GRAVITY_MPS2,
                  earth_radius_m=EARTH_MEAN_RADIUS_M,ground_altitude_m=0.0,
-                 wind_ecef_mps=(0,0,0)):
+                 wind_ecef_mps=(0,0,0),
+                 earth_rotation_rate_radps=EARTH_ROTATION_RATE_RADPS,
+                 launch_latitude_deg=DEFAULT_LAUNCH_LATITUDE_DEG):
         gravity=float(surface_gravity_mps2)
         wind=vector3(wind_ecef_mps)
         radius=float(earth_radius_m)
+        rate=float(earth_rotation_rate_radps)
+        latitude=np.deg2rad(float(launch_latitude_deg))
         if (not np.all(np.isfinite([gravity,ground_altitude_m,radius]))
                 or gravity < 1e-12 or not np.all(np.isfinite(wind))
                 or radius <= 0):
             raise ValueError('Invalid surface gravity, Earth radius, ground altitude or wind.')
+        if not np.isfinite(rate) or rate < 0 or not np.isfinite(latitude) or abs(latitude) > np.pi/2:
+            raise ValueError('Invalid Earth rotation rate (>= 0, 0 disables it) or launch latitude.')
         self.planet_center_ecef_m=np.zeros(3)
         self.launch_site_ecef_m=np.array([0.0,0.0,radius])
         self.earth_radius_m=radius
@@ -75,6 +93,8 @@ class Environment:
         self.gravity_mu_m3ps2=gravity*radius*radius
         self.ground_altitude_m=float(ground_altitude_m)
         self.wind_ecef_mps=wind.copy()
+        # Earth rotation vector in ECEF; rate 0 gives the former inertial-ECEF behaviour.
+        self.earth_rotation_ecef_radps=rate*np.array([np.cos(latitude),0.0,np.sin(latitude)])
 
     @staticmethod
     def atmosphere(altitude_m):
@@ -116,15 +136,53 @@ class Environment:
         position_ecef=self._rotation_to_ecef(state)@position
         return float(np.linalg.norm(position_ecef)-self.earth_radius_m+self.ground_altitude_m)
 
+    def gravity_ecef(self,position_ecef_m):
+        """Inverse-square point-mass gravity at an ECEF position, in ECEF components.
+
+        Single source of truth: the Kalman filter and the dynamics both call this.
+        """
+        position=vector3(position_ecef_m)
+        distance=np.linalg.norm(position)
+        if distance < 1e-6:
+            raise ValueError('Gravity is undefined at the planet centre.')
+        return -self.gravity_mu_m3ps2*position/distance**3
+
+    def gravity_gradient_ecef(self,position_ecef_m):
+        """d(gravity)/d(position) at an ECEF position, 3x3, for filter linearization."""
+        position=vector3(position_ecef_m)
+        distance=np.linalg.norm(position)
+        if distance < 1e-6:
+            raise ValueError('Gravity is undefined at the planet centre.')
+        unit=position/distance
+        return self.gravity_mu_m3ps2/distance**3*(3.0*np.outer(unit,unit)-np.eye(3))
+
     def gravity_body(self,state):
         """Inverse-square point-mass gravity toward the planet centre, in Body components."""
         rotation=self._rotation_to_ecef(state)
-        position_ecef=rotation@state.position_body_m
-        distance=np.linalg.norm(position_ecef)
-        if distance < 1e-6:
-            raise ValueError('Gravity is undefined at the planet centre.')
-        magnitude=self.gravity_mu_m3ps2/distance**2
-        return rotation.T@(-magnitude*position_ecef/distance)
+        return rotation.T@self.gravity_ecef(rotation@state.position_body_m)
+
+    def frame_acceleration_ecef(self,position_ecef_m,velocity_ecef_mps):
+        """Rotating-frame pseudo-acceleration, ECEF components: -2 W x v - W x (W x r).
+
+        Add it to (force/mass + gravity) to obtain the acceleration relative to the
+        rotating Earth. Coriolis (velocity term) plus centrifugal (position term).
+        """
+        w=self.earth_rotation_ecef_radps
+        return (-2.0*np.cross(w,vector3(velocity_ecef_mps))
+                -np.cross(w,np.cross(w,vector3(position_ecef_m))))
+
+    def frame_acceleration_gradients_ecef(self):
+        """(d/dp, d/dv) of frame_acceleration_ecef: centrifugal and Coriolis matrices."""
+        w=self.earth_rotation_ecef_radps
+        skew=_skew(w)
+        return -skew@skew,-2.0*skew
+
+    def frame_acceleration_body(self,state):
+        """Coriolis + centrifugal pseudo-acceleration of the CG in current Body components."""
+        rotation=self._rotation_to_ecef(state)
+        w=rotation.T@self.earth_rotation_ecef_radps
+        return (-2.0*np.cross(w,state.velocity_body_mps)
+                -np.cross(w,np.cross(w,state.position_body_m)))
 
     def wind_body(self,state):
         """The fixed ECEF wind expressed in current Body components."""
