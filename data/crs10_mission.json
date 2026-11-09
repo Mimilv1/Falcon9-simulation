@@ -360,5 +360,23 @@
     "landing_attitude_kp": 1.5,
     "landing_attitude_kd": 6.0,
     "landing_terminal_hold_height_m": 20.0
+  },
+  "upper_stage": {
+    "class": "A",
+    "ignition_s": 152.0,
+    "cutoff_s": 545.0,
+    "ramp_s": 1.0,
+    "throttle": 0.95,
+    "attitude_kp": 2.0,
+    "attitude_kd": 2.5,
+    "drag_coefficient": 0.3,
+    "step_s": 0.05,
+    "basis": "Separate upper-stage-plus-Dragon six-DOF continuation from the conserved separation state. Ignition/cutoff adopt M1 approximate reference times; throttle, smooth ramps, altitude/radial-speed feedback with 200 km design target and constant equivalent drag coefficient are project assumptions, not reconstructed CRS-10 guidance. No Dragon separation or upper-stage navigation is modeled.",
+    "source_ids": [
+      "M1"
+    ],
+    "target_altitude_m": 200000.0,
+    "height_time_s": 80.0,
+    "velocity_time_s": 40.0
   }
 }

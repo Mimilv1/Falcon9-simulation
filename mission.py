@@ -372,6 +372,7 @@ def run_mission(
         )
     }
     vehicle = prepare_launch(plan)
+    upper = None
     sequence = MissionSequence(plan)
     provider = provider_factory(vehicle, sequence.phase, plan)
     flow, derivative = provider.flow_at(0.0)
@@ -490,6 +491,7 @@ def run_mission(
                             vehicle, state, time_s, evaluation.loads
                         )
                         vehicle, state = split.lower, split.lower_state
+                        upper = (split.upper, split.upper_state, time_s)
                         record["conservation_audit"] = split.audit
                         record["booster_state"] = state.to_vector().tolist()
                         record["upper_state"] = split.upper_state.to_vector().tolist()
@@ -712,6 +714,12 @@ def run_mission(
         if plan.get("vehicle_configuration") == "booster"
         else "continuous_project_recovery" if recovery else "ascent_to_booster_coast"
     )
+    if upper is not None:
+        from upper_stage import propagate_upper_stage
+
+        print("Propagating separated stage 2...", flush=True)
+        summary["stage2"] = propagate_upper_stage(*upper, until_s, plan, output)
+        save_json(output / "stage2_events.json", summary["stage2"]["events"])
     summary["reference_comparison"] = (
         compare_reference(output, truth_rows)
         if plan.get("vehicle_configuration") != "booster"
@@ -791,6 +799,7 @@ def plot_results(output, *, show=False, save=None):
     nav = read("navigation.csv") if (output / "navigation.csv").exists() else []
     events = json.loads((output / "events.json").read_text())
     validation = read("validation.csv") if (output / "validation.csv").exists() else []
+    stage2 = read("stage2_truth.csv") if (output / "stage2_truth.csv").exists() else []
     t = np.array([float(r["time_s"]) for r in truth])
     fig, axes = plt.subplots(3, 2, figsize=(13, 11), sharex=True)
     for ax, field, label, scale in (
@@ -799,12 +808,23 @@ def plot_results(output, *, show=False, save=None):
         (axes[1, 0], "stage1_propellant_kg", "Stage-1 propellant [t]", 0.001),
         (axes[1, 1], "cg_station_m", "CG above structural base [m]", 1),
     ):
-        ax.plot(t, [float(r[field]) * scale for r in truth], label="Simulation")
+        ax.plot(t, [float(r[field]) * scale for r in truth], label="Stack / stage 1")
         ax.set_ylabel(label)
     for ax, field, scale in (
         (axes[0, 0], "altitude_m", 0.001),
         (axes[0, 1], "speed_mps", 1),
     ):
+        if stage2:
+            ax.plot(
+                [float(r["time_s"]) for r in stage2],
+                [
+                    float(r["cg_" + field] if field == "altitude_m" else r[field])
+                    * scale
+                    for r in stage2
+                ],
+                color="tab:purple",
+                label="Stage 2 + Dragon (A)",
+            )
         if validation:
             ax.plot(
                 [float(r["time_s"]) for r in validation],
@@ -831,6 +851,11 @@ def plot_results(output, *, show=False, save=None):
         ax.grid(alpha=0.3)
         for event in events[1:]:
             ax.axvline(event["time_s"], color=".6", lw=0.7, ls=":")
+        if stage2:
+            for event in json.loads((output / "stage2_events.json").read_text())[1:]:
+                ax.axvline(
+                    event["time_s"], color="tab:purple", lw=0.7, ls="--", alpha=0.5
+                )
     for ax in axes[2]:
         ax.set_xlabel("Simulation time [s]")
     fig.suptitle(
@@ -847,7 +872,86 @@ def plot_results(output, *, show=False, save=None):
     if show:
         plt.show()
     plt.close(fig)
+    if stage2:
+        plot_trajectories(output, truth, stage2, events)
     return destination
+
+
+def plot_trajectories(output, truth, stage2, events):
+    import matplotlib.pyplot as plt
+
+    radius = 6371000.0
+    fig, axes = plt.subplots(1, 2, figsize=(13, 5))
+    for rows, label in ((truth, "Stack / stage 1"), (stage2, "Stage 2 + Dragon (A)")):
+        p = np.array(
+            [[float(r["cg_position_ecef_m_" + a]) for a in "xyz"] for r in rows]
+        )
+        r = np.linalg.norm(p, axis=1)
+        downrange = radius * np.arccos(np.clip(p[:, 2] / r, -1, 1)) / 1000
+        axes[0].plot(downrange, (r - radius) / 1000, label=label)
+        axes[1].plot(-p[:, 1] / 1000, p[:, 0] / 1000, label=label)
+    for ax in axes:
+        ax.grid(alpha=0.3)
+        ax.legend()
+    axes[0].set(
+        xlabel="Surface angular distance from launch [km]", ylabel="CG altitude [km]"
+    )
+    axes[1].set(
+        xlabel="External east component [km]", ylabel="External north component [km]"
+    )
+    fig.suptitle("Separated trajectories; assumed stage-2 commands")
+    fig.tight_layout()
+    fig.savefig(output / "trajectories.png", dpi=150)
+    plt.close(fig)
+    upper_events = json.loads((output / "stage2_events.json").read_text())
+    names = {
+        "liftoff": "Liftoff",
+        "shutdown_start": "Shutdown",
+        "meco": "MECO",
+        "stage_separation": "Separation",
+        "boostback_start": "Boostback ignition",
+        "boostback_end": "Boostback end",
+        "entry_start": "Entry ignition",
+        "entry_end": "Entry end",
+        "landing_start": "Landing ignition",
+        "touchdown": "Touchdown",
+        "stage2_ignition": "Stage-2 ignition",
+        "seco": "SECO",
+    }
+    timeline = [
+        {
+            "vehicle": "Stack / stage 1",
+            "time_s": e["time_s"],
+            "event": names.get(e["event"], e["event"]),
+        }
+        for e in events
+    ]
+    timeline.extend(
+        {"vehicle": "Stage 2", "time_s": e["time_s"], "event": names[e["event"]]}
+        for e in upper_events[1:]
+    )
+    timeline.sort(key=lambda e: e["time_s"])
+    with (output / "event_timeline.csv").open(
+        "w", newline="", encoding="utf-8"
+    ) as stream:
+        writer = csv.DictWriter(stream, fieldnames=["vehicle", "time_s", "event"])
+        writer.writeheader()
+        writer.writerows(timeline)
+    fig, ax = plt.subplots(figsize=(10, 5))
+    ax.axis("off")
+    table = ax.table(
+        cellText=[[f'{e["time_s"]:.1f}', e["vehicle"], e["event"]] for e in timeline],
+        colLabels=["Time [s]", "Vehicle", "Event"],
+        loc="center",
+        cellLoc="left",
+    )
+    table.auto_set_font_size(False)
+    table.set_fontsize(10)
+    table.scale(1, 1.65)
+    ax.set_title("Event times for overview.png; simulated events / adopted commands")
+    fig.tight_layout()
+    fig.savefig(output / "flight_events.png", dpi=150)
+    plt.close(fig)
 
 
 def terminal_plan(plan=None):

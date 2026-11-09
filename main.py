@@ -72,6 +72,13 @@ def main():
             f"Navigation position RMS={result['navigation_position_rms_m']:.3f} m (truth attitude)"
         )
     print("Full return flight completed:", result["full_mission_completed"])
+    if "stage2" in result:
+        upper = result["stage2"]["final"]
+        print(
+            f"Stage 2: t={upper['time_s']:.1f} s, "
+            f"altitude={upper['cg_altitude_m']/1000:.2f} km, "
+            f"speed={upper['speed_mps']:.1f} m/s (assumed commands)"
+        )
     plot_results(output, show=not args.no_show, save=args.save)
     if result["status"] not in {"requested_interval_complete", "landing_success"} or (
         args.case == "full" and not result["full_mission_completed"]
