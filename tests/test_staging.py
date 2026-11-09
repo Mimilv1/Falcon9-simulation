@@ -1,4 +1,3 @@
-"""Component checks for shutdown envelopes and no-impulse separation."""
 import sys
 import unittest
 from pathlib import Path
@@ -44,11 +43,11 @@ class TransitionMathChecks(unittest.TestCase):
         np.testing.assert_allclose(split.lower.velocity,v.velocity,atol=1e-12)
         self.assertEqual(split.upper_state.propellant_kg[0],0)
         self.assertEqual(split.lower_state.propellant_kg[1],0)
-        # Stage 2 material points inherit omega cross cut, not the same base velocity.
+
         expected=v.velocity+np.cross(v.omega,[42.6,0,0])
         np.testing.assert_allclose(split.upper.velocity,expected)
         np.testing.assert_allclose(split.lower.quaternion,split.upper.quaternion)
-        self.assertEqual(len(v.stages),2)  # map does not mutate the caller
+        self.assertEqual(len(v.stages),2)
 
     def test_separation_rejects_running_engine_or_nonzero_outflow(self):
         v=build_falcon9();s=v.to_state();zero=Loads([0,0,0],[0,0,0],[0,0,0],[0,0])

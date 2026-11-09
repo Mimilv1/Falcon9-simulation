@@ -1,4 +1,3 @@
-"""First B models checked against standard values and physical limits."""
 import sys
 import unittest
 from pathlib import Path
@@ -55,7 +54,7 @@ class AscentModelChecks(unittest.TestCase):
         with self.assertRaises(ValueError):Environment.atmosphere(-1)
 
     def test_layered_atmosphere_checkpoint_values(self):
-        # USSA 1976 geopotential-height checkpoints above the troposphere.
+
         checkpoints={
             11000:(216.65,22632.06,0.36392),
             20000:(216.65,5474.89,0.088035),
@@ -81,7 +80,7 @@ class AscentModelChecks(unittest.TestCase):
         env=Environment(earth_radius_m=radius)
         np.testing.assert_allclose(env.launch_site_ecef_m,[0,0,radius])
         np.testing.assert_allclose(env.planet_center_ecef_m,[0,0,0])
-        # Launch attitude: Body +x along ECEF +z, so site gravity is [-g,0,0] in Body.
+
         pad=State(launch_position_body_m(radius),[0,0,0],
                   LAUNCH_QUATERNION_BODY_TO_ECEF_WXYZ,[0,0,0],[0,0])
         np.testing.assert_allclose(env.gravity_body(pad),[-9.80665,0,0],atol=1e-12)
@@ -89,8 +88,8 @@ class AscentModelChecks(unittest.TestCase):
     def test_gravity_changes_body_components_when_attitude_turns(self):
         radius=6371000.0
         env=Environment(earth_radius_m=radius)
-        # 90 deg yaw about Body z on top of the launch attitude; the vehicle
-        # stays at the ECEF launch site (0,0,R), only its heading changes.
+
+
         yawed=quaternion_product(LAUNCH_QUATERNION_BODY_TO_ECEF_WXYZ,[np.sqrt(.5),0,0,np.sqrt(.5)])
         site_body=body_to_ecef_matrix(yawed).T@np.array([0,0,radius])
         state=State(site_body,[0,0,0],yawed,[0,0,0],[0,0])
@@ -102,7 +101,7 @@ class AscentModelChecks(unittest.TestCase):
         at_ground=State(launch_position_body_m(radius),[0,0,0],
                          LAUNCH_QUATERNION_BODY_TO_ECEF_WXYZ,[0,0,0],[0,0])
         np.testing.assert_allclose(env.gravity_body(at_ground),[-9.80665,0,0],atol=1e-12)
-        # One radius above the site: distance 2R from the centre -> g0/4.
+
         at_radius=State(launch_position_body_m(radius,radius),[0,0,0],
                         LAUNCH_QUATERNION_BODY_TO_ECEF_WXYZ,[0,0,0],[0,0])
         np.testing.assert_allclose(env.gravity_body(at_radius),[-9.80665/4,0,0],atol=1e-12)
@@ -121,8 +120,8 @@ class AscentModelChecks(unittest.TestCase):
     def test_gravity_tilts_toward_the_planet_centre_downrange(self):
         radius=6371000.0
         env=Environment(earth_radius_m=radius)
-        # One radius downrange of the site, ECEF (R, 0, R): gravity points at the
-        # centre, not along the site vertical, with inverse-square magnitude g0/2.
+
+
         downrange_ecef=np.array([radius,0.0,radius])
         rotation=body_to_ecef_matrix(LAUNCH_QUATERNION_BODY_TO_ECEF_WXYZ)
         downrange=State(rotation.T@downrange_ecef,[0,0,0],
@@ -136,12 +135,12 @@ class AscentModelChecks(unittest.TestCase):
         pad=State(launch_position_body_m(radius),[0,0,0],
                   LAUNCH_QUATERNION_BODY_TO_ECEF_WXYZ,[0,0,0],[0,0])
         self.assertAlmostEqual(env.altitude(pad,None),0.0,delta=1e-6)
-        # One radius downrange at site height: the surface curves away by R*(sqrt(2)-1).
+
         downrange_ecef=np.array([radius,0.0,radius])
         downrange=State(body_to_ecef_matrix(LAUNCH_QUATERNION_BODY_TO_ECEF_WXYZ).T@downrange_ecef,
                         [0,0,0],LAUNCH_QUATERNION_BODY_TO_ECEF_WXYZ,[0,0,0],[0,0])
         self.assertAlmostEqual(env.altitude(downrange,None),radius*(np.sqrt(2)-1),places=6)
-        # A 2000 km apogee above the site is inside the envelope.
+
         apogee=State(launch_position_body_m(radius,2000000),[0,0,0],
                      LAUNCH_QUATERNION_BODY_TO_ECEF_WXYZ,[0,0,0],[0,0])
         self.assertAlmostEqual(env.altitude(apogee,None),2000000.0,places=6)
@@ -168,7 +167,6 @@ class AscentModelChecks(unittest.TestCase):
         self.assertLess(np.dot(result.force_body_n,state.velocity_body_mps),0)
         rest=State([100,0,0],[0,0,0],[1,0,0,0],[0,0,0],[410900,107500])
         np.testing.assert_allclose(aero.evaluate(rest,p,a,np.zeros(3)).force_body_n,[0,0,0])
-
 
 
 if __name__=='__main__':unittest.main()

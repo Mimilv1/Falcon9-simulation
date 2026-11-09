@@ -1,10 +1,3 @@
-"""A-owned six-DOF core: all shared vectors in Body, +x toward nose.
-
-Force already includes propulsive momentum/pressure reaction. Explicit exhaust
-ports supply convective and rotational outflow terms, not a second thrust.
-The open-system equations assume axial CG migration and balanced axial outflow.
-"""
-
 from dataclasses import dataclass, field
 from typing import Callable
 import numpy as np
@@ -20,11 +13,11 @@ from mass_flow import ExhaustPort, point_gyration, validate_ports, PropellantLim
 
 @dataclass(frozen=True)
 class State:
-    position_body_m: np.ndarray  # Earth centre -> CG, expressed in CURRENT Body
+    position_body_m: np.ndarray
     velocity_body_mps: np.ndarray
-    quaternion_body_to_ecef_wxyz: np.ndarray  # current Body -> ECEF basis
+    quaternion_body_to_ecef_wxyz: np.ndarray
     omega_body_radps: np.ndarray
-    propellant_kg: np.ndarray  # [Stage 1, attached Stage 2]
+    propellant_kg: np.ndarray
 
     def __post_init__(self):
         for field in ("position_body_m", "velocity_body_mps", "omega_body_radps"):
@@ -60,13 +53,12 @@ class State:
 
 @dataclass(frozen=True)
 class Loads:
-    force_body_n: np.ndarray  # Thrust + aerodynamics; gravity excluded.
-    moment_body_nm: np.ndarray  # About current CG, Body components.
-    gravity_body_mps2: np.ndarray  # Current Body gravity, added exactly once by A.
-    consumption_kgps: np.ndarray  # Nonnegative [Stage 1, Stage 2] consumption.
+    force_body_n: np.ndarray
+    moment_body_nm: np.ndarray
+    gravity_body_mps2: np.ndarray
+    consumption_kgps: np.ndarray
     exhaust_ports: tuple[ExhaustPort, ...] = ()
-    # Rotating-Earth pseudo-acceleration at the CG (Coriolis + centrifugal), Body
-    # components, added exactly once by A next to gravity. Zero = inertial ECEF.
+
     frame_acceleration_body_mps2: np.ndarray = field(
         default_factory=lambda: np.zeros(3)
     )
@@ -135,11 +127,6 @@ def state_derivative(time_s, state_vector, model, configuration, provider):
 
 
 def accelerations(state, loads, properties):
-    """CG inertial acceleration in Body components, plus Body angular acceleration.
-
-    Signed mdot=-q. See docs/powered_dynamics.md for the control-volume balance,
-    fixed-port/axial-balance assumptions, and distinction from IMU acceleration.
-    """
     omega = state.omega_body_radps
     mass = properties.mass_kg
     migration = (
@@ -190,7 +177,6 @@ def accelerations(state, loads, properties):
 
 
 def rk4_step(time_s, state, step_s, model, configuration, provider):
-    """One smooth segment; caller splits steps at cutoff, separation, or fuel limits."""
     if not np.isfinite(step_s) or step_s <= 0:
         raise ValueError("Integration step must be finite and positive.")
     rotation = body_to_ecef_matrix(state.quaternion_body_to_ecef_wxyz)
@@ -222,12 +208,10 @@ def rk4_step(time_s, state, step_s, model, configuration, provider):
 
 
 def navigation_truth(state, loads):
-    """Truth at the instantaneous CG for C; a real displaced IMU needs lever-arm terms."""
     return {
         "position_body_m": state.position_body_m.copy(),
         "velocity_body_mps": state.velocity_body_mps.copy(),
         "quaternion_body_to_ecef_wxyz": state.quaternion_body_to_ecef_wxyz.copy(),
-        # Angular velocity relative to the ECEF basis; Earth rotation omitted.
         "omega_body_radps": state.omega_body_radps.copy(),
         "force_nongrav_body_n": loads.force_body_n.copy(),
         "gravity_body_mps2": loads.gravity_body_mps2.copy(),
@@ -235,13 +219,6 @@ def navigation_truth(state, loads):
 
 
 def acceleration_truth(state, loads, properties, sensor_station_body_m=None):
-    """Geometric CG acceleration and specific force at a fixed structural station.
-
-    Supply the same sensor station at every time for a physically fixed IMU.
-    Default: fixed-body point coincident with CG at this instant.
-    Acceleration is relative to ECEF; specific force is the inertial one (the
-    CG pseudo-acceleration is used for the sensor station, lever-arm effect negligible).
-    """
     acceleration, angular = accelerations(state, loads, properties)
     station = (
         properties.cg_station_body_m
@@ -266,8 +243,7 @@ def acceleration_truth(state, loads, properties, sensor_station_body_m=None):
         - 2 * np.cross(state.omega_body_radps, migration)
         - migration_acceleration
     )
-    # An accelerometer senses inertial acceleration minus gravity. `acceleration` is
-    # relative to the rotating Earth, so the Coriolis/centrifugal part is removed.
+
     specific_force = (
         sensor_acceleration
         - loads.gravity_body_mps2

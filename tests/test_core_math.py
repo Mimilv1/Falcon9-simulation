@@ -1,5 +1,3 @@
-"""Analytical core checks; synthetic fixtures, no vehicle-data import."""
-
 import sys
 import unittest
 from pathlib import Path

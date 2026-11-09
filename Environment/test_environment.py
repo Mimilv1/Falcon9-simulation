@@ -1,13 +1,3 @@
-"""Dedicated tests for Environement.py (the Environment module).
-
-Every public evaluator is exercised: atmosphere, gravity_body, wind_body,
-altitude, and the constructor validation. Expected values are either published
-USSA 1976 table values or arithmetic derived in the test itself, never values
-produced by the module under test.
-
-Run from the repository root:
-    python3 -m unittest discover -s Environment
-"""
 import sys
 import unittest
 from pathlib import Path
@@ -25,14 +15,12 @@ G0=STANDARD_GRAVITY_MPS2
 
 
 def state_at(position_body,quaternion=None,velocity=(0,0,0)):
-    """State helper: any position/attitude, zero rates and empty tanks."""
     return State(np.asarray(position_body,dtype=float),velocity,
                  quaternion if quaternion is not None else LAUNCH_QUATERNION_BODY_TO_ECEF_WXYZ,
                  [0,0,0],[0,0])
 
 
 def state_at_ecef(position_ecef,quaternion=None):
-    """The ECEF point expressed in the given attitude's Body components."""
     quaternion=quaternion if quaternion is not None else LAUNCH_QUATERNION_BODY_TO_ECEF_WXYZ
     return state_at(body_to_ecef_matrix(quaternion).T@np.asarray(position_ecef,dtype=float),quaternion)
 
@@ -46,8 +34,8 @@ class AtmosphereChecks(unittest.TestCase):
         self.assertAlmostEqual(a.sound_speed_mps,340.294,places=3)
 
     def test_published_ussa_1976_checkpoint_values(self):
-        # (altitude [m], T [K], p [Pa], rho [kg/m3]) from the USSA 1976 tables;
-        # sound speed is checked against sqrt(gamma*R*T) below.
+
+
         expected=((5000,255.65,54019.9,7.3612e-1),
                   (11000,216.65,22632.1,3.6392e-1),
                   (20000,216.65,5474.9,8.8035e-2),
@@ -59,8 +47,8 @@ class AtmosphereChecks(unittest.TestCase):
         for altitude,temperature,pressure,density in expected:
             a=Environment.atmosphere(altitude)
             self.assertAlmostEqual(a.temperature_k,temperature,places=2,msg=f'T at {altitude} m')
-            # Published values above are rounded to five significant digits;
-            # real modeling errors (wrong lapse rate or layer walk) are far larger.
+
+
             np.testing.assert_allclose(a.pressure_pa,pressure,rtol=5e-5,err_msg=f'p at {altitude} m')
             np.testing.assert_allclose(a.density_kgm3,density,rtol=5e-5,err_msg=f'rho at {altitude} m')
             self.assertAlmostEqual(a.sound_speed_mps,
@@ -70,15 +58,15 @@ class AtmosphereChecks(unittest.TestCase):
         a=Environment.atmosphere(MESOPAUSE_ALTITUDE_M)
         self.assertAlmostEqual(a.temperature_k,186.946,places=3)
         self.assertAlmostEqual(a.pressure_pa,0.37338,places=5)
-        # The tail is isothermal: temperature frozen at the mesopause value.
+
         self.assertAlmostEqual(Environment.atmosphere(MESOPAUSE_ALTITUDE_M+1).temperature_k,
                                a.temperature_k,places=12)
         self.assertAlmostEqual(Environment.atmosphere(2000000).temperature_k,
                                a.temperature_k,places=12)
 
     def test_tail_decays_exponentially_with_scale_height(self):
-        # Above the mesopause p(h) = p_meso * exp(-g0*(h-h_meso)/(R*186.946));
-        # the expected ratio follows from literal test values, not the module.
+
+
         g0,gas,tail_temperature=G0,287.05287,186.946
         ratio=Environment.atmosphere(95000).pressure_pa/Environment.atmosphere(90000).pressure_pa
         self.assertAlmostEqual(ratio,np.exp(-g0*5000/(gas*tail_temperature)),places=12)
@@ -95,7 +83,7 @@ class AtmosphereChecks(unittest.TestCase):
         for bad in (-1,2000001,float('nan'),float('inf'),-5e-5,-2e6):
             with self.assertRaises(ValueError,msg=f'altitude {bad}'):
                 Environment.atmosphere(bad)
-        # Both envelope endpoints are valid; sub-micrometre roundoff is clamped.
+
         for good in (0,2000000,-5e-7):
             Environment.atmosphere(good)
 
@@ -119,7 +107,7 @@ class AtmosphereChecks(unittest.TestCase):
                             msg=f'density not decreasing at {grid[i]} m')
 
     def test_hydrostatic_balance_dp_dh_equals_minus_g_rho(self):
-        # Inside one layer the model integrates dp/dh = -g*rho with constant g.
+
         for altitude in (3000.0,15000.0,40000.0):
             dh=1.0
             mid=Environment.atmosphere(altitude)
@@ -167,7 +155,7 @@ class GravityChecks(unittest.TestCase):
         self.assertAlmostEqual(np.linalg.norm(env.gravity_body(state)),expected,places=9)
 
     def test_direction_and_magnitude_survive_the_body_round_trip(self):
-        # Independent arithmetic in ECEF: g = -mu/|r|^2 * r/|r|, with mu = g0*R^2.
+
         env=Environment()
         position_ecef=np.array([5e6,-3e6,7e6])
         quaternion=normalize_quaternion([0.6,0.3,-0.2,0.7])
@@ -205,9 +193,8 @@ class WindChecks(unittest.TestCase):
         np.testing.assert_array_equal(env.wind_body(state_at(launch_position_body_m(R))),[0,0,0])
 
     def test_pad_wind_components_follow_the_launch_frame_mapping(self):
-        # Launch frame: Body +x -> ECEF +z, Body +y -> ECEF +y, Body +z -> ECEF -x.
-        # An ECEF wind (3,-4,0) therefore reads (0,-4,-3) in Body components,
-        # and a rising wind (0,0,5) reads as a +x tailwind for the vertical rocket.
+
+
         env=Environment(wind_ecef_mps=(3,-4,0))
         np.testing.assert_allclose(env.wind_body(state_at(launch_position_body_m(R))),
                                    [0,-4,-3],atol=1e-12)
@@ -222,7 +209,7 @@ class WindChecks(unittest.TestCase):
         turned=env.wind_body(state_at(launch_position_body_m(R),yawed))
         self.assertFalse(np.allclose(pad,turned))
         self.assertAlmostEqual(np.linalg.norm(pad),np.linalg.norm(turned),places=12)
-        # Rotated back to ECEF it is always the original scenario wind.
+
         for quaternion in (LAUNCH_QUATERNION_BODY_TO_ECEF_WXYZ,yawed):
             vector=env.wind_body(state_at(launch_position_body_m(R),quaternion))
             np.testing.assert_allclose(body_to_ecef_matrix(quaternion)@vector,[3,-4,0],atol=1e-12)
@@ -282,13 +269,13 @@ class AltitudeChecks(unittest.TestCase):
         pad=state_at(launch_position_body_m(R))
         self.assertAlmostEqual(env.altitude(pad,SimpleNamespace(cg_station_body_m=np.zeros(3)),[10,0,0]),
                                10.0,delta=1e-6)
-        # station measured from CG: (station - cg_station) is what moves the point.
+
         self.assertAlmostEqual(env.altitude(pad,SimpleNamespace(cg_station_body_m=np.array([4.,0,0])),[10,0,0]),
                                6.0,delta=1e-6)
-        # A lateral station offset raises the radius by Pythagoras, not by 10 m.
+
         lateral=env.altitude(pad,SimpleNamespace(cg_station_body_m=np.zeros(3)),[0,0,10])
         self.assertAlmostEqual(lateral,np.sqrt(R*R+100)-R,delta=1e-6)
-        # station=None ignores properties entirely.
+
         self.assertAlmostEqual(env.altitude(pad,None),0.0,delta=1e-6)
 
 
@@ -321,18 +308,17 @@ class ConstructionChecks(unittest.TestCase):
 
 
 class SimulatorSanityChecks(unittest.TestCase):
-    """Plausibility of the numbers a Falcon 9 flight actually consumes."""
 
     def test_max_q_regime_produces_kilopascal_dynamic_pressure(self):
-        # 12 km at ~250 m/s true airspeed is Falcon 9 max-Q territory.
+
         air=Environment.atmosphere(12000)
         q=.5*air.density_kgm3*250**2
         self.assertGreater(q,5e3)
         self.assertLess(q,3e4)
 
     def test_gravity_and_atmosphere_cover_the_boostback_arc(self):
-        # Booster arc: gravity at a 150 km apogee is within 5% of surface
-        # gravity, and the vehicle re-enters measurable air well below 120 km.
+
+
         env=Environment()
         apogee=state_at(launch_position_body_m(R,150000))
         self.assertAlmostEqual(np.linalg.norm(env.gravity_body(apogee)),
@@ -341,14 +327,14 @@ class SimulatorSanityChecks(unittest.TestCase):
         self.assertLess(Environment.atmosphere(150000).density_kgm3,1e-9)
 
     def test_drag_inputs_are_self_consistent_at_one_flight_point(self):
-        # One flight-like point: altitude, gravity and wind all key off the
-        # same ECEF position and attitude, with no cross-talk between them.
+
+
         env=Environment(wind_ecef_mps=(-12,3,0))
         quaternion=normalize_quaternion([0.9,0.1,0.2,0.3])
         position_ecef=np.array([3e5,7e5,R+21000])
         state=state_at_ecef(position_ecef,quaternion)
         air=Environment.atmosphere(env.altitude(state,None))
-        # Altitude reads the ECEF radius, gravity its centre, wind neither.
+
         self.assertAlmostEqual(env.altitude(state,None),
                                np.linalg.norm(position_ecef)-R,places=6)
         self.assertAlmostEqual(np.linalg.norm(env.gravity_body(state)),

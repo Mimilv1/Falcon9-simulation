@@ -21,26 +21,23 @@ def normalize_quaternion(value):
 def quaternion_product(left, right):
     aw, ax, ay, az = np.asarray(left, dtype=float)
     bw, bx, by, bz = np.asarray(right, dtype=float)
-    return np.array([
-        aw*bw - ax*bx - ay*by - az*bz,
-        aw*bx + ax*bw + ay*bz - az*by,
-        aw*by - ax*bz + ay*bw + az*bx,
-        aw*bz + ax*by - ay*bx + az*bw,
-    ])
+    return np.array(
+        [
+            aw * bw - ax * bx - ay * by - az * bz,
+            aw * bx + ax * bw + ay * bz - az * by,
+            aw * by - ax * bz + ay * bw + az * bx,
+            aw * bz + ax * by - ay * bx + az * bw,
+        ]
+    )
 
 
 LAUNCH_TILT_RAD = -np.pi / 2
-LAUNCH_QUATERNION_BODY_TO_ECEF_WXYZ = np.array([
-    np.cos(LAUNCH_TILT_RAD / 2), 0.0, np.sin(LAUNCH_TILT_RAD / 2), 0.0
-])
+LAUNCH_QUATERNION_BODY_TO_ECEF_WXYZ = np.array(
+    [np.cos(LAUNCH_TILT_RAD / 2), 0.0, np.sin(LAUNCH_TILT_RAD / 2), 0.0]
+)
 
 
 def launch_position_body_m(earth_radius_m, height_above_site_m=0.0):
-    """ECEF launch point (0,0,R) plus a height h, in Body components at launch attitude.
-
-    With the launch attitude, Body +x is ECEF +z, so the vector from the Earth
-    centre to a point h above the launch site is [R+h, 0, 0] in Body components.
-    """
     radius = float(earth_radius_m)
     height = float(height_above_site_m)
     if not np.isfinite(radius) or radius <= 0 or not np.isfinite(height):
@@ -50,15 +47,16 @@ def launch_position_body_m(earth_radius_m, height_above_site_m=0.0):
 
 def body_to_ecef_matrix(quaternion_wxyz):
     w, x, y, z = normalize_quaternion(quaternion_wxyz)
-    return np.array([
-        [1-2*(y*y+z*z), 2*(x*y-w*z), 2*(x*z+w*y)],
-        [2*(x*y+w*z), 1-2*(x*x+z*z), 2*(y*z-w*x)],
-        [2*(x*z-w*y), 2*(y*z+w*x), 1-2*(x*x+y*y)],
-    ])
+    return np.array(
+        [
+            [1 - 2 * (y * y + z * z), 2 * (x * y - w * z), 2 * (x * z + w * y)],
+            [2 * (x * y + w * z), 1 - 2 * (x * x + z * z), 2 * (y * z - w * x)],
+            [2 * (x * z - w * y), 2 * (y * z + w * x), 1 - 2 * (x * x + y * y)],
+        ]
+    )
 
 
 def quaternion_rate_body_to_ecef(quaternion_wxyz, omega_body_radps):
-    """Body/ECEF rate in Body components; Earth rotation is zero in v0."""
     return 0.5 * quaternion_product(
         normalize_quaternion(quaternion_wxyz), np.r_[0.0, vector3(omega_body_radps)]
     )

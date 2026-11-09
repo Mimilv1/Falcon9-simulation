@@ -1,5 +1,3 @@
-"""Team objects: Body +x nose; all shared vectors use current Body axes."""
-
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
 import numpy as np
@@ -12,7 +10,6 @@ from kalman import NavigationKF
 
 
 def quat_rotate(q, v):
-    """Rotate current Body components into ECEF."""
     return body_to_ecef_matrix(q) @ vector3(v)
 
 
@@ -24,15 +21,13 @@ class EngineSpec:
     exit_area: float | None = None
     throttle_min: float | None = None
     gimbal_max: float | None = None
-    dry_mass: float | None = None  # already included in stage dry mass
+    dry_mass: float | None = None
 
 
 @dataclass
 class Engine:
     spec: EngineSpec
-    position: np.ndarray = field(
-        default_factory=lambda: np.zeros(3)
-    )  # stage-base Body coordinates
+    position: np.ndarray = field(default_factory=lambda: np.zeros(3))
     running: bool = False
     throttle: float = 0.0
     gimbal_pitch: float = 0.0
@@ -59,9 +54,9 @@ class Stage:
     length: float
     diameter: float
     cg_dry: float | None = None
-    inertia_dry: np.ndarray | None = None  # own dry CG, Body x/y/z
+    inertia_dry: np.ndarray | None = None
     engines: list = field(default_factory=list)
-    offset: float = 0.0  # axial stage-base station relative to Vehicle base
+    offset: float = 0.0
     name: str = "stage"
     tank_specs: tuple[TankSpec, ...] = ()
     dry_components: tuple = ()
@@ -141,7 +136,6 @@ class Stage:
         return combine_components(components)
 
     def tank_inventories(self):
-        """Derive liquid inventories from the single authoritative total state."""
         if self.liquid_profile is None:
             return {}
         masses = self.liquid_profile.stage1_inventory(self.propellant_mass)
@@ -153,19 +147,15 @@ class Vehicle:
     stages: list = field(default_factory=list)
     payload_mass: float = 0.0
     t: float = 0.0
-    position: np.ndarray = field(
-        default_factory=lambda: np.zeros(3)
-    )  # Earth centre -> structural base, CURRENT Body m
-    velocity: np.ndarray = field(
-        default_factory=lambda: np.zeros(3)
-    )  # base velocity in ECEF, CURRENT Body m/s
+    position: np.ndarray = field(default_factory=lambda: np.zeros(3))
+    velocity: np.ndarray = field(default_factory=lambda: np.zeros(3))
     quaternion: np.ndarray = field(
         default_factory=lambda: np.array([1.0, 0.0, 0.0, 0.0])
-    )  # current Body -> ECEF [w,x,y,z]
-    omega: np.ndarray = field(default_factory=lambda: np.zeros(3))  # Body rad/s
+    )
+    omega: np.ndarray = field(default_factory=lambda: np.zeros(3))
     parameters: object | None = field(default=None, repr=False)
-    datum_shift_m: float = 0.0  # current base station relative to original datum
-    # On-board navigation filter (IMU + GNSS + LIDAR); None until attach_navigation().
+    datum_shift_m: float = 0.0
+
     navigation: NavigationKF | None = field(default=None, repr=False)
     navigation_imu_station_body_m: np.ndarray | None = field(default=None, repr=False)
 
@@ -176,7 +166,6 @@ class Vehicle:
         self.quaternion = normalize_quaternion(self.quaternion)
 
     def separate(self, index=1):
-        """No impulse; preserve positions/velocities of corresponding structural points."""
         if not 0 < index < len(self.stages):
             raise ValueError("index out of range")
         cut = self.stages[index].offset
@@ -188,36 +177,42 @@ class Vehicle:
         for stage in upper.stages:
             stage.offset -= cut
         upper.datum_shift_m += cut
-        lower.navigation = upper.navigation = None  # parent filter is invalid for either child
+        lower.navigation = upper.navigation = None
         lower.navigation_imu_station_body_m = upper.navigation_imu_station_body_m = None
         upper.position = self.position + r_body
         upper.velocity = self.velocity + np.cross(self.omega, r_body)
         return lower, upper
 
     def structural_point_ecef(self, station_body_m):
-        """Truth position/velocity (ECEF) of a fixed structural station, e.g. the IMU.
-
-        Station in current-base Body coordinates (same datum as cg_station_body_m).
-        """
         station = vector3(station_body_m)
         rotation = body_to_ecef_matrix(self.quaternion)
-        return (rotation @ (self.position + station),
-                rotation @ (self.velocity + np.cross(self.omega, station)))
+        return (
+            rotation @ (self.position + station),
+            rotation @ (self.velocity + np.cross(self.omega, station)),
+        )
 
-    def attach_navigation(self, imu_spec, sigma0, *, environment, position_error_m=(0, 0, 0),
-                          velocity_error_mps=(0, 0, 0), accel_bias0_mps2=None):
-        """Create the on-board Kalman filter at the IMU station of this vehicle.
-
-        State: IMU-station position/velocity in ECEF + accelerometer bias. The initial
-        estimate is the current structural truth plus the given initial errors.
-        Gravity (1/r^2) and the Coriolis/centrifugal terms come from `environment`
-        (Environement.Environment), the single place where they are computed.
-        """
+    def attach_navigation(
+        self,
+        imu_spec,
+        sigma0,
+        *,
+        environment,
+        position_error_m=(0, 0, 0),
+        velocity_error_mps=(0, 0, 0),
+        accel_bias0_mps2=None,
+    ):
         p_true, v_true = self.structural_point_ecef(imu_spec.station_body_m)
         self.navigation = NavigationKF.from_imu_spec(
-            imu_spec, p_true + vector3(position_error_m), v_true + vector3(velocity_error_mps),
-            sigma0, ba0=accel_bias0_mps2, environment=environment)
-        self.navigation_imu_station_body_m = np.array(imu_spec.station_body_m, dtype=float)
+            imu_spec,
+            p_true + vector3(position_error_m),
+            v_true + vector3(velocity_error_mps),
+            sigma0,
+            ba0=accel_bias0_mps2,
+            environment=environment,
+        )
+        self.navigation_imu_station_body_m = np.array(
+            imu_spec.station_body_m, dtype=float
+        )
         return self.navigation
 
     def _require_navigation(self):
@@ -226,29 +221,41 @@ class Vehicle:
         return self.navigation
 
     def navigation_predict(self, imu_sample, previous_time_s, rotation):
-        """IMU propagation with one IMUSample; rotation = Body -> ECEF matrix (attitude truth in V1)."""
         kf = self._require_navigation()
         kf.predict(imu_sample.accel_meas_mps2, rotation, imu_sample.t - previous_time_s)
 
-    def navigation_update_gnss(self, gnss_sample, gnss_spec, rotation, omega_meas_radps):
-        """GNSS update (no-op without a valid fix); lever arm = antenna station - IMU station."""
+    def navigation_update_gnss(
+        self, gnss_sample, gnss_spec, rotation, omega_meas_radps
+    ):
         kf = self._require_navigation()
         if not gnss_sample.valid:
             return None
         arm = gnss_spec.antenna_station_body_m - self.navigation_imu_station_body_m
-        return kf.update_gnss(gnss_sample.pos_meas_m, gnss_sample.vel_meas_mps, rotation,
-                              omega_meas_radps, arm, gnss_sample.pos_sigma_m,
-                              gnss_sample.vel_sigma_mps, gnss_spec.latency_s)
+        return kf.update_gnss(
+            gnss_sample.pos_meas_m,
+            gnss_sample.vel_meas_mps,
+            rotation,
+            omega_meas_radps,
+            arm,
+            gnss_sample.pos_sigma_m,
+            gnss_sample.vel_sigma_mps,
+            gnss_spec.latency_s,
+        )
 
     def navigation_update_lidar(self, lidar_sample, lidar_spec, rotation):
-        """LIDAR range update (no-op without a valid return); lever arm = LIDAR station - IMU station."""
         kf = self._require_navigation()
         if not lidar_sample.valid:
             return None
         arm = lidar_spec.station_body_m - self.navigation_imu_station_body_m
-        return kf.update_lidar(lidar_sample.range_meas_m, rotation, arm, lidar_spec.boresight_body,
-                               lidar_spec.planet_center_ecef_m, lidar_spec.planet_radius_m,
-                               lidar_sample.sigma_m)
+        return kf.update_lidar(
+            lidar_sample.range_meas_m,
+            rotation,
+            arm,
+            lidar_spec.boresight_body,
+            lidar_spec.planet_center_ecef_m,
+            lidar_spec.planet_radius_m,
+            lidar_sample.sigma_m,
+        )
 
     def getmass(self):
         return (
@@ -296,7 +303,6 @@ class Vehicle:
     def to_state(
         self, *, consumption_by_stage=None, consumption_derivative_by_stage=None
     ):
-        """Base -> geometric CG, both expressed in current Body, including migration."""
         from dynamics import State
 
         properties = self.get_mass_properties(
@@ -324,7 +330,6 @@ class Vehicle:
         consumption_by_stage=None,
         consumption_derivative_by_stage=None,
     ):
-        """Synchronize an accepted A state; do not call this for RK trial states."""
         prop = dict(zip(("stage1", "stage2"), state.propellant_kg))
         properties = self.get_mass_properties(
             propellant_by_stage=prop,
@@ -349,7 +354,6 @@ class Vehicle:
 
 
 class VehicleMassAdapter:
-    """Evaluate RK4 trial inventory without mutating shared Stage/Vehicle state."""
 
     def __init__(self, vehicle):
         self.vehicle = vehicle
@@ -416,7 +420,6 @@ class VehicleMassAdapter:
 
 
 def build_falcon9(parameters=None):
-    """Create fresh team objects from one evidence profile; do not run a scenario."""
     p = parameters or Falcon9Parameters()
     profile = VehicleModel(inputs=p, mass_model="dual_tank")
     dry_components = profile.stage1_dry_components()
@@ -503,14 +506,11 @@ def build_falcon9(parameters=None):
         [stage1, stage2],
         payload_mass=p.payload_mass,
         parameters=p,
-        # Default pad placement: base at the ECEF launch site (0,0,earth_radius),
-        # expressed in launch-attitude Body components as [R, 0, 0].
         position=np.array([EARTH_MEAN_RADIUS_M, 0.0, 0.0]),
         quaternion=np.array(p.quaternion_body_to_ecef_wxyz),
     )
 
 
-# Preserve the team's global entry points. The factory provides independent objects.
 falcon9 = build_falcon9()
 stage1, stage2 = falcon9.stages
 stage1_engines = stage1.engines

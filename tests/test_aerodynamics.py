@@ -1,5 +1,3 @@
-"""Multi-configuration aerodynamics tests: force/moment conventions, retro
-flow, damping, configuration data and provider integration."""
 import unittest
 from pathlib import Path
 import numpy as np
@@ -116,8 +114,8 @@ class TestRetroFlow(unittest.TestCase):
         side=np.r_[0.0,-direction[1:]/sine]
         expected=np.cross(np.array([2.0*21.0-38.6-21.0,0.0,0.0]),magnitude*side)
         np.testing.assert_allclose(result.free_moment_body_nm,expected,rtol=1e-12)
-        # The mirrored flow with the mirrored station yields the same lateral
-        # moment: the mirror maps arm and force direction coherently.
+
+
         nose_direction=-relative/speed
         nose_side=np.r_[0.0,-nose_direction[1:]/sine]
         nose_expected=np.cross(np.array([38.6-21.0,0.0,0.0]),magnitude*nose_side)
@@ -142,7 +140,7 @@ class TestRotaryDamping(unittest.TestCase):
         dynamic_pressure=.5*ATMOSPHERE.density_kgm3*speed*speed
         scale=dynamic_pressure*10.52*42.6**2/(2.0*speed)
         expected=scale*np.array([-2.0*0.1,-20.0*0.5,-20.0*(-0.2)])
-        # With slope and crossflow zero, the entire free moment is damping.
+
         np.testing.assert_allclose(result.free_moment_body_nm,expected,rtol=1e-12)
 
     def test_damping_opposes_rotation_signs(self):
@@ -209,10 +207,8 @@ class TestConfigurationData(unittest.TestCase):
 
 
 class TestPhysicalInvariants(unittest.TestCase):
-    """Model-level invariants the propagation core and load assembly rely on."""
 
     def test_aerodynamic_power_is_never_positive(self):
-        """Every force term must extract energy from the relative motion."""
         model=Aerodynamics({'booster':booster_configuration()})
         for speed in (80.0,200.0,670.0):
             for angle in np.linspace(0.0,np.pi,9):
@@ -227,7 +223,6 @@ class TestPhysicalInvariants(unittest.TestCase):
                                      tolerance)
 
     def test_damping_power_is_never_positive(self):
-        """Rotary damping with negative coefficients must oppose rotation."""
         model=Aerodynamics({'booster':booster_configuration(roll=-2.0)})
         omega=[0.3,-0.4,0.5]
         result=model.evaluate(state([300.0,0.0,0.0],omega=omega),
@@ -272,7 +267,6 @@ class TestPhysicalInvariants(unittest.TestCase):
                                places=6)
 
     def test_reports_are_consistent_with_stated_formulas(self):
-        """force and moment reproduce the documented decomposition term by term."""
         configuration=booster_configuration(crossflow=1.1)
         model=Aerodynamics({'booster':configuration})
         relative=np.array([250.0,0.0,30.0])
@@ -299,7 +293,6 @@ class TestPhysicalInvariants(unittest.TestCase):
 
 
 class TestHypersonicExtension(unittest.TestCase):
-    """Mach 7..10 knots are declared estimates; the domain ends there."""
 
     def setUp(self):
         self.model=Aerodynamics.from_json(CONFIGURATIONS)
@@ -347,7 +340,6 @@ class TestHypersonicExtension(unittest.TestCase):
 
 
 def fin_control_configuration():
-    """Isolated fin control: no potential force, no crossflow, no damping."""
     return AeroConfiguration(name='fins',reference_area_m2=10.52,
         reference_length_m=42.6,axial_drag=MachDragCurve([0.0,1.0],[0.4,0.4]),
         potential_normal_slope_per_rad=0.0,potential_center_station_m=21.0,
@@ -360,7 +352,6 @@ def fin_control_configuration():
 
 
 class TestGridFinControl(unittest.TestCase):
-    """Fin increments: tangential force at the mount station, one moment each."""
 
     def test_single_fin_force_and_moment_at_mount_station(self):
         model=Aerodynamics({'fins':fin_control_configuration()})
@@ -390,7 +381,7 @@ class TestGridFinControl(unittest.TestCase):
         result=model.evaluate(state([300.0,0.0,0.0]),properties(),ATMOSPHERE,
                               np.zeros(3),'fins',[0.2,0.0,-0.2,0.0])
         single=.5*ATMOSPHERE.density_kgm3*300.0**2*2.0*0.2
-        # The axial aero force stays untouched; only the fin increment steers.
+
         self.assertAlmostEqual(result.force_body_n[2],2.0*single,places=6)
         self.assertAlmostEqual(result.force_body_n[1],0.0,places=8)
         np.testing.assert_allclose(result.free_moment_body_nm,
@@ -432,7 +423,7 @@ class TestGridFinControl(unittest.TestCase):
                             np.zeros(3),'fins',commands)
         retro=model.evaluate(state([-300.0,0.0,0.0]),properties(),ATMOSPHERE,
                              np.zeros(3),'fins',commands)
-        # Same speed, mirrored through-flow: the fin increment flips sign.
+
         self.assertAlmostEqual(retro.force_body_n[2],-nose.force_body_n[2],
                                places=6)
         np.testing.assert_allclose(retro.free_moment_body_nm,
@@ -609,8 +600,8 @@ class TestProviderIntegration(unittest.TestCase):
             engine.running=True
             engine.throttle=1.0
         model=Aerodynamics.from_json(CONFIGURATIONS)
-        # Pad exit nozzles sit at the site level; the strict environment
-        # requires the site above the ground datum (ground_altitude_m>0).
+
+
         provider=SteadyPoweredAscent(vehicle,Environment(ground_altitude_m=10.0,earth_rotation_rate_radps=0.0),model,
                                      aero_configuration='full_stack')
         initial=vehicle.to_state(consumption_by_stage={

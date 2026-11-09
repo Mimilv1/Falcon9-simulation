@@ -1,4 +1,3 @@
-"""Independent physical checks of open-system, moving-CG dynamics."""
 import sys
 import unittest
 from pathlib import Path
@@ -60,7 +59,7 @@ class PoweredDynamicsChecks(unittest.TestCase):
     def test_roll_angular_momentum_leaves_with_the_jet(self):
         model=LumpedRocket()
         state=State([0,0,0],[0,0,0],[1,0,0,0],[.2,0,0],[100,0])
-        # Exit axial gyration=1 equals fixture Jxx/m=1; spin rate stays constant.
+
         loads=Loads([0,0,0],[0,0,0],[0,0,0],[2,0],
                     (ExhaustPort(0,[0,0,0],2,gyration_body_m2=uniform_disk_gyration(np.sqrt(2))),))
         _,alpha=accelerations(state,loads,model.mass_properties(None,state.propellant_kg,[2,0]))
@@ -118,8 +117,8 @@ class PoweredDynamicsChecks(unittest.TestCase):
         Rp=body_to_ecef_matrix(plus.quaternion_body_to_ecef_wxyz)
         u=R@(state.velocity_body_mps-p.cg_rate_body_mps)
         up=Rp@(plus.velocity_body_mps-pplus.cg_rate_body_mps)
-        # Attitude is constant (no moment): the ECEF finite difference of the
-        # base velocity equals the Body sensor acceleration rotated into ECEF.
+
+
         np.testing.assert_allclose((up-u)/h,R@truth['sensor_acceleration_body_mps2'],rtol=1e-5,atol=2e-5)
 
     def test_rising_flow_fuel_event_is_resolved_without_negative_inventory(self):

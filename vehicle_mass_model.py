@@ -1,12 +1,9 @@
-"""Evidence profile adapter for the reusable core; Body +x is longitudinal."""
-
 from enum import Enum
 import json
 from pathlib import Path
 import numpy as np
 from vehicle_parameters import Falcon9Parameters
 from mass_properties import (
-    MassProperties,
     cylinder_inertia_per_kg,
     fixed_cylinder,
     liquid_column,
@@ -20,10 +17,6 @@ class Configuration(str, Enum):
 
 
 class VehicleModel:
-    """Literature-input adapter for mass properties, independent of Vehicle objects.
-
-    Geometric derivatives are coupled to explicit exhaust data by dynamics.py.
-    """
 
     def __init__(self, parameter_path=None, *, inputs=None, mass_model=None):
         self.inputs = inputs if inputs is not None else Falcon9Parameters()
@@ -80,7 +73,6 @@ class VehicleModel:
     cylinder_inertia_per_kg = staticmethod(cylinder_inertia_per_kg)
 
     def stage1_tank_geometry(self):
-        """Fixed literature section boundaries; liquid heights follow inventory/density."""
         v = self.value
         g = {}
         for fluid in ("rp1", "lox"):
@@ -102,7 +94,7 @@ class VehicleModel:
                     f"{fluid}_unfilled_height_m": length - height,
                 }
             )
-        # Compatibility plotting radius only; calculations use the two separate radii.
+
         g["radius_m"] = g["rp1_radius_m"]
         return g
 
@@ -122,11 +114,6 @@ class VehicleModel:
         }
 
     def stage1_inventory(self, propellant_kg):
-        """Reconstruct inventory for one constant-O/F burn, without vents/refilling.
-
-        State retains its two-stage total-mass interface. Variable O/F, venting,
-        transfer, or a different initial loading require independent tank states.
-        """
         v = self.value
         if not np.isfinite(propellant_kg):
             raise ValueError("Propellant must be finite.")
@@ -173,12 +160,6 @@ class VehicleModel:
         )
 
     def stage1_dry_components(self):
-        """RFZ dry-group proxy with explicit residual allocation and axisymmetry A.
-
-        Shell is a thin cylindrical shell; localized groups are equivalent thin
-        disks inside the body envelope (folded legs). These local inertias are
-        idealizations; positions/masses alone do not determine actual inertia.
-        """
         r = self.value["body_diameter_m"] / 2
         groups = [
             fixed_cylinder("stage1_dry_" + name, mass, 0.0, z, length, r)
@@ -206,7 +187,6 @@ class VehicleModel:
         return tuple(groups)
 
     def stage1_dry_uncertainty(self):
-        """Conditional CG bounds for fixed sourced groups and residual within tank region."""
         first_moment = sum(g[1] * g[2] for g in self.dry_groups)
         residual = self.dry_residual_mass
         mass = self.value["stage1_dry_mass_kg"]

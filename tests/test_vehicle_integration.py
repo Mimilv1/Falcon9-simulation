@@ -1,4 +1,3 @@
-"""Team-object/source-profile contracts and staging physics."""
 import sys
 import unittest
 from pathlib import Path
