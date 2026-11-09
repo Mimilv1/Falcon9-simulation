@@ -128,6 +128,7 @@ def default_provider(vehicle, phase, plan):
             PitchProgram(p["start_s"], p["tau_s"], np.deg2rad(p["tilt_max_deg"])),
             p["kp"],
             p["kd"],
+            p.get("heading_deg", 90.0),
         )
     return base
 
@@ -326,8 +327,17 @@ def run_mission(
     plan=None,
     provider_factory=default_provider,
     conditions_provider=None,
+    recovery=False,
 ):
     plan = load_mission() if plan is None else plan
+    controller = None
+    if recovery:
+        from recovery import RecoveryController, recovery_plan
+
+        plan = recovery_plan(plan)
+        controller = RecoveryController(plan)
+        provider_factory = controller.provider
+        conditions_provider = controller.conditions
     settings = plan["integration"]
     step_s = settings["step_s"] if step_s is None else step_s
     seed = settings["seed"] if seed is None else seed
@@ -338,7 +348,9 @@ def run_mission(
         or step_s <= 0
     ):
         raise ValueError("Require positive finite duration and step.")
-    if navigation and step_s > 1 / settings["imu_rate_hz"] + 1e-12:
+    if not np.isfinite(settings["imu_rate_hz"]) or settings["imu_rate_hz"] <= 0:
+        raise ValueError("IMU rate must be positive and finite.")
+    if navigation and step_s > min(1 / settings["imu_rate_hz"], 0.1) + 1e-12:
         raise ValueError("Step must not exceed the configured IMU period.")
     output = Path(output)
     output.mkdir(parents=True, exist_ok=True)
@@ -462,6 +474,11 @@ def run_mission(
                         )
                         conditions.update(landing_verdict(metrics, landing["limits"]))
                     record = sequence.accept(event.name, time_s, conditions)
+                    record["published_reference_time_s"] = next(
+                        e.get("reference_time_s", e.get("time_s"))
+                        for e in plan["transitions"]
+                        if e["name"] == event.name
+                    )
                     if event.name == "meco":
                         for stage in vehicle.stages:
                             for engine in stage.engines:
@@ -515,8 +532,24 @@ def run_mission(
             clock = sequence.next_clock_time
             boundary = until_s if clock is None else min(until_s, clock)
             h = min(step_s, boundary - time_s)
+            if controller is not None and controller.phase is not None:
+                for knot in (
+                    controller.next_update,
+                    controller.ramp[0] + controller.ramp[1],
+                ):
+                    if knot > time_s + 1e-9:
+                        h = min(h, knot - time_s)
             if next_output > time_s + 1e-9:
                 h = min(h, next_output - time_s)
+            if controller is not None and sequence.phase == "landing_burn":
+                clearance = controller.contact_altitude(state, evaluation.properties)
+                _, velocity = controller.point_state(state, evaluation.properties)
+                h = min(
+                    h,
+                    max(
+                        1e-8, 0.8 * max(clearance, 0) / max(np.linalg.norm(velocity), 1)
+                    ),
+                )
             if nav:
                 future = [
                     sensor.next_t
@@ -534,6 +567,32 @@ def run_mission(
                 if abs(candidate_time - boundary) < 1e-10:
                     candidate_time = boundary
                 candidate_evaluation = provider.evaluate(candidate_time, candidate)
+                if (
+                    controller is not None
+                    and sequence.phase == "landing_burn"
+                    and controller.contact_altitude(
+                        candidate, candidate_evaluation.properties
+                    )
+                    <= 0
+                ):
+                    lo, hi = 0.0, h
+                    for _ in range(35):
+                        mid = (lo + hi) / 2
+                        trial = rk4_step(
+                            time_s, state, mid, vehicle.mass_model(), None, provider
+                        )
+                        trial_ev = provider.evaluate(time_s + mid, trial)
+                        if controller.contact_altitude(trial, trial_ev.properties) > 0:
+                            lo = mid
+                        else:
+                            hi = mid
+                        if hi - lo < 1e-9:
+                            break
+                    candidate_time = time_s + hi
+                    candidate = rk4_step(
+                        time_s, state, hi, vehicle.mass_model(), None, provider
+                    )
+                    candidate_evaluation = provider.evaluate(candidate_time, candidate)
             except PropellantLimitError as error:
                 status, detail = "propellant_limit", str(error)
                 break
@@ -574,6 +633,15 @@ def run_mission(
                 row = nav.row(time_s, state, evaluation.properties)
                 nw.writerow(row)
                 nav_rows.append(row)
+    if (
+        recovery
+        and status == "requested_interval_complete"
+        and sequence.phase != "landed"
+    ):
+        status, detail = (
+            "mission_time_limit",
+            "Return not completed by requested simulation endpoint.",
+        )
     summary = {
         "mission": plan["mission"],
         "status": status,
@@ -599,6 +667,24 @@ def run_mission(
         ],
         "input_sha256": input_hashes,
     }
+    if controller is not None:
+        if sequence.phase in {"landed", "landing_failed"}:
+            controller.burns.append(
+                {
+                    "phase": "landing_burn",
+                    "start_s": controller.started,
+                    "end_s": time_s,
+                    "consumed_kg": float(
+                        controller.phase_fuel - state.propellant_kg[0]
+                    ),
+                    "reason": "contact",
+                    "contact_passed": sequence.phase == "landed",
+                }
+            )
+        summary["recovery_burns"] = controller.burns
+        summary["limitations"][
+            2
+        ] = "Project-designed recovery using true-state feedback and ideal bounded moments; not physical TVC/RCS or SpaceX flight software. Outcomes are measured, not forced."
     summary["physical_state_finite"] = bool(np.all(np.isfinite(state.to_vector())))
     summary["max_dynamic_pressure_pa"] = max(
         r["dynamic_pressure_pa"] for r in truth_rows
@@ -624,7 +710,7 @@ def run_mission(
     summary["physics_case"] = (
         "independent_terminal_test"
         if plan.get("vehicle_configuration") == "booster"
-        else "ascent_to_booster_coast"
+        else "continuous_project_recovery" if recovery else "ascent_to_booster_coast"
     )
     summary["reference_comparison"] = (
         compare_reference(output, truth_rows)

@@ -27,7 +27,7 @@ class TransitionMathChecks(unittest.TestCase):
         engine=build_falcon9().stages[0].engines[0];engine.running=True;engine.throttle=1
         steady=evaluate_steady_engine(engine,101325,stage_index=0,stage_offset_m=0,nozzle_exit_axial_m=0)
         half=scale_shutdown_output(steady,.5,-.2)
-        self.assertAlmostEqual(half.thrust_n,.5*845099)
+        self.assertAlmostEqual(half.thrust_n,.5*756000)
         self.assertAlmostEqual(half.exhaust_port.mass_flow_rate_kgps2,-.2*steady.mass_flow_kgps)
         off=scale_shutdown_output(steady,0,0)
         self.assertEqual(off.thrust_n,0);self.assertEqual(off.mass_flow_kgps,0)

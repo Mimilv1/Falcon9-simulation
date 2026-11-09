@@ -20,11 +20,11 @@ All axial distances follow **Body +x toward the nose**. All shared vectors are e
 | Tank bottom axial stations | RP-1: x=4.0 m; LOX: x=18.7 m | E/A | [S3](https://doi.org/10.2514/6.2017-4878) lower skirt + ordered section lengths; aligned source datums assumed |
 | Stage 1 nominal dry CG | 17.52108 m above base | E/A | [Bykerk, Table 2](https://www.eucass.eu/doi/EUCASS2023-018.pdf) dry groups + [S2](https://ir-api.ua.edu/api/core/bitstreams/cafcf02b-b6e7-47d8-a41b-24b1ba12a154/content) total; 6,450 kg residual uniformly over x=4.0–40.8 m |
 | Stage 1 dry inertia [Ixx,Iyy,Izz] | [61,368.59, 4,441,994.04, 4,441,994.04] kg·m² | E/A | Component shapes and parallel-axis calculation; Ixx is axial. Not measured inertia. |
-| Vacuum engine thrust | Merlin 1D SL: 914 kN; MVac: 935 kN | E | [Pezent, Table 2.16](https://ir-api.ua.edu/api/core/bitstreams/cafcf02b-b6e7-47d8-a41b-24b1ba12a154/content); per engine, selected literature set |
+| Effective vacuum engine thrust | Stage 1: 824.901 kN; stage 2: 935 kN | E/A (S1), E (S2) | S10 historical sea-level operating point 756 kN + assumed 0.68 m² exit area × 101325 Pa; not an identified CRS-10 rating/throttle. Stage 2 retained from Pezent Table 2.16. |
 | Vacuum specific impulse | Merlin 1D SL: 311 s; MVac: 348 s | E | [Pezent, Table 2.16](https://ir-api.ua.edu/api/core/bitstreams/cafcf02b-b6e7-47d8-a41b-24b1ba12a154/content) |
 | Nozzle exit area | Merlin 1D SL: 0.68 m²; MVac: 4.90 m² | E | [Pezent, Table 2.16](https://ir-api.ua.edu/api/core/bitstreams/cafcf02b-b6e7-47d8-a41b-24b1ba12a154/content) |
 | Minimum throttle | Merlin 1D SL: 60%; MVac: 40% | E | [Pezent, Table 2.16](https://ir-api.ua.edu/api/core/bitstreams/cafcf02b-b6e7-47d8-a41b-24b1ba12a154/content) research model limits, not certified flight limits |
-| Merlin 1D SL reference thrust / Isp | 845.099 kN / 287.556 s | E/A | [S2](https://ir-api.ua.edu/api/core/bitstreams/cafcf02b-b6e7-47d8-a41b-24b1ba12a154/content) vacuum data with p=101,325 Pa: Tsl=Tvac−Ae·p, Isp_sl=Isp_vac·Tsl/Tvac |
+| Stage-1 sea-level effective thrust / Isp | 756.000 kN / 285.023 s | E/A | S10 sea-level operating level and retained S2 vacuum Isp/nozzle area; Tₛₗ=Tᵥₐ꜀−Aₑp, Iₛₚ,ₛₗ=Iₛₚ,ᵥₐ꜀Tₛₗ/Tᵥₐ꜀. Not measured CRS-10 performance. |
 | Engine dry-mass proxies | Merlin 1D: 470 kg; MVac: 700 kg | E | [Bykerk, Table 2](https://www.eucass.eu/doi/EUCASS2023-018.pdf); engine masses are already included in stage dry budgets |
 
 ## Retained assumptions and unresolved data
@@ -93,3 +93,17 @@ The generic satellite fairing and separate CRS10Parameters class are removed.
 Falcon9Parameters is the only default. Mission commands and evidence are in
 `data/crs10_mission.json` and `docs/crs10_mission.md`. The fairing-derived axial
 drag curve still requires reconciliation with Dragon geometry before flight validation.
+
+
+## Historical first-stage operating point revision
+
+**S10:** [SpaceX Falcon 9 Payload User Guide Rev.2, 21 October 2015, p.11](https://device.report/m/08e51aa8dc266d701619331c9fdf0c23ce8456f61c08bd14084c00cc7c4d36ae.pdf), section 2.2: 756 kN sea-level thrust per engine, 6804 kN total. This is a SpaceX-authored historical document on a mirror. Its original URL is independently identified in [NASA SSP 51071, section6.1](https://www.nasa.gov/wp-content/uploads/2017/06/ssp_51071-baseline_0.pdf).
+
+The research model adopts this historical effective operating level. Vacuum
+thrust is estimated as 756000 + 0.68×101325 = 824901 N per engine. Retained
+311 s vacuum Isp and 0.68 m² exit area remain estimates from S2. Neither this
+combination nor the adopted 60% throttle minimum is certified for CRS-10.
+A higher-rated engine at lower throttle can give the same operating point;
+video speed alone cannot distinguish engine rating, commanded throttle and mass.
+The earlier 914 kN/full-throttle combination should not be described as an
+established CRS-10 engine operating history.

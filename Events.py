@@ -72,7 +72,15 @@ class MissionSequence:
         if event is None:
             return None
         if event.time_s is None:
-            key = "ground_contact" if event.name == "touchdown" else "burn_complete"
+            key = (
+                "ground_contact"
+                if event.name == "touchdown"
+                else (
+                    event.name
+                    if event.name in {"entry_start", "landing_start"}
+                    else "burn_complete"
+                )
+            )
             return event if (signals or {}).get(key, False) else None
         return event if time_s >= event.time_s - 1e-9 else None
 

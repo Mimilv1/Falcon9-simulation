@@ -25,7 +25,7 @@ class AscentModelChecks(unittest.TestCase):
         provider=SteadyPoweredAscent(vehicle,environment,DragOnlyAerodynamics(21.08,curve))
         state=vehicle.to_state(consumption_by_stage={'stage1':provider.consumption_kgps[0]})
         loads=provider(0,state)
-        np.testing.assert_allclose(loads.force_body_n,[9*845099,0,0],atol=1e-8)
+        np.testing.assert_allclose(loads.force_body_n,[9*756000,0,0],atol=1e-8)
         np.testing.assert_allclose(loads.consumption_kgps,provider.consumption_kgps)
         self.assertEqual(vehicle.stages[0].propellant_mass,410900)
 
@@ -156,7 +156,7 @@ class AscentModelChecks(unittest.TestCase):
         e=build_falcon9().stages[0].engines[0];e.running=True;e.throttle=1
         args=dict(stage_index=0,stage_offset_m=0,nozzle_exit_axial_m=0)
         vac=evaluate_steady_engine(e,0,**args);sea=evaluate_steady_engine(e,101325,**args)
-        self.assertEqual(vac.thrust_n,914000)
+        self.assertEqual(vac.thrust_n,824901)
         self.assertAlmostEqual(vac.thrust_n-sea.thrust_n,.68*101325)
         self.assertEqual(vac.mass_flow_kgps,sea.mass_flow_kgps)
 

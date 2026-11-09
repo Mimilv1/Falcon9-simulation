@@ -1,6 +1,6 @@
 {
   "description": "CRS-10 nominal configuration; loaded Dragon mass is an external estimate and CG/inertia use a uniform-cylinder assumption. Stage and engine values remain mixed-source research estimates.",
-  "literature_set": "Pezent 2024, Table 2.17, printed p.77 (PDF p.94)",
+  "literature_set": "Mass/Isp/area primarily S2; revised first-stage effective operating point from S10 historical sea-level level with explicit CRS-10 E/A applicability.",
   "literature_url": "https://ir-api.ua.edu/api/core/bitstreams/cafcf02b-b6e7-47d8-a41b-24b1ba12a154/content",
   "geometry_url": "https://www.spacex.com/assets/media/falcon-users-guide-2025-05-09.pdf",
   "ft_geometry_url": "https://www.faa.gov/about/office_org/headquarters_offices/ast/media/2018_AST_Compendium.pdf",
@@ -277,13 +277,14 @@
     },
     "stage1_engine_thrust_vac_n": {
       "attribute": "stage1_engine_thrust_vac",
-      "class": "E",
+      "class": "E/A",
       "unit": "N",
-      "source": "S2 Table 2.16, printed p.77 / PDF p.94",
+      "source": "S10 SpaceX 2015 Rev.2 p.11: 756 kN sea level; effective vacuum operating point = 756000 + 101325*0.68 = 824901 N. Application to CRS-10 is an estimate, not a recovered engine rating or throttle history.",
       "source_ids": [
+        "S10",
         "S2"
       ],
-      "condition": "Adopted literature engine model; not a manufacturer certification for a selected flight"
+      "condition": "Historical effective operating-point model; retained Isp311 s and area0.68 m2 from S2. Same thrust can be represented by throttling a higher-rated engine; telemetry alone does not identify the two."
     },
     "stage1_isp_vac_s": {
       "attribute": "stage1_isp_vac",
@@ -449,14 +450,14 @@
     "rates": "Analytical geometric mass/CG/inertia derivatives, including CG and mass second derivatives; coupled to explicit exhaust momentum terms.",
     "integration": "Body-only powered integration with explicit balanced exhaust flow, CG migration and angular-momentum outflow; smooth flow required. See docs/powered_dynamics.md.",
     "inventory": "Fixed initial loading and flow ratio allow total-mass state reconstruction. No venting, variable mixture, refilling or restart-specific ratio schedules.",
-    "engine_operating_set": "Pezent Table 2.16: vacuum thrust 914/935 kN, Isp 311/348 s, exit area 0.68/4.9 m2, throttle minimum 0.60/0.40. These are literature estimates; do not imply actual mission limits.",
+    "engine_operating_set": "Stage1 historical effective Tvac824901 N from756kN SL +0.68m2*101325Pa; Isp311s and min throttle0.60 remain mixed-source estimates. Stage2 retained935kN/348s. Not mission-certified engine limits.",
     "earth_model": "Current Body components; fixed initial Body basis only for attitude bookkeeping. No active geographic transformation API.",
     "exhaust_closure": "Fixed port stations, axial CG migration, balanced axial exhaust first moments; relative-flow internal angular momentum/swirl and moving nozzle boundaries omitted."
   },
   "numeric_source": "Falcon9Parameters in vehicle_parameters.py; Vehicle factory references these values",
   "team_repository": "https://github.com/Mimilv1/Falcon9-simulation",
   "team_base_commit": "5b61a45b07766fbd458d4410a1034977da824837",
-  "revision": "CRS-10 is the sole default; separate profile and satellite fairing removed.",
+  "revision": "2026-11-09 historical operating-point audit and project recovery design",
   "sources": {
     "S1": {
       "title": "SpaceX Falcon User Guide, May 2025",
@@ -495,14 +496,14 @@
       "title": "Valentin Miquel, Propellant Feeding System of a Liquid Rocket With Multiple Engines, KTH, 2020",
       "url": "https://www.diva-portal.org/smash/get/diva2:1440090/FULLTEXT01.pdf",
       "locator": "Table 5, PDF p.24, Falcon 9 first-stage row",
-      "scope": "Comparative study: RP-1 266 K, 820 kg/m³; subcooled LOX 66 K, 1250 kg/m³. Pressure and original measurement provenance not provided; E reference conditions, not certified flight properties."
+      "scope": "Comparative study: RP-1 266 K, 820 kg/m\u00b3; subcooled LOX 66 K, 1250 kg/m\u00b3. Pressure and original measurement provenance not provided; E reference conditions, not certified flight properties."
     },
     "S7": {
       "title": "Huber, Lemmon and Bruno, Effect of RP-1 Compositional Variability on Thermophysical Properties, NIST, 2009",
       "url": "https://tsapps.nist.gov/publication/get_pdf.cfm?pub_id=902380",
       "doi": "10.1021/ef900597q",
       "locator": "Table 5, journal p.5553 / PDF p.4",
-      "scope": "Cross-check only: model density 808.1 kg/m³ at 288.7 K, 101.325 kPa. Not substituted for cold RP-1."
+      "scope": "Cross-check only: model density 808.1 kg/m\u00b3 at 288.7 K, 101.325 kPa. Not substituted for cold RP-1."
     },
     "S8": {
       "title": "Course Module 4 Simulation Examples",
@@ -517,10 +518,10 @@
       "scope": "Legacy FT geometry; stage/interstage boundary applicability remains unresolved. Not used for v3 internal tank section lengths."
     },
     "S10": {
-      "title": "SpaceX CRS-10 Mission Overview, NASA",
-      "url": "https://www.nasa.gov/wp-content/uploads/2018/07/spacex_crs-10_mission_overview_0.pdf",
-      "locator": "TOTAL CARGO table",
-      "scope": "2490 kg cargo only, not the loaded spacecraft total"
+      "title": "SpaceX Falcon 9 Payload User Guide Rev.2, 21 October 2015",
+      "url": "https://device.report/m/08e51aa8dc266d701619331c9fdf0c23ce8456f61c08bd14084c00cc7c4d36ae.pdf",
+      "locator": "printed/PDF p.11, section2.2 and Table2-1",
+      "classification": "Official historical design document; CRS-10 operating applicability E/A; mirror hosting."
     },
     "S11": {
       "title": "Ed Kyle, SpaceX Falcon 9 v1.2 Data Sheet, NASA-hosted copy",

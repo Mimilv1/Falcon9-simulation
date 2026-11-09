@@ -184,7 +184,7 @@ class TestConfigurationData(unittest.TestCase):
     def test_declared_configuration_file_loads_all_phases(self):
         model=Aerodynamics.from_json(CONFIGURATIONS)
         self.assertEqual(set(model.configurations),
-                         {'full_stack','booster_alone','booster_landing','second_stack'})
+                         {'full_stack','booster_alone','booster_landing','booster_return','second_stack'})
         for name in model.configurations:
             result=model.evaluate(state([200.0,10.0,-5.0]),properties(),ATMOSPHERE,
                                   np.zeros(3),name)
@@ -338,7 +338,7 @@ class TestHypersonicExtension(unittest.TestCase):
                                      self.model,aero_configuration='full_stack')
         initial=vehicle.to_state(consumption_by_stage={
             'stage1':provider.consumption_kgps[0]})
-        result=propagate(0.0,initial,150.0,0.5,vehicle.mass_model(),None,provider)
+        result=propagate(0.0,initial,165.0,0.5,vehicle.mass_model(),None,provider)
         self.assertIn(result.stop_reason,('end_time','propellant_limit'))
         machs=[provider.evaluate(t,s).aero.mach
                for t,s in zip(result.times_s[::4],result.states[::4])]

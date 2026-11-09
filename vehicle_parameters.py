@@ -83,7 +83,7 @@ class Falcon9Parameters:
         )
 
         self.stage1_engine_count = 9
-        self.stage1_engine_thrust_vac = 914e3
+        self.stage1_engine_thrust_vac = 756000.0 + 0.68 * 101325.0
         self.stage1_isp_vac = 311.0
         self.stage1_engine_exit_area = 0.68
         self.reference_sea_level_pressure_pa = 101325.0

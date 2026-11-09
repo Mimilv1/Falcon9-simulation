@@ -10,9 +10,12 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description="CRS-10 ascent, shutdown, separation and booster coast."
     )
-    parser.add_argument("--case", choices=["ascent", "terminal"], default="ascent")
+    parser.add_argument(
+        "--case", choices=["ascent", "terminal", "full"], default="ascent"
+    )
     parser.add_argument("--until", type=float, default=None)
     parser.add_argument("--dt", type=float, default=None)
+    parser.add_argument("--imu-rate", type=float, default=None)
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument("--output", type=Path, default=None)
     parser.add_argument("--no-navigation", action="store_true")
@@ -28,10 +31,16 @@ def main():
         plot_results(args.plot_only, show=not args.no_show, save=args.save)
         return
     plan = terminal_plan() if args.case == "terminal" else load_mission()
+    if args.imu_rate is not None:
+        plan["integration"]["imu_rate_hz"] = args.imu_rate
     until = (
         args.until
         if args.until is not None
-        else plan["terminal_test"]["duration_s"] if args.case == "terminal" else 160.0
+        else (
+            plan["terminal_test"]["duration_s"]
+            if args.case == "terminal"
+            else 600.0 if args.case == "full" else 160.0
+        )
     )
     output = args.output or Path(__file__).parent / "results" / datetime.now().strftime(
         "crs10-" + args.case + "-%Y%m%d-%H%M%S"
@@ -44,6 +53,7 @@ def main():
         seed=args.seed,
         navigation=not args.no_navigation,
         plan=plan,
+        recovery=args.case == "full",
     )
     final = result["final_truth"]
     print(
@@ -63,7 +73,9 @@ def main():
         )
     print("Full return flight completed:", result["full_mission_completed"])
     plot_results(output, show=not args.no_show, save=args.save)
-    if result["status"] != "requested_interval_complete":
+    if result["status"] not in {"requested_interval_complete", "landing_success"} or (
+        args.case == "full" and not result["full_mission_completed"]
+    ):
         raise SystemExit(2)
 
 

@@ -287,11 +287,11 @@
     }
   },
   "unresolved_before_full_flight": [
-    "Physical TVC/attitude control, booster flip and return steering.",
-    "Dragon/booster-specific validation of estimated aerodynamic coefficients.",
-    "Boostback and entry completion rules, engine sets, throttle and fuel budgets.",
-    "Restart transients and settled-fluid validity during coast/flip.",
-    "Landing target, deployed-leg contact height and landing control law."
+    "Physical TVC/RCS actuator model and surveyed landing-site geometry.",
+    "Independent validation of the calibrated ascent operating point and pitch program.",
+    "Robust recovery success under coefficient, mass, wind and navigation uncertainty.",
+    "Restart health/settling and deployed-leg inertia/contact-force dynamics.",
+    "C final merge and replacing truth-attitude input with an explicitly justified navigation interface."
   ],
   "environment": {
     "launch_latitude_deg": 28.6,
@@ -299,12 +299,13 @@
   },
   "attitude_program": {
     "start_s": 8.0,
-    "tau_s": 60.0,
+    "tau_s": 100.0,
     "tilt_max_deg": 80.0,
     "kp": 2.0,
     "kd": 2.5,
     "class": "A",
-    "basis": "Latest team main ideal eastward pitch program and unlimited pure control couple retained for powered ascent and shutdown. Not CRS-10 guidance or a physical TVC actuator. No flip is commanded after MECO."
+    "basis": "A: ascent uses the existing unlimited ideal pitch-control couple. tau100 s is calibrated to the same reference readout, not independently validated guidance. Heading45 deg is a northeast ISS-launch approximation. Recovery actuators are bounded separately.",
+    "heading_deg": 45.0
   },
   "terminal_test": {
     "class": "A",
@@ -314,5 +315,45 @@
     "central_engine_throttle": 0.65,
     "duration_s": 10.0,
     "basis": "Independent terminal powered-descent integration fixture, not a state inherited from CRS-10 return. Initial altitude within the existing C LiDAR range (1800 m), tail down and centred engine to test retro-flow aero, braking, mass depletion and sensor interfaces. Fuel inventory and throttle are provisional assumptions; no claim of a complete landing. Legs/fins deployed for booster_landing configuration."
+  },
+  "recovery": {
+    "class": "A",
+    "basis": "Project-designed feedback return, not reconstructed SpaceX flight software. True state feedback for A/B verification; navigation feedback not yet used.",
+    "guidance_period_s": 0.2,
+    "ramp_s": 1.0,
+    "boostback_budget_kg": 38000.0,
+    "entry_budget_kg": 16000.0,
+    "landing_budget_kg": 10000.0,
+    "reserve_kg": 2000.0,
+    "boostback_throttle": 1.0,
+    "entry_throttle": 0.8,
+    "boostback_min_s": 10.0,
+    "boostback_max_s": 60.0,
+    "boostback_miss_limit_m": 500.0,
+    "entry_altitude_m": 45000.0,
+    "entry_end_speed_mps": 500.0,
+    "landing_margin_m": 1500.0,
+    "landing_ignition_factor": 1.05,
+    "landing_target_north_m": -14000.0,
+    "landing_target_east_m": 6000.0,
+    "contact_below_base_m": 1.0,
+    "contact_radius_m": 3.5,
+    "max_control_moment_nm": 2000000.0,
+    "coast_control_moment_nm": 200000.0,
+    "attitude_kp": 1.0,
+    "attitude_kd": 2.0,
+    "max_angular_accel_radps2": 0.12,
+    "max_angular_rate_radps": 0.22,
+    "landing_tilt_limit_deg": 20.0,
+    "target_basis": "A: rounded 14 km south / 6 km east launch-relative pad target on sphere, not surveyed LZ-1 coordinates.",
+    "contact_basis": "A: four leg tips 1 m below base and 3.5 m radial; explicit numerical acceptance geometry, not manufacturer dimensions.",
+    "assume_restart_ready": true,
+    "restart_basis": "A: engine health, propellant settling and ignition transients not resolved; successful restart is assumed after zero-flow and attitude checks. One-second smooth flow ramp is numerical design, not a measured transient.",
+    "landing_budget_basis": "Planning allocation. Unused boostback/entry allocation can transfer to landing; reserve plus limiting-tank residual is protected.",
+    "landing_force_allocation": "A: bounded search over body tilt and throttle using thrust PLUS B aerodynamic force; vertical-force error weighted 100:1. Grid fins allocate attitude moment, with remaining ideal actuator moment bounded separately.",
+    "boostback_prediction": "A: reduced-order predictor includes central gravity, rotation, B force coefficients and a prospective entry burn. Used for feedback; prediction errors remain.",
+    "landing_target_vertical_velocity_mps": -1.0,
+    "landing_horizontal_horizon_fraction": 0.5,
+    "landing_margin_basis": "A: 1.5 km early-ignition clearance allowance for reduced stopping-predictor and attitude/force uncertainty, selected in development trials; not an actual CRS-10 altitude or validated robustness bound."
   }
 }

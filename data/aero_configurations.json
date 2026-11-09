@@ -45,8 +45,40 @@
       "reference_area_m2": 10.52,
       "reference_length_m": 42.6,
       "axial_drag_curve": {
-        "mach": [0.0, 0.8, 0.85, 1.0, 1.05, 1.1, 1.3, 1.6, 2.0, 3.0, 4.0, 5.0, 7.0, 8.0, 10.0],
-        "drag_coefficient": [0.42, 0.41, 0.4, 0.72, 0.94, 0.92, 0.84, 0.74, 0.68, 0.56, 0.5, 0.46, 0.42, 0.41, 0.4]
+        "mach": [
+          0.0,
+          0.8,
+          0.85,
+          1.0,
+          1.05,
+          1.1,
+          1.3,
+          1.6,
+          2.0,
+          3.0,
+          4.0,
+          5.0,
+          7.0,
+          8.0,
+          10.0
+        ],
+        "drag_coefficient": [
+          0.42,
+          0.41,
+          0.4,
+          0.72,
+          0.94,
+          0.92,
+          0.84,
+          0.74,
+          0.68,
+          0.56,
+          0.5,
+          0.46,
+          0.42,
+          0.41,
+          0.4
+        ]
       },
       "potential_normal_slope_per_rad": 2.0,
       "potential_center_station_m": 41.0,
@@ -69,8 +101,40 @@
       "reference_area_m2": 10.52,
       "reference_length_m": 42.6,
       "axial_drag_curve": {
-        "mach": [0.0, 0.8, 0.85, 1.0, 1.05, 1.1, 1.3, 1.6, 2.0, 3.0, 4.0, 5.0, 7.0, 8.0, 10.0],
-        "drag_coefficient": [0.67, 0.66, 0.65, 0.97, 1.19, 1.17, 1.09, 0.99, 0.93, 0.81, 0.75, 0.71, 0.67, 0.65, 0.63]
+        "mach": [
+          0.0,
+          0.8,
+          0.85,
+          1.0,
+          1.05,
+          1.1,
+          1.3,
+          1.6,
+          2.0,
+          3.0,
+          4.0,
+          5.0,
+          7.0,
+          8.0,
+          10.0
+        ],
+        "drag_coefficient": [
+          0.67,
+          0.66,
+          0.65,
+          0.97,
+          1.19,
+          1.17,
+          1.09,
+          0.99,
+          0.93,
+          0.81,
+          0.75,
+          0.71,
+          0.67,
+          0.65,
+          0.63
+        ]
       },
       "potential_normal_slope_per_rad": 2.0,
       "potential_center_station_m": 41.0,
@@ -82,7 +146,12 @@
         "uncertainty": "Order-of-magnitude declared estimate. The real fins are individually commanded and their effectiveness varies with Mach, alpha and lattice state; those dependencies are declared unmodeled, as is any deflection axial-drag increment and interference with the passive crossflow segments.",
         "convention": "Azimuth about Body +x from +y toward +z; a positive deflection pushes fin i along (0, -sin(phi), cos(phi)), scaled by the axial-flow share cos(a)*|cos(a)| (full nose-first, reversed engine-first, zero at 90 degrees total angle).",
         "fin_count": 4,
-        "azimuths_rad": [0.7853981634, 2.3561944902, 3.926990817, 5.4977871438],
+        "azimuths_rad": [
+          0.7853981634,
+          2.3561944902,
+          3.926990817,
+          5.4977871438
+        ],
         "fin_area_m2": 1.65,
         "lift_slope_per_rad": 1.2,
         "pivot_radius_m": 1.83,
@@ -120,8 +189,40 @@
       "reference_area_m2": 10.52,
       "reference_length_m": 19.8,
       "axial_drag_curve": {
-        "mach": [0.0, 0.8, 0.85, 1.0, 1.05, 1.1, 1.3, 1.6, 2.0, 3.0, 4.0, 5.0, 7.0, 8.0, 10.0],
-        "drag_coefficient": [0.32, 0.31, 0.3, 0.62, 0.84, 0.82, 0.74, 0.66, 0.6, 0.48, 0.42, 0.38, 0.36, 0.35, 0.34]
+        "mach": [
+          0.0,
+          0.8,
+          0.85,
+          1.0,
+          1.05,
+          1.1,
+          1.3,
+          1.6,
+          2.0,
+          3.0,
+          4.0,
+          5.0,
+          7.0,
+          8.0,
+          10.0
+        ],
+        "drag_coefficient": [
+          0.32,
+          0.31,
+          0.3,
+          0.62,
+          0.84,
+          0.82,
+          0.74,
+          0.66,
+          0.6,
+          0.48,
+          0.42,
+          0.38,
+          0.36,
+          0.35,
+          0.34
+        ]
       },
       "potential_normal_slope_per_rad": 2.0,
       "potential_center_station_m": 17.3,
@@ -139,6 +240,87 @@
           "top_m": 19.8,
           "width_m": 3.7,
           "crossflow_drag_coefficient": 1.1
+        }
+      ]
+    },
+    "booster_return": {
+      "class": "declared estimate",
+      "evidence": "booster_alone estimates plus declared increments: grid fins and deployed legs add projected side area near the interstage and the engine bay, axial CA0 raised by a flat crossfin/leg increment (+0.25 subsonic, decreasing to +0.25/0.17 by Mach 7), roll damping from the grid fins.",
+      "uncertainty": "Increments are declared estimates, not measured. Grid-fin normal force in reality is control-effective (movable); this model treats fins as fixed crossflow area only.",
+      "notes": "A integration configuration: B booster_landing coefficients and fins, with deployed-leg segment omitted. Fins deployed after boostback; legs deploy at landing ignition. No new measured coefficients.",
+      "reference_area_m2": 10.52,
+      "reference_length_m": 42.6,
+      "axial_drag_curve": {
+        "mach": [
+          0.0,
+          0.8,
+          0.85,
+          1.0,
+          1.05,
+          1.1,
+          1.3,
+          1.6,
+          2.0,
+          3.0,
+          4.0,
+          5.0,
+          7.0,
+          8.0,
+          10.0
+        ],
+        "drag_coefficient": [
+          0.67,
+          0.66,
+          0.65,
+          0.97,
+          1.19,
+          1.17,
+          1.09,
+          0.99,
+          0.93,
+          0.81,
+          0.75,
+          0.71,
+          0.67,
+          0.65,
+          0.63
+        ]
+      },
+      "potential_normal_slope_per_rad": 2.0,
+      "potential_center_station_m": 41.0,
+      "pitch_damping_coefficient": -20.0,
+      "roll_damping_coefficient": -3.0,
+      "grid_fin_control": {
+        "class": "declared estimate",
+        "evidence": "Falcon 9 grid fin approximated as a porous lattice panel of about 1.5 m x 1.1 m (1.65 m2); lift slope per fin 1.2 per rad, roughly half of a solid panel of aspect ratio near one because of lattice porosity. Mount stations sit inside the declared fin side segment; maximum deflection about 20 degrees matches observed strokes. Azimuths are intercardinal (45, 135, 225, 315 degrees).",
+        "uncertainty": "Order-of-magnitude declared estimate. The real fins are individually commanded and their effectiveness varies with Mach, alpha and lattice state; those dependencies are declared unmodeled, as is any deflection axial-drag increment and interference with the passive crossflow segments.",
+        "convention": "Azimuth about Body +x from +y toward +z; a positive deflection pushes fin i along (0, -sin(phi), cos(phi)), scaled by the axial-flow share cos(a)*|cos(a)| (full nose-first, reversed engine-first, zero at 90 degrees total angle).",
+        "fin_count": 4,
+        "azimuths_rad": [
+          0.7853981634,
+          2.3561944902,
+          3.926990817,
+          5.4977871438
+        ],
+        "fin_area_m2": 1.65,
+        "lift_slope_per_rad": 1.2,
+        "pivot_radius_m": 1.83,
+        "station_m": 39.6,
+        "maximum_deflection_rad": 0.35
+      },
+      "side_segments": [
+        {
+          "bottom_m": 0.0,
+          "top_m": 42.6,
+          "width_m": 3.66,
+          "crossflow_drag_coefficient": 1.1
+        },
+        {
+          "bottom_m": 38.6,
+          "top_m": 40.6,
+          "width_m": 2.4,
+          "crossflow_drag_coefficient": 1.0,
+          "note": "four grid fins combined, incremental projected width beyond the body"
         }
       ]
     }

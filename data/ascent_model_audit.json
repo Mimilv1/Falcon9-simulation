@@ -1,0 +1,169 @@
+{
+  "date": "2026-11-09",
+  "scope": "Ascent discrepancy audit; alternate cases are numerical sensitivity, not independent flight validation.",
+  "reference_verification": {
+    "raw_sha256": "005abeb4b2c1116a31364959710d4b5e346febf49821a04aaf0da9d7f87838c5",
+    "status": "See exact hash in crs10_ascent_reference_source.json; raw re-downloaded and matched original hash. Units m/s and km per author. No second speed conversion applied.",
+    "source_url": "https://github.com/shahar603/Telemetry-Data/blob/b245d3b81aa36b7941ec10f3f4b508999d106a6d/README.md"
+  },
+  "cases": {
+    "previous": {
+      "count": 140,
+      "interval_s": [
+        0.0,
+        139.973
+      ],
+      "basis": "Video-digitized ascent telemetry, E. Speed reference frame not independently verified. Not first-stage return data.",
+      "final_sample": {
+        "time_s": 139.973,
+        "reference_altitude_m": 59400.0,
+        "simulated_altitude_m": 57533.13036417197,
+        "error_altitude_m": -1866.8696358280285,
+        "reference_speed_mps": 1609.444,
+        "simulated_speed_mps": 2317.034173256016,
+        "error_speed_mps": 707.590173256016
+      },
+      "rmse_altitude_m": 2402.051863196086,
+      "rmse_speed_mps": 297.1348341015474,
+      "stage1_propellant_at_endpoint_kg": 31948.20826448365
+    },
+    "historical_thrust": {
+      "count": 140,
+      "interval_s": [
+        0.0,
+        139.973
+      ],
+      "basis": "Video-digitized ascent telemetry, E. Speed reference frame not independently verified. Not first-stage return data.",
+      "final_sample": {
+        "time_s": 139.973,
+        "reference_altitude_m": 59400.0,
+        "simulated_altitude_m": 38579.01657636155,
+        "error_altitude_m": -20820.98342363845,
+        "reference_speed_mps": 1609.444,
+        "simulated_speed_mps": 1731.8815423509095,
+        "error_speed_mps": 122.43754235090955
+      },
+      "rmse_altitude_m": 6985.137736138497,
+      "rmse_speed_mps": 53.62071908723756,
+      "stage1_propellant_at_endpoint_kg": 68889.3742291946
+    },
+    "historical_thrust_pitch_tau100": {
+      "count": 140,
+      "interval_s": [
+        0.0,
+        139.973
+      ],
+      "basis": "Video-digitized ascent telemetry, E. Speed reference frame not independently verified. Not first-stage return data.",
+      "final_sample": {
+        "time_s": 139.973,
+        "reference_altitude_m": 59400.0,
+        "simulated_altitude_m": 54627.553103635306,
+        "error_altitude_m": -4772.446896364694,
+        "reference_speed_mps": 1609.444,
+        "simulated_speed_mps": 1574.1888191319408,
+        "error_speed_mps": -35.25518086805914
+      },
+      "rmse_altitude_m": 1576.774113612581,
+      "rmse_speed_mps": 18.45944358412264,
+      "stage1_propellant_at_endpoint_kg": 68889.3742291946
+    }
+  },
+  "previous_projected_delta_v_1_to_139_9s_mps": {
+    "thrust": 3418.0383,
+    "aero": -100.7428,
+    "gravity": -1010.7232,
+    "rotation": 2.71575,
+    "note": "Along instantaneous velocity; state/control coupled. Not a counterfactual zero-drag run."
+  },
+  "recovery_integration_trial": {
+    "status": "landing_failed",
+    "all_phases_visited": true,
+    "finite_state": true,
+    "reserve_preserved": true,
+    "contact": {
+      "ground_contact": true,
+      "legs_deployed": true,
+      "vertical_speed_mps": 2.625222924264168,
+      "horizontal_speed_mps": 1.0015039410159983,
+      "tilt_deg": 1.9455728357778728,
+      "angular_rate_degps": 0.28868698813022464,
+      "target_error_m": 17.943372072667746
+    },
+    "sensor_counts": {
+      "imu": 9302,
+      "gnss": 4651,
+      "lidar": 4651
+    },
+    "nav_position_rms_m": 1.1539400469504768,
+    "imu_rate_hz": 20,
+    "dynamics_step_s": 0.05,
+    "burns": [
+      {
+        "phase": "boostback_burn",
+        "start_s": 161.0,
+        "end_s": 208.84999999999243,
+        "consumed_kg": 38014.70419302379,
+        "reason": "fuel or duration cap",
+        "ballistic_miss_m": 3860.4586442385003
+      },
+      {
+        "phase": "entry_burn",
+        "start_s": 370.1999999999833,
+        "end_s": 393.049999999982,
+        "consumed_kg": 14183.501158890936,
+        "reason": "entry speed target",
+        "ballistic_miss_m": 4885.261906548559
+      },
+      {
+        "phase": "landing_burn",
+        "start_s": 426.2999999999801,
+        "end_s": 465.0693724566017,
+        "consumed_kg": 7712.3923959882995,
+        "reason": "contact",
+        "contact_passed": false
+      }
+    ],
+    "events": [
+      [
+        "liftoff",
+        0.0
+      ],
+      [
+        "shutdown_start",
+        140.0
+      ],
+      [
+        "meco",
+        141.0
+      ],
+      [
+        "stage_separation",
+        144.0
+      ],
+      [
+        "boostback_start",
+        161.0
+      ],
+      [
+        "boostback_end",
+        208.84999999999243
+      ],
+      [
+        "entry_start",
+        370.1999999999833
+      ],
+      [
+        "entry_end",
+        393.049999999982
+      ],
+      [
+        "landing_start",
+        426.2999999999801
+      ],
+      [
+        "touchdown",
+        465.0693724566017
+      ]
+    ]
+  }
+}

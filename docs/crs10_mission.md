@@ -1,166 +1,223 @@
-# CRS-10 execution and team handoff
+# CRS-10 model audit and recovery design
 
-## What is connected
+## Status and execution
 
-`main.py` → `mission.run_mission` → vehicle/mass properties → B loads → A RK4
-→ accepted state → existing C sensor measurements and filter → CSV/JSON/plot.
-Every RK4 trial rebuilds mass, CG, inertia, flow, gravity, rotation effects and
-aerodynamics from the trial state. Random sensor samples are generated only at
-accepted sampling epochs. The filter uses its own estimated position/velocity
-for environment propagation, with truth attitude supplied as in C's current code.
+`python main.py --no-show` runs ascent, shutdown, separation and booster coast
+to 160 s. The booster is still climbing at this point. The terminal case is an
+independent fixture; it is not spliced into the ascent trajectory.
 
-There is one CRS-10 vehicle parameter set. The mission plan is
-`data/crs10_mission.json`; it contains commands and explicit assumptions, not a
-second copy of vehicle masses. No new comments/docstrings were added to the code.
+`python main.py --case full --no-show` attempts the continuous return with
+project-designed guidance. It uses the inherited state at every phase boundary;
+no position, speed, attitude or fuel reset creates a landing. A failed contact
+is recorded as `landing_failed`, not relabelled as success. Current development
+trials fail landing criteria. This is an experimental recovery controller.
 
-## Source-timed events and implemented scope
+The existing C sensor/filter algorithms are unchanged. A revised 100 Hz IMU /
+10 Hz GNSS/LiDAR run through 160 s completed, seed 1, with 0.618 m saved-sample
+position RMS at the IMU station. This is an internal metric under assumed noise
+and truth attitude, not real Falcon navigation accuracy. C's later branch and
+closed-loop navigation feedback still require final integration.
 
-**M1, K:** [SpaceX CRS-10 press kit](https://www.nasa.gov/wp-content/uploads/2018/07/crs10presskitfinal.pdf),
-February 2017, PDF p.2, “Mission Timeline (all times approximate)”. MECO 141 s,
-stage separation 144 s, boostback start 161 s, entry start 392 s, landing start
-453 s are official approximate preflight milestones. Adopting them as exact
-simulation commands is **A**, not knowledge of actual flight-computer thresholds.
+## Why the previous speed was 44% high
+
+The comparison uses geometric-CG ground-relative speed, which is invariant to
+rotation of the Body basis. It is simulation truth, not a Kalman estimate.
+
+| Audit | Evidence and conclusion |
+| --- | --- |
+| Input data and units | Original JSON was downloaded again: SHA256 matches `data/crs10_ascent_reference_source.json`. Author specifies velocity m/s and altitude km. Our export only converts height ×1000; it does not convert velocity a second time. Raw-file stage mixing remains a source risk, but the comparison ends before stage separation. No new frame-by-frame video verification is claimed. |
+| Effective propulsion level | Old per-engine vacuum thrust 914 kN implied 845.099 kN at sea level; 9 engines gave 7.606 MN. S10's historical sea-level value is 756 kN, or 6.804 MN total. The old full-throttle effective operating level was 11.8% above that historical total. |
+| Early divergence | At 10 s, old speed was 43.2 versus reference 28.3 m/s. At 60 s, 407.2 versus 281.9 m/s. The discrepancy was present early, not introduced by separation or sensors. |
+| Fuel coupling | Old full flow 2697.17 kg/s left only 31948 kg at MECO. Revised effective flow 2434.24 kg/s leaves 68889 kg. Greater old consumption reduced mass faster and amplified later acceleration. |
+| Attitude program | Old arbitrary pitch τ=60 s produced too much horizontal speed. Using τ=100 s shifts more impulse vertically. This value is calibrated against the same ascent data, not measured guidance. |
+| Gravity/rotation/drag | In the old 1–139.9 s trace, projected velocity contributions were thrust +3418.0, gravity −1010.7, aero −100.7 and frame acceleration +2.7 m/s. These are contributions along the actual trajectory, not counterfactual runs. Rotation cannot explain a 708 m/s excess; increasing drag purely to force a match is not justified. |
+| Integrator | Prior 0.05 versus 0.01 s check gave <0.001 m final altitude difference. It does not explain the large physical mismatch. |
+
+Source-pinned numerical audit: `data/ascent_model_audit.json`.
+
+| Controlled sensitivity at 139.973 s | Speed | Error versus 1609.444 m/s | Altitude |
+| --- | --- | --- | --- |
+| Previous 914 kN / pitch τ=60 s | 2317.0 m/s | +44.0% | 57.53 km |
+| Historical effective thrust only / τ=60 s | 1731.9 m/s | +7.6% | 38.58 km |
+| Historical effective thrust / τ=100 s | 1574.2 m/s | −2.2% | 54.63 km |
+| Reference webcast readout | 1609.444 m/s | — | 59.40 km |
+
+The isolated sensitivity cases retain the previous eastward heading to avoid
+mixing heading with thrust/pitch changes. The revised team default uses a 45°
+northeast heading as an explicit project assumption. Small rotation differences
+do not change the main conclusion. The revised ascent is still about 8% low in
+height near 140 s. Better agreement is calibration, not independent validation.
+
+**Identifiability:** this does not prove a particular engine hardware rating was
+wrong on CRS-10. A higher-rated engine at lower throttle can give the same
+operating point. Actual throttle, loaded mass and engine condition are not
+uniquely recoverable from this speed curve. The defensible finding is that the
+old effective thrust/consumption plus assumed pitch history were inconsistent
+with this reference trajectory.
+
+## Updated operating-point evidence
+
+**S10:** [SpaceX Falcon 9 Payload User Guide Rev.2, 21 October 2015, p.11](https://device.report/m/08e51aa8dc266d701619331c9fdf0c23ce8456f61c08bd14084c00cc7c4d36ae.pdf),
+section2.2, historical sea-level thrust 756 kN per engine. SpaceX authorship;
+mirror hosting. [NASA SSP51071 section6.1](https://www.nasa.gov/wp-content/uploads/2017/06/ssp_51071-baseline_0.pdf)
+independently identifies the original 2015 guide URL.
+
+The nominal model adopts 824901 N vacuum equivalent = 756000 + 0.68×101325 N.
+This is **E/A for CRS-10**, not a certified mission rating. Isp311 s, nozzle
+area0.68 m² and minimum throttle0.60 remain mixed-source estimates from the
+previous literature set. Original masses are unchanged. See `parameter_evidence.md`.
+
+**M1:** [Official CRS-10 press kit](https://www.nasa.gov/wp-content/uploads/2018/07/crs10presskitfinal.pdf),
+p.2, explicitly approximate preflight schedule: MECO141, separation144,
+boostback start161, entry start392 and landing start453 s. Adoption of exact
+ascent/separation clock commands is A. Entry/landing in the recovery design use
+state conditions instead; their published times remain comparison markers.
 
 **M2:** [SpaceX technical webcast](https://www.youtube.com/watch?v=rUDLxFUMC9c).
-No new frame-by-frame event timing was extracted in this revision.
+**M3:** [Pinned telemetry author documentation](https://github.com/shahar603/Telemetry-Data/blob/b245d3b81aa36b7941ec10f3f4b508999d106a6d/README.md).
+The author's estimated MECO143 s is not silently mixed with the official planned
+141 s. No post-separation state is copied from upper-stage telemetry.
 
-**M3, E:** Existing `data/crs10_ascent_reference.csv` is published webcast
-readout, pinned author revision and processing in
-`data/crs10_ascent_reference_source.json`. It contains 140 samples in
-0–139.973 s. It is independent ascent reference data, not a source for a
-post-separation booster state. The speed reference frame is not independently
-verified. An author's estimated 143 s MECO is not mixed with M1's planned 141 s.
+## Continuous recovery design — all project choices are A
 
-| Phase / event | Initial state | Transition / success check | Current implementation |
-| --- | --- | --- | --- |
-| Powered ascent | Full stack, structural base at external [0,0,R], base velocity zero relative Earth, upright; initial CG velocity includes fuel-driven CG migration | Reach 140 s with valid fuel/model state | 9 engines, full throttle; ideal eastward pitch program; changing mass/CG/inertia; B full_stack aero |
-| Engine shutdown | Inherit the accepted ascent state at 140 s | Smooth quintic envelope reaches zero flow and derivative at 141 s | 1 s duration A; thrust and flow scaled consistently; ideal pitch control retained |
-| Full-stack coast | Inherit shutdown state; all engine commands off | Reach 144 s with zero flow/derivative and full stack attached | Gravity, rotation and aero continue; no zero-velocity reset; no control couple after MECO |
-| Separation | Inherit accepted coasting state at 144 s | No-impulse/no-discard map; mass/momentum/energy audit and structural continuity pass | Child CG states calculated, only lower stage propagated; first-stage sensors/filter preserved; aero switches to booster_alone |
-| Booster coast | Inherit actual lower-stage state | Reach requested 160 s endpoint without model/fuel failure | Free rotation under B aero; no flip command is claimed |
-| Boostback | Must inherit preceding state, detached, engines off, settled/ready and sufficient declared fuel budget | Scheduled reference 161 s plus physical restart guards; burn end unresolved | Not implemented; a timer alone cannot restart a burn |
-| Return coast / entry | Must inherit a completed boostback and a physically descending state for entry | Entry reference 392 s plus guards; entry-burn end unresolved | Not implemented |
-| Aero descent / landing burn | Must inherit completed entry, then descent | Landing-start reference 453 s plus guards; touchdown from leg-contact geometry | Not implemented as continuous return |
-| Touchdown | Pre-contact state at actual descending contact crossing | All declared speed/tilt/target/leg limits satisfied | Criteria helper only; no contact detector/controller in default provider |
-
-Initial attitude is Hamilton [√0.5,0,−√0.5,0] Body → launch-aligned ECEF.
-The launch latitude is 28.6° A, Earth rotation 7.292115×10⁻⁵ rad/s. The external
-origin is Earth centre and the initial base lies on external +z. Body +x is the
-nose direction. Structural stations remain distances from the vehicle base.
-
-The ideal pitch program is retained from team main: begins at 8 s,
-τ = 60 s, asymptotic tilt 80°, PD gains 2 and 2.5, unlimited CG pure couple.
-It is **A**, not measured CRS-10 guidance or a physical TVC actuator. No
-full-mission match can be inferred merely from a successful numerical run.
-B's full-stack Cd originated with a generic fairing; high-Mach and booster
-coefficients, side-force terms and rotary damping contain declared estimates.
-
-## Independent terminal-descent fixture
-
-`python main.py --case terminal --no-show`
-
-This uses the same first-stage parameters, B environment/aero, A dynamics and C
-sensor/filter implementation. It starts a separate simulation; it does not
-reset or splice an ascent state to claim a continuous CRS-10 trajectory.
-
-| Setting | Value | Class and rationale |
+| Phase | Commands | End condition and protection |
 | --- | --- | --- |
-| Structural-base altitude | 1500 m | A; within the current C LiDAR 1800 m envelope |
-| Initial base vertical velocity | −100 m/s | A; descending, for braking/sensor integration |
-| Propellant | 15000 kg | A; above limiting-tank residual, enough for this short check; not a measured landing reserve |
-| Initial attitude / angular rate | Upright / zero | A; tail-down powered descent fixture |
-| Active engine | Central engine only, throttle 0.65 | A; symmetric axial thrust with no invented gimbal command |
-| Aerodynamics | booster_landing | B model with fins/legs assumed deployed from start; no active fin control |
-| Interval | 10 s | A; exercises descent and deceleration without contact or restart transients |
+| Ascent | 9 engines, historical effective level; northeast ideal pitch τ=100 s | Smooth shutdown starts140 s, ends141 s with zero flow/derivative |
+| Coast / separation | Engines off; inherit state | Separation144 s; zero-impulse/no-discard map audits mass, momentum, energy and structural continuity |
+| Flip / booster coast | B booster aero and bounded ideal attitude moments; point for reverse-horizontal impulse | Boostback161 s only if detached, engines off/zero flow, attitude ready and complete return budget fits |
+| Boostback | Centre plus diametrically opposite engines [0,1,5], throttle1; predictor includes spherical gravity, rotation, B force coefficients and prospective entry | Predicted miss ≤500 m after ≥10 s, or 38 t budget /60 s cap; 1 s smooth shutdown. Reaching a budget cap is recorded separately from reaching the target. |
+| Return coast | Grid fins deployed, legs stowed via `booster_return`; attitude control uses B fin effectiveness | Entry on descending crossing of45 km and restart guards, not a forced392 s state |
+| Entry burn | Same 3 engines, throttle0.8; bounded force/attitude allocation includes aerodynamic forces | Speed ≤500 m/s or16 t budget; smooth shutdown. Goal/cap reason recorded. |
+| Aero descent | Engine off; fin/attitude commands correct predicted lateral motion | Predict full-thrust stopping trajectory including altitude-dependent drag, mass decrease and startup ramp; ignite when predicted clearance reaches1500 m allowance |
+| Landing burn | Centre engine, target throttle0.60–1; legs deployed; net-force allocation prioritizes vertical braking | Guidance updates0.2 s, accelerating to0.01 s near contact; thrust plus B aero determines tilt/throttle. Stop free-flight integration at first leg contact. 10 t planning allocation may use unused earlier budget, while final reserve is protected. |
+| Contact assessment | No velocity/attitude reset | Pass all contact speed, tilt, rate and position limits; otherwise `landing_failed` |
 
-Its success criterion is integration/interface operation: finite state,
-positive fuel margin, decreasing downward speed, valid LiDAR updates, and saved
-truth/measurements/estimates. It is not a touchdown-success test. A complete
-landing needs contact geometry, target and a control law.
+Initial return budget: boostback38 t + entry16 t + landing10 t + reserve2 t =66 t.
+Revised MECO inventory is68.889 t; the model's unburnable limiting-tank residual
+is about1.202 t, leaving67.687 t available. The 2 t reserve is additional to that
+residual. Budgets are project allocations, not SpaceX flight records. Unused
+boostback/entry allocation can transfer to landing; the reserve cannot.
 
-## Run and outputs
+Restart health/settling is explicitly assumed ready after zero-flow and attitude
+checks. The 1 s ignition/shutdown ramps are numerical transients, not measured
+engine data. Engine groups are symmetric so the existing balanced exhaust
+contract remains valid; no unsupported asymmetric-port gimbal force is inserted.
+
+## Guidance, actuators and contact
+
+The landing command uses a ZEM/ZEV-type kinematic terminal law with target
+position rₜ and target velocity vₜ (vertical component −1 m/s). The lateral terminal horizon is half the vertical horizon so position correction
+occurs earlier. Required net acceleration is
+6(rₜ−r)/τ² −4v/τ −2vₜ/τ. Gravity/frame effects are removed before requesting
+nongravitational force. A bounded search allocates **thrust plus aerodynamic
+force**, not thrust alone, to this request. Vertical-force error receives100:1
+weight relative to horizontal error. This is our project controller, not G-FOLD
+or SpaceX software.
+
+Attitude control allocates B's linearized four-fin moments with ±0.35 rad
+travel; remaining ideal moment is capped at2 MN·m with powered engines and
+0.2 MN·m in coast. Maximum desired angular rate is0.22 rad/s and angular
+acceleration0.12 rad/s². These are A-class virtual actuator limits. Landing tilt authority tapers from20°
+to2° in the last1000 m. Physical
+TVC/RCS force coupling, valve dynamics and fin slew-rate limits are not modeled.
+Fins deploy after boostback; legs deploy at landing ignition. Deployed-leg mass
+redistribution and contact reaction forces are not resolved.
+
+The target is an A-class rounded offset14 km south /6 km east of the launch
+site, on the same spherical Earth. It is not a surveyed LZ-1 coordinate. The
+contact geometry is four assumed leg tips1 m below the structural base, with
+3.5 m radius. Contact uses the lowest tip, not CG altitude zero. Trials are
+localized by step reduction and a contact tolerance; no penetration is reset
+into an artificial successful landing.
+
+Landing criteria (A): vertical speed ≤2 m/s, horizontal speed ≤1 m/s, tilt ≤5°,
+angular rate ≤1°/s, target error ≤10 m, legs deployed and actual contact.
+Current prototype trials do not satisfy these criteria. Do not loosen the
+criteria after a failed run to manufacture success.
+
+## Output and handoff
+
+Each run saves truth/measurement/navigation CSVs, accepted events and separation
+audit, summary with plan/sources/input hashes, ascent comparison CSV and
+`overview.png`. Results remain ignored by Git. `--case full` returns a nonzero
+exit code unless landing succeeds. Default ascent can complete its shorter
+requested interval without claiming a complete return.
+
+The runner uses the same fixed first-stage IMU/GNSS/LiDAR stations across
+separation. Random sensor generation occurs only at accepted sampling epochs.
+The recovery controller currently uses truth-state feedback; connecting C's
+estimates to guidance is a distinct final integration step. Its current filter
+also receives truth attitude. Neither fact should be hidden in the report.
+
+Before submission: finish recovery tuning/robustness or explicitly limit claims
+to demonstrated phases; merge C's final branch; run complete sensor/filter
+integration and error analysis; confirm clean installation/reproducibility;
+write the manual, assumptions/sources, results and dangerous-error discussion.
+
+
+## Numerical and runtime verification
+
+The Earth-centred RK4 safeguard is described in `powered_dynamics.md`.
+Body state storage is retained; intermediate position/velocity integration is
+performed externally so that rotating the basis cannot invent a below-ground
+trial position. The high-radius/free-spin regression checks every trial.
+
+Default sensor scheduling remains100 Hz IMU /10 Hz GNSS/LiDAR. For a faster
+engineering integration check use:
 
 ```text
-python main.py --output results/team-ascent --no-show
-python main.py --case terminal --output results/team-terminal --no-show
-python main.py --plot-only results/team-ascent
-python main.py --until 20 --no-show
+python main.py --case full --imu-rate 20 --dt 0.05 --no-show
 ```
 
-| Output | Meaning |
+This explicitly records20 Hz IMU in the run plan/specs. It does not change C's
+sensor/filter implementation or establish a final hardware rate. Final team
+validation should also run the agreed100 Hz setting. A successful unit suite
+or a complete saved trajectory does not imply a successful landing.
+
+
+## Latest continuous integration result
+
+The development run used0.05 s maximum dynamics step,20 Hz IMU and10 Hz
+GNSS/LiDAR, seed1, with the Earth-centred RK4 safeguard. It visited all phases
+in one trajectory and preserved the same navigation instance through separation.
+No state was reset to create a nominal return.
+
+| Event | Simulated time [s] |
 | --- | --- |
-| truth.csv | 0.1 s accepted-state samples plus endpoint: phase, Body/ECEF CG position/velocity, quaternion, angular rate, fuel, mass, CG, inertia, forces/moments, gravity/frame acceleration, altitude, Mach, thrust, q̄ |
-| measurements.csv | 100 Hz IMU and 10 Hz GNSS/LiDAR, validity flags; invalid numeric entries remain NaN |
-| navigation.csv | IMU-station ECEF estimates, accelerometer bias, errors relative to that same structural point, state sigmas |
-| events.json | Accepted events/guards; at separation, parent/child states and conservation audit |
-| validation.csv | Time-aligned simulation versus ascent reference, only overlapping times; no extrapolation; absent for terminal case |
-| summary.json | Scope/status, seed, actual sensor specs, plan/sources, input hashes, final state, internal navigation metrics and independent reference-error metrics |
-| overview.png | Altitude/speed/reference, fuel, CG station and navigation errors |
+| MECO | 141.000 |
+| Separation | 144.000 |
+| Boostback start / end | 161.000 /208.850 |
+| Entry start / end | 370.200 /393.050 |
+| Landing burn start | 426.300 |
+| Leg contact | 465.069 |
 
-Sensors remain at current C-main first-stage stations: IMU 38 m, GNSS 41 m,
-LiDAR 0.5 m from base. IMU rate is fixed at 100 Hz instead of changing with
-integration step. Existing C-main biases/scale/random-walk settings are
-retained explicitly in the plan. IMU errors and sensor stations are assumptions,
-not Falcon 9 certified data. Navigation truth attitude remains an explicit limit.
+These are simulated outcomes of the project controller, not recovered actual
+CRS-10 event states. Boostback ended on its approximate planning cap rather
+than the500 m miss goal. Per-burn caps are sampled decisions followed by a
+smooth shutdown, so a small overrun is possible; observed boostback consumption
+was38.015 t. A strict per-burn cutoff allowance remains a refinement.
 
-One `NavigationRun` instance survives separation: do not initialize the filter
-from booster true CG. The estimated point remains the fixed IMU station.
-Sampling, outputs and events are aligned exactly; dt >0.01 s is rejected when
-navigation is enabled. Dynamics-only convergence runs can use a larger dt.
+| Contact metric | Actual | Criterion | Result |
+| --- | --- | --- | --- |
+| Vertical speed | 2.625 m/s | ≤2 m/s | Fail |
+| Horizontal speed | 1.0015 m/s | ≤1 m/s | Fail, including the small excess |
+| Tilt | 1.946° | ≤5° | Pass |
+| Angular rate | 0.289°/s | ≤1°/s | Pass |
+| Target error | 17.943 m | ≤10 m | Fail |
 
-Results are ignored by Git. Use an empty output directory. Noncompletion saves
-partial accepted results, marks `full_mission_completed=false` and exits with
-code 2. Requesting >161 s cannot silently skip an unsupported restart.
+Status is `landing_failed`; `full_mission_completed` is false. Remaining fuel
+was8.979 t, above the declared reserve plus limiting-tank residual. Consumption:
+boostback38.015 t, entry14.184 t and landing7.712 t. Fuel shortage did not cause
+this last failed contact; terminal guidance accuracy remains the principal
+unfinished control task.
 
-## Checks and what remains
+The run generated9302 IMU,4651 GNSS and4651 LiDAR samples;492 LiDAR updates
+were accepted. Navigation position RMS over saved samples was1.154 m with
+truth attitude and provisional noise. This checks integration, not mission
+accuracy or estimator robustness. The earlier count is superseded by
+**144 passing regression tests** after the geocentric-trial regression was added.
 
-The regression suite covers moving-CG launch initialization, event ordering,
-zero-flow guards, fuel budget checks, no skipped unknown burn endpoints,
-separation conservation/structural continuity, filter preservation, sensor
-sampling, model-domain stops, and independent terminal setup. B's ideal
-vertical tests explicitly disable Earth rotation; the production run retains it.
-Altitude test tolerance is 1 μm where Earth-radius subtraction causes nm
-roundoff. Neither adjustment changes production physics.
-
-For the final team run, first pull main, install requirements, and use the two
-commands above. A/B must still address the independent ascent-reference
-mismatch, justify a physical pitch/throttle history, and decide which flight
-phases the report claims. Continuous boostback/entry/landing additionally needs
-burn budgets and goals, attitude/flip commands, restart envelopes and contact
-geometry. Do not claim those phases from the independent terminal fixture.
-C's algorithm design remains C's work; this merge only adapts its existing API
-and writes the measurements/truth needed to verify the final integration.
-
-
-## Verified run, 9 November 2026
-
-Execution source commit: `986fc50` (later edits only remove stale frame comments
-and update documentation). All 100 core/mission tests and 36 environment tests
-passed. Default 0.01 s integration with fixed 100 Hz IMU, seed 1:
-
-| Check | Result |
-| --- | --- |
-| Ascent → shutdown → separation → booster coast | Completed to 160 s, no model-domain or fuel stop |
-| Event times | Shutdown start 140 s, zero-thrust MECO 141 s, separation 144 s |
-| Final CG altitude / ground-relative speed | 74.03 km / 2271.9 m/s |
-| Final booster mass / propellant | 54148.2 kg / 31948.2 kg |
-| Coast | Zero thrust and constant propellant after 141 s |
-| Separation | All mass/momentum/energy relative residuals below 1×10⁻¹⁰; structural position continuity error below 1×10⁻⁸ m |
-| Samples | IMU 16001; GNSS 1601; LiDAR 1601 generated samples, including invalid out-of-range returns |
-| Internal navigation position RMS | 0.690 m over saved 0.1 s samples; truth attitude and provisional sensor errors |
-| Independent terminal check | Base altitude 1500 → 777.6 m; vertical velocity −100 → −44.69 m/s over 10 s; LiDAR updates 101 |
-| Numerical step comparison | 0.05 versus 0.01 s, same event times; final altitude difference <0.001 m and speed difference <0.00001 m/s |
-
-Independent reference comparison exposes a substantial modeling mismatch:
-at 139.973 s the reference altitude/speed are 59.4 km and 1609.444 m/s;
-the simulation gives about 57.53 km and 2317.03 m/s. Speed is about 44% high.
-Across the 140 reference samples, altitude RMSE is about 2.402 km and speed
-RMSE 297.1 m/s. Simulated maximum q̄ is about 35.7 kPa at 63.4 s, compared with
-the approximate 75 s preflight marker. Numerical consistency is therefore
-verified, but CRS-10 trajectory fidelity is not. Review the assumed pitch and
-full-throttle history, reference-frame interpretation and B-model applicability
-before any physical tuning or claim of validation.
-
-`verification.json` in the ascent result directory records runtime assertions
-and the step comparison. Generated CSV/JSON/PNG files remain local under
-`results/`; team members regenerate them with the documented commands.
+A final short checkpoint-only tuning experiment was not promoted: it did not
+meet all acceptance criteria. The shared parameters remain those of the full
+recorded integration run. All generated test trajectories stay under ignored
+`results/`, not the shared repository history.

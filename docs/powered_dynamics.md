@@ -93,3 +93,16 @@ conditions and the full flight runner remain to be agreed and integrated.
 Measured transients, separate-stage aerodynamics, fluid settling/slosh,
 variable O/F, navigation, guidance/control and geographic outputs remain outside
 the current A core.
+
+
+## Earth-centred integration safeguard
+
+The public State remains current Body components. `rk4_step` converts position
+and velocity to the external Earth-centred frame internally, evaluates each
+RK trial by mapping it back into Body, and returns the result in Body again.
+This avoids O(Rω²Δt²) geometric errors in intermediate Body-coordinate trials
+near the ground. Directly integrating a 6371 km position in a rotating basis
+can falsely query the atmosphere below ground even when the accepted CG is
+above it. Quaternion, angular dynamics and fuel equations remain the same.
+A regression holds a freely rotating CG one metre above the sphere and checks
+all intermediate provider queries, not just the final point.

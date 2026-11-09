@@ -12,11 +12,15 @@ Python 3.11+:
 python -m pip install -r requirements.txt
 python main.py --no-show
 python main.py --case terminal --no-show
+python main.py --case full --no-show
 ```
 
 The default ascent runs to 160 s: powered ascent, smooth shutdown (140–141 s),
 coast, stage separation (144 s), then booster-only coast. It stops before the
-161 s boostback reference. It is not a complete return-to-landing simulation.
+161 s boostback reference. The `full` case additionally attempts a continuous project-designed return through
+boostback, entry, descent and contact. It is experimental: a run is not a
+landing success unless all recorded contact criteria pass. Latest full trial: contact465.07 s, vertical speed2.625 m/s,
+target error17.943 m. It fails landing criteria; do not present them as a successful CRS-10 recovery.
 The terminal case is a separate 10 s assumed powered-descent fixture, not a
 continuation of the ascent trajectory and not a landing success demonstration.
 
@@ -60,6 +64,7 @@ model does not include a complete Earth-rate correction; see the model limits.
 | `VehicleData.py`, `vehicle_parameters.py`, `data/vehicle_parameters.json` | Vehicle objects and the single CRS-10 parameter set |
 | `vehicle_mass_model.py`, `mass_properties.py`, `mass_flow.py` | Fuel, moving CG, inertia and exhaust contract |
 | `dynamics.py`, `frames.py`, `propagation.py` | Equations, quaternion transforms and integration utilities |
+| `recovery.py` | Project-designed return guidance, force/moment allocation, fuel budgets and geometric contact |
 | `ascent.py`, `engine_schedule.py` | B load adapter, retained ideal pitch command and smooth shutdown |
 | `propulsion.py`, `Aerodynamics.py`, `Environement.py` | B thrust, aerodynamics, gravity, atmosphere and rotation effects |
 | `staging.py` | Zero-impulse separation and conservation audit |
@@ -73,8 +78,13 @@ model does not include a complete Earth-rate correction; see the model limits.
 - Full-stack axial drag was obtained for a generic fairing geometry; Dragon
   applicability and booster/high-Mach coefficients remain uncertain.
 - Navigation receives truth attitude; sensor settings remain provisional.
-- Boostback/entry burn goals and budgets, flip/restart commands, and landing
-  control/contact geometry still need implementation before a continuous return.
+- Return guidance and contact detection are implemented as explicit A-class
+  project designs. Landing performance, physical actuator realism and robustness
+  still require validation; the controller uses truth-state feedback.
+- Stage-1 nominal operating level is based on the 2015 guide (756 kN SL per
+  engine). Applying it to CRS-10 is E/A; it does not identify actual rating/throttle.
+- Pitch tau=100 s was calibrated against the same ascent data; improved agreement
+  is calibration, not independent validation.
 
 ## Checks and evidence
 

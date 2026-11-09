@@ -184,8 +184,10 @@ class PitchProgram:
 class ControlledAscent:
     EAST_ECEF = np.array([0.0, -1.0, 0.0])
 
-    def __init__(self, ascent, program, kp=2.0, kd=2.5):
+    def __init__(self, ascent, program, kp=2.0, kd=2.5, heading_deg=90.0):
         self.ascent, self.program, self.kp, self.kd = (ascent, program, kp, kd)
+        angle = np.deg2rad(heading_deg)
+        self.heading_ecef = np.array([np.cos(angle), -np.sin(angle), 0.0])
         self.last = None
 
     def flow_at(self, time_s):
