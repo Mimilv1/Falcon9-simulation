@@ -1,0 +1,50 @@
+\section{Sample Section}
+Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Aenean commodo ligula \ac{CPA} olor sit amet.
+Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Aenean commodo ligula eget dolor. Aenean massa. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Donec quam felis, ultricies nec, \textit{pellentesque} eu, pretium quis, sem. Nulla consequat massa quis enim. Donec pede justo, fringilla vel, aliquet nec, vulputate eget, arcu. In enim justo, rhoncus ut, imperdiet a, venenatis vitae, justo. Nullam dictum felis eu pede mollis pretium. Integer tincidunt.
+
+
+\subsection{Subsection}
+Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Aenean commodo ligula eget dolor. Aenean massa. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Donec quam felis, ultricies nec, pellentesque eu, pretium quis, sem.
+
+\subsubsection{Subsubsection}
+Nulla consequat massa quis enim. Donec pede justo, fringilla vel, aliquet nec, vulputate eget, arcu. In enim justo, rhoncus ut, imperdiet a, venenatis vitae, justo. Nullam dictum felis eu pede mollis pretium. Integer tincidunt.
+
+% Sample Table (random content)
+\begin{table}[htbp]
+\centering
+\begin{tabular}{lrrrl}
+\toprule
+Implementation & Cycles & Runtime & Rel.\ cost & Expected attacker effort \\
+\midrule
+Unprotected & 16\,604  & $2075$\,$\mu s$  & $1.00\times$ & baseline \\
+Dummy ops   & 102\,385 & $12798$\,$\mu s$ & $6.17\times$ & $\approx 1\times$ once dummies are located \\
+Shuffling   & 67\,284  & $8410$\,$\mu s$  & $4.05\times$ & $16\times$ (folded) $\dots$ $256\times$ (naive) \\
+Masking     & 72\,539  & $9067$\,$\mu s$  & $4.37\times$ & 1st order infeasible; 2nd order $\mathcal{O}(n^2)$ \\
+\bottomrule
+\end{tabular}
+\caption{Runtime cost of the implemented countermeasures. One \ac{AES}-128 decryption at a card clock of $8$\,MHz.}
+\label{tab:cm_cost}
+\end{table}
+
+% Sample Figures (random content)
+\begin{figure}[h!]
+	\centering
+	\includegraphics[width=\linewidth]{images/cpa_shuffle_locator.pdf}
+	\caption{Locating the shuffled S-box loop - Reference Implementation}
+	\label{fig:cpa_shuffle_locator}
+\end{figure}
+
+\begin{figure*}[h]
+\centering
+\begin{minipage}{0.48\textwidth}
+  \centering
+  \includegraphics[width=\linewidth]{images/own_dummy_0.pdf}
+\end{minipage}\hfill
+\begin{minipage}{0.48\textwidth}
+  \centering
+  \includegraphics[width=\linewidth]{images/own_dummy_1.pdf}
+\end{minipage}
+\caption{Two consecutive dummy AES traces with different number of dummy operations.}
+\label{fig:dummy}
+\end{figure*}
+

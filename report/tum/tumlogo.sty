@@ -1,0 +1,82 @@
+% File: tumlogo.sty Copyright (C) 2019 The LaTeX4EI Team
+% Provides the TUM Corporate Design logo.
+%
+% It may be distributed and/or modified under the conditions of the
+% LaTeX Project Public License (LPPL), either version 1.3c of this
+% license or (at your option) any later version. The latest version
+% of this license is in the file
+%
+%    https://www.latex-project.org/lppl.txt
+%
+% This file is part of the "tum-templates bundle" (The Work in LPPL)
+% and all files in that bundle must be distributed together.
+%
+%
+% ----------------------------------------------------------------------------
+%
+% The development version of the bundle can be found at
+%
+%    https://gitlab.lrz.de/latex4ei/tum-templates
+%
+% for those people who are interested.
+%
+% ----------------------------------------------------------------------------
+%
+% Version history:
+% v1.0 2020/10/01 Initial version.
+% v2.0 2021/04/19 No changes.
+%
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{tumlogo}[2021/04/19 v2.0]
+
+
+% .:: Required packages
+% ----------------------------------------------------------------------------
+
+\RequirePackage{pgfkeys}
+\RequirePackage{pgfopts}
+\RequirePackage{tikz}
+\usepackage[absolute,overlay]{textpos}
+\usepackage{graphicx}
+
+% .:: Options for TUM logo
+% ----------------------------------------------------------------------------
+% height: a tex length
+% color: TUMBlue, TUMBlack, TUMWhite
+
+\newcommand{\@tum@logo@color@}{TUMBlue}
+
+\pgfqkeys{/TUM/logo}{
+  height/.initial = 40mm,
+  color/.is choice,
+  color/TUMBlue/.code = {\renewcommand{\@tum@logo@color@}{TUMBlue}},
+  color/TUMBlack/.code = {\renewcommand{\@tum@logo@color@}{TUMBlack}},
+  color/TUMWhite/.code = {\renewcommand{\@tum@logo@color@}{TUMWhite}},
+}
+
+% process package options
+\ProcessPgfOptions{/TUM/logo}
+
+% print debug info to logfile
+\typeout{Global options after tumlogo option parsing.}
+\typeout{classoptions: \@classoptionslist}
+\typeout{unused classoptions: \@unusedoptionlist}
+
+
+% .:: TUM logo
+% ----------------------------------------------------------------------------
+
+\newcommand{\theTUMLogo}[1][]{%
+  \begingroup
+  \pgfqkeys{/TUM/logo}{#1}%
+
+  %\centering
+  \begin{textblock*}{2cm}(17cm,1cm)
+  \includegraphics[
+    %height=\pgfkeysvalueof{/TUM/logo/height}
+    height=2cm,
+  ]{tum/resources/snu_logo.png}%
+  \end{textblock*}
+
+  \endgroup
+}
