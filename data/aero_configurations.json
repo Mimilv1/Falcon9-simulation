@@ -1,0 +1,146 @@
+{
+  "conventions": {
+    "axes": "Current Body, +x toward the nose; stations measured from the phase structural datum (base = 0).",
+    "angle": "Total angle between nose axis and relative velocity, 0 (nose-first) .. pi (engine-first).",
+    "decomposition": "Axial: -qbar*S_ref*CA0(M)*cos(a)*|cos(a)| along +x. Lateral: potential qbar*S_ref*CN_alpha*sin(a)*|cos(a)| plus crossflow qbar*CDc*S_side*sin(a)^2 per side segment, each along -(lateral relative velocity direction).",
+    "moments": "Potential force at the windward-end station (mirrored about CG x for retro flow); crossflow force per segment at its side-area centroid; rotary damping c*qbar*S_ref*L_ref^2/(2V)*omega.",
+    "side_segments": "Incremental projected widths; overlap with the body segment is intentional (fins, legs).",
+    "damping": "Pitch damping applied to yaw by axisymmetry; roll damping separate. Zero means declared unmodeled."
+  },
+  "configurations": {
+    "full_stack": {
+      "class": "crossflow approximation over sourced axial curve",
+      "evidence": "Axial CA0: data/drag_curve_pezent_extended.json. Mach 0..7 unchanged from the Pezent 2024 Fig.2.13(b) readout (RasAeroII, 0 deg AoA, full Falcon9-like stack with 5.2 m fairing); Mach 8 and 10 knots appended as a declared estimate with slow hypersonic decay. Normal force, crossflow, damping and the potential center are declared estimates without sourced data.",
+      "uncertainty": "Axial Mach 0..7: see the original drag_curve_pezent.json record (pixel readout, transonic rise worst). Axial Mach 7..10: declared estimate; in that regime the vehicle is above roughly 55 km where drag stays below about 0.5 percent of thrust.",
+      "notes": "Applies while stage1+stage2+payload remain attached (datum: stack base = 0).",
+      "reference_area_m2": 21.08,
+      "reference_length_m": 62.4,
+      "axial_drag_curve": {
+        "file": "drag_curve_pezent_extended.json"
+      },
+      "potential_normal_slope_per_rad": 2.0,
+      "potential_center_station_m": 57.6,
+      "pitch_damping_coefficient": -10.0,
+      "roll_damping_coefficient": 0.0,
+      "side_segments": [
+        {
+          "bottom_m": 0.0,
+          "top_m": 55.2,
+          "width_m": 3.66,
+          "crossflow_drag_coefficient": 1.1
+        },
+        {
+          "bottom_m": 55.2,
+          "top_m": 62.4,
+          "width_m": 3.7,
+          "crossflow_drag_coefficient": 1.1
+        }
+      ]
+    },
+    "booster_alone": {
+      "class": "declared estimate",
+      "evidence": "No sourced coefficients for the separated booster. Axial curve estimated for a blunt-ended cylinder of fineness ratio 11.6 (friction + bluff base/interstage, transonic peak), extended to Mach 10 by the same declared decay convention as the full stack. Potential slope from slender-body theory (2 per rad, referenced to the 3.66 m body cross-section). Crossflow CDc from subcritical cylinder values. Pitch damping from slender launch-vehicle order of magnitude.",
+      "uncertainty": "Axial CA0 uncertain to roughly +/-50 percent; normal force and damping are order-of-magnitude only. The Mach 7..10 knots are declared estimates (see full_stack). Refined evidence should replace all entries.",
+      "notes": "Separation leaves the booster in the original datum (engine bay base = 0, interstage top = 42.6). Flows either direction are approximated with the same CA0 (both ends are bluff equipment sections).",
+      "reference_area_m2": 10.52,
+      "reference_length_m": 42.6,
+      "axial_drag_curve": {
+        "mach": [0.0, 0.8, 0.85, 1.0, 1.05, 1.1, 1.3, 1.6, 2.0, 3.0, 4.0, 5.0, 7.0, 8.0, 10.0],
+        "drag_coefficient": [0.42, 0.41, 0.4, 0.72, 0.94, 0.92, 0.84, 0.74, 0.68, 0.56, 0.5, 0.46, 0.42, 0.41, 0.4]
+      },
+      "potential_normal_slope_per_rad": 2.0,
+      "potential_center_station_m": 41.0,
+      "pitch_damping_coefficient": -20.0,
+      "roll_damping_coefficient": 0.0,
+      "side_segments": [
+        {
+          "bottom_m": 0.0,
+          "top_m": 42.6,
+          "width_m": 3.66,
+          "crossflow_drag_coefficient": 1.1
+        }
+      ]
+    },
+    "booster_landing": {
+      "class": "declared estimate",
+      "evidence": "booster_alone estimates plus declared increments: grid fins and deployed legs add projected side area near the interstage and the engine bay, axial CA0 raised by a flat crossfin/leg increment (+0.25 subsonic, decreasing to +0.25/0.17 by Mach 7), roll damping from the grid fins.",
+      "uncertainty": "Increments are declared estimates, not measured. Grid-fin normal force in reality is control-effective (movable); this model treats fins as fixed crossflow area only.",
+      "notes": "Same datum as booster_alone. Fin/leg segments are incremental widths beyond the body.",
+      "reference_area_m2": 10.52,
+      "reference_length_m": 42.6,
+      "axial_drag_curve": {
+        "mach": [0.0, 0.8, 0.85, 1.0, 1.05, 1.1, 1.3, 1.6, 2.0, 3.0, 4.0, 5.0, 7.0, 8.0, 10.0],
+        "drag_coefficient": [0.67, 0.66, 0.65, 0.97, 1.19, 1.17, 1.09, 0.99, 0.93, 0.81, 0.75, 0.71, 0.67, 0.65, 0.63]
+      },
+      "potential_normal_slope_per_rad": 2.0,
+      "potential_center_station_m": 41.0,
+      "pitch_damping_coefficient": -20.0,
+      "roll_damping_coefficient": -3.0,
+      "grid_fin_control": {
+        "class": "declared estimate",
+        "evidence": "Falcon 9 grid fin approximated as a porous lattice panel of about 1.5 m x 1.1 m (1.65 m2); lift slope per fin 1.2 per rad, roughly half of a solid panel of aspect ratio near one because of lattice porosity. Mount stations sit inside the declared fin side segment; maximum deflection about 20 degrees matches observed strokes. Azimuths are intercardinal (45, 135, 225, 315 degrees).",
+        "uncertainty": "Order-of-magnitude declared estimate. The real fins are individually commanded and their effectiveness varies with Mach, alpha and lattice state; those dependencies are declared unmodeled, as is any deflection axial-drag increment and interference with the passive crossflow segments.",
+        "convention": "Azimuth about Body +x from +y toward +z; a positive deflection pushes fin i along (0, -sin(phi), cos(phi)), scaled by the axial-flow share cos(a)*|cos(a)| (full nose-first, reversed engine-first, zero at 90 degrees total angle).",
+        "fin_count": 4,
+        "azimuths_rad": [0.7853981634, 2.3561944902, 3.926990817, 5.4977871438],
+        "fin_area_m2": 1.65,
+        "lift_slope_per_rad": 1.2,
+        "pivot_radius_m": 1.83,
+        "station_m": 39.6,
+        "maximum_deflection_rad": 0.35
+      },
+      "side_segments": [
+        {
+          "bottom_m": 0.0,
+          "top_m": 42.6,
+          "width_m": 3.66,
+          "crossflow_drag_coefficient": 1.1
+        },
+        {
+          "bottom_m": 38.6,
+          "top_m": 40.6,
+          "width_m": 2.4,
+          "crossflow_drag_coefficient": 1.0,
+          "note": "four grid fins combined, incremental projected width beyond the body"
+        },
+        {
+          "bottom_m": 0.0,
+          "top_m": 3.6,
+          "width_m": 1.6,
+          "crossflow_drag_coefficient": 1.2,
+          "note": "deployed landing legs, incremental projected width beyond the body"
+        }
+      ]
+    },
+    "second_stack": {
+      "class": "declared estimate",
+      "evidence": "No sourced coefficients for stage 2 + Dragon. Axial curve estimated like booster_alone but sleeker (nose cone instead of bluff interstage), extended to Mach 10 by the declared decay convention; potential slope from slender-body theory; side areas from the 3.66 m stage-2 body and the 3.7 m Dragon trunk section.",
+      "uncertainty": "Order-of-magnitude declared estimates throughout; the Mach 7..10 knots are declared estimates (see full_stack). To be replaced by evidence.",
+      "notes": "After separation the upper vehicle runs in its own datum (stage-2 aft skirt base = 0, Dragon top = 19.8).",
+      "reference_area_m2": 10.52,
+      "reference_length_m": 19.8,
+      "axial_drag_curve": {
+        "mach": [0.0, 0.8, 0.85, 1.0, 1.05, 1.1, 1.3, 1.6, 2.0, 3.0, 4.0, 5.0, 7.0, 8.0, 10.0],
+        "drag_coefficient": [0.32, 0.31, 0.3, 0.62, 0.84, 0.82, 0.74, 0.66, 0.6, 0.48, 0.42, 0.38, 0.36, 0.35, 0.34]
+      },
+      "potential_normal_slope_per_rad": 2.0,
+      "potential_center_station_m": 17.3,
+      "pitch_damping_coefficient": -10.0,
+      "roll_damping_coefficient": 0.0,
+      "side_segments": [
+        {
+          "bottom_m": 0.0,
+          "top_m": 12.6,
+          "width_m": 3.66,
+          "crossflow_drag_coefficient": 1.1
+        },
+        {
+          "bottom_m": 12.6,
+          "top_m": 19.8,
+          "width_m": 3.7,
+          "crossflow_drag_coefficient": 1.1
+        }
+      ]
+    }
+  }
+}

@@ -30,7 +30,7 @@ Position and velocity derivatives include rotating-basis transport terms.
 | `vehicle_mass_model.py`, `mass_properties.py` | Fuel inventory, mass, CG and inertia |
 | `load_interface.py`, `mass_flow.py` | Force/moment assembly and exhaust data contract |
 | `dynamics.py`, `propagation.py`, `frames.py` | Motion equations, integration and Body attitude |
-| `propulsion.py`, `Aerodynamics.py`, `Environement.py` | Temporary thrust, drag and environment models for B to refine |
+| `propulsion.py`, `Aerodynamics.py`, `Environement.py` | Temporary thrust, multi-configuration aerodynamics (axial drag, normal force, station moments, rotary damping) and environment models for B to refine |
 | `ascent.py` | Reusable temporary load provider connecting B models to A; no flight scenario |
 | `engine_schedule.py`, `staging.py` | Parameterized shutdown-envelope utility and no-impulse separation map; no mission timing |
 | `main.py` | Integration entry point; currently loads the vehicle without running a mission |
@@ -67,6 +67,14 @@ behavior have not been agreed or validated.
 ## References
 
 - [A/B/C interface](docs/core_api.md)
+- [Aerodynamics model](docs/aero_model.md)
 - [Mass and engine parameter evidence](docs/parameter_evidence.md)
 - [Powered dynamics equations and limitations](docs/powered_dynamics.md)
 - `data/drag_curve_pezent.json`: temporary drag-table evidence and readout method
+- `data/drag_curve_pezent_extended.json`: the same curve with appended Mach 8/10
+  declared-estimate knots so full-mission ascents pass the Mach 7 evidence ceiling
+- `data/aero_configurations.json`: declared per-configuration aerodynamic records
+  (full stack, booster alone, booster with grid fins and legs, second stack);
+  only the full-stack axial curve is sourced, all other coefficients are documented
+  estimates; `booster_landing` additionally declares a linearized grid-fin
+  control increment (per-fin deflection commands accepted by the aero model)
