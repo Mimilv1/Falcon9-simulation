@@ -165,5 +165,101 @@
         465.0693724566017
       ]
     ]
+  },
+  "landing_controller_revision": {
+    "source_commit": "54d6312f85a5cf3e8be5309605f811f478edf852",
+    "coarse": {
+      "status": "landing_success",
+      "source_commit": "54d6312f85a5cf3e8be5309605f811f478edf852",
+      "all_five_limits_met": true,
+      "acceptance_limits": {
+        "vertical_speed_mps": 2.0,
+        "horizontal_speed_mps": 1.0,
+        "tilt_deg": 5.0,
+        "angular_rate_degps": 1.0,
+        "target_error_m": 10.0
+      },
+      "contact_metrics": {
+        "ground_contact": true,
+        "legs_deployed": true,
+        "vertical_speed_mps": 0.5030118177662111,
+        "horizontal_speed_mps": 0.7404107792584305,
+        "tilt_deg": 1.8061994500282532,
+        "angular_rate_degps": 0.11307568299765836,
+        "target_error_m": 6.170503920588978
+      },
+      "all_phases_visited": true,
+      "state_resets_to_create_success": false,
+      "reserve_preserved": true,
+      "final_propellant_kg": 8864.565135236604,
+      "sensor_counts": {
+        "imu": 9304,
+        "gnss": 4652,
+        "lidar": 4652
+      },
+      "lidar_updates": 496,
+      "navigation_position_rms_m": 1.1726266346090273,
+      "imu_rate_hz": 20,
+      "dynamics_step_s": 0.05,
+      "C_unmerged_commits_at_review": 0
+    },
+    "finer": {
+      "status": "landing_success",
+      "source_commit": "54d6312f85a5cf3e8be5309605f811f478edf852",
+      "all_five_limits_met": true,
+      "contact_metrics": {
+        "ground_contact": true,
+        "legs_deployed": true,
+        "vertical_speed_mps": 0.49737078096229215,
+        "horizontal_speed_mps": 0.8550189846706797,
+        "tilt_deg": 0.45735404220974146,
+        "angular_rate_degps": 0.02956197308310876,
+        "target_error_m": 4.22514546635673
+      },
+      "dynamics_step_s": 0.025,
+      "navigation_enabled": false
+    },
+    "default_100hz": {
+      "status": "landing_success",
+      "source_commit": "54d6312f85a5cf3e8be5309605f811f478edf852",
+      "all_five_limits_met": true,
+      "acceptance_limits": {
+        "vertical_speed_mps": 2.0,
+        "horizontal_speed_mps": 1.0,
+        "tilt_deg": 5.0,
+        "angular_rate_degps": 1.0,
+        "target_error_m": 10.0
+      },
+      "contact_metrics": {
+        "ground_contact": true,
+        "legs_deployed": true,
+        "vertical_speed_mps": 0.497466800523965,
+        "horizontal_speed_mps": 0.9015922263368593,
+        "tilt_deg": 0.5349440773231906,
+        "angular_rate_degps": 0.012891240761890244,
+        "target_error_m": 3.3061406587234377
+      },
+      "all_phases_visited": true,
+      "physical_state_finite": true,
+      "computational_inputs_match_recorded_hashes": true,
+      "hash_check_exclusion": {
+        "path": "data/ascent_model_audit.json",
+        "basis": "Output-only audit evidence updated after execution; not read by the simulator."
+      },
+      "state_resets_to_create_success": false,
+      "reserve_preserved": true,
+      "final_propellant_kg": 8931.388298190908,
+      "contact_time_s": 465.082698620836,
+      "sensor_counts": {
+        "imu": 46509,
+        "gnss": 4651,
+        "lidar": 4651
+      },
+      "lidar_updates": 496,
+      "navigation_position_rms_m": 0.9183489316675028,
+      "imu_rate_hz": 100,
+      "dynamics_step_s": 0.01,
+      "C_unmerged_commits_at_review": 0
+    }
   }
 }

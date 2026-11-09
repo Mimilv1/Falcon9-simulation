@@ -17,10 +17,20 @@ python main.py --case full --no-show
 
 The default ascent runs to 160 s: powered ascent, smooth shutdown (140–141 s),
 coast, stage separation (144 s), then booster-only coast. It stops before the
-161 s boostback reference. The `full` case additionally attempts a continuous project-designed return through
-boostback, entry, descent and contact. It is experimental: a run is not a
-landing success unless all recorded contact criteria pass. Latest full trial: contact465.07 s, vertical speed2.625 m/s,
-target error17.943 m. It fails landing criteria; do not present them as a successful CRS-10 recovery.
+161 s boostback reference. The `full` case connects boostback, entry, descent
+and leg contact. The revised nominal run with the default 100 Hz IMU passes
+all five landing criteria: vertical speed 0.497 m/s, horizontal 0.902 m/s,
+target error 3.306 m, tilt 0.535° and angular rate 0.013°/s. A 20 Hz
+engineering run and a 0.025 s dynamics check also pass.
+These are simulated acceptance results under the documented assumptions,
+not validation of the actual CRS-10 landing.
+
+Fast full integration check using the existing C models:
+
+```text
+python main.py --case full --imu-rate 20 --dt 0.05 --no-show
+```
+
 The terminal case is a separate 10 s assumed powered-descent fixture, not a
 continuation of the ascent trajectory and not a landing success demonstration.
 

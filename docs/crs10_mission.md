@@ -9,14 +9,17 @@ independent fixture; it is not spliced into the ascent trajectory.
 `python main.py --case full --no-show` attempts the continuous return with
 project-designed guidance. It uses the inherited state at every phase boundary;
 no position, speed, attitude or fuel reset creates a landing. A failed contact
-is recorded as `landing_failed`, not relabelled as success. Current development
-trials fail landing criteria. This is an experimental recovery controller.
+is recorded as `landing_failed`, not relabelled as success. The revised nominal
+model passes all five contact criteria in the default 100 Hz integration run,
+the 20 Hz engineering run and the finer-step check. This remains a project
+controller under the documented assumptions, not reconstructed SpaceX software.
 
-The existing C sensor/filter algorithms are unchanged. A revised 100 Hz IMU /
-10 Hz GNSS/LiDAR run through 160 s completed, seed 1, with 0.618 m saved-sample
-position RMS at the IMU station. This is an internal metric under assumed noise
-and truth attitude, not real Falcon navigation accuracy. The fetched Emilien-Branch has no unmerged commits relative to main as of
-9 November2026. Further C branch changes are not presumed. Closed-loop
+The existing C sensor/filter algorithms are unchanged. The default 100 Hz IMU /
+10 Hz GNSS/LiDAR full run completed through contact, seed 1, with 0.918 m
+saved-sample position RMS at the IMU station. This is an internal metric under
+assumed noise and truth attitude, not real Falcon navigation accuracy. The
+fetched Emilien-Branch has no unmerged commits relative to main as of
+9 November 2026. Further C branch changes are not presumed. Closed-loop
 navigation feedback remains a distinct model-design choice.
 
 ## Why the previous speed was 44% high
@@ -106,23 +109,20 @@ contract remains valid; no unsupported asymmetric-port gimbal force is inserted.
 
 ## Guidance, actuators and contact
 
-The landing command uses a ZEM/ZEV-type kinematic terminal law with target
-position rₜ and target velocity vₜ (vertical component −1 m/s). The lateral terminal horizon is half the vertical horizon so position correction
-occurs earlier. Required net acceleration is
-6(rₜ−r)/τ² −4v/τ −2vₜ/τ. Gravity/frame effects are removed before requesting
-nongravitational force. A bounded search allocates **thrust plus aerodynamic
-force**, not thrust alone, to this request. Vertical-force error receives100:1
-weight relative to horizontal error. This is our project controller, not G-FOLD
-or SpaceX software.
+The vertical landing loop tracks the lowest leg-tip clearance and approach
+velocity, including rotational and CG-migration corrections. Horizontal
+position/velocity use a fixed critically damped feedback law. Details and
+verified gains are in the landing-controller revision below.
 
-Attitude control allocates B's linearized four-fin moments with ±0.35 rad
-travel; remaining ideal moment is capped at2 MN·m with powered engines and
-0.2 MN·m in coast. Maximum desired angular rate is0.22 rad/s and angular
-acceleration0.12 rad/s². These are A-class virtual actuator limits. Landing tilt authority tapers from20°
-to2° in the last1000 m. Physical
-TVC/RCS force coupling, valve dynamics and fin slew-rate limits are not modeled.
-Fins deploy after boostback; legs deploy at landing ignition. Deployed-leg mass
-redistribution and contact reaction forces are not resolved.
+Attitude control uses B's linearized four-fin moments with ±0.35 rad travel.
+During landing, the existing2 MN·m ideal powered attitude actuator is used
+first; fins supply residual demand. Coast allocation remains fins first with
+0.2 MN·m ideal residual authority. Maximum desired angular rate0.22 rad/s and
+angular acceleration0.12 rad/s² are unchanged. These are A-class virtual
+actuator limits; physical TVC/RCS force coupling, valve dynamics and fin slew
+rates are not modeled. Landing tilt tapers to4°, inside the unchanged5° contact
+criterion. Fins deploy after boostback; legs deploy at landing ignition.
+Deployed-leg mass redistribution and contact reaction forces are not resolved.
 
 The target is an A-class rounded offset14 km south /6 km east of the launch
 site, on the same spherical Earth. It is not a surveyed LZ-1 coordinate. The
@@ -133,8 +133,8 @@ into an artificial successful landing.
 
 Landing criteria (A): vertical speed ≤2 m/s, horizontal speed ≤1 m/s, tilt ≤5°,
 angular rate ≤1°/s, target error ≤10 m, legs deployed and actual contact.
-Current prototype trials do not satisfy these criteria. Do not loosen the
-criteria after a failed run to manufacture success.
+The verified nominal runs now satisfy these criteria. The criteria were not
+loosened, the target was not shifted, and no state reset creates success.
 
 ## Output and handoff
 
@@ -150,10 +150,11 @@ The recovery controller currently uses truth-state feedback; connecting C's
 estimates to guidance is a distinct final integration step. Its current filter
 also receives truth attitude. Neither fact should be hidden in the report.
 
-Before submission: finish recovery tuning/robustness or explicitly limit claims
-to demonstrated phases; check any newly published C changes; run complete sensor/filter
-integration and error analysis; confirm clean installation/reproducibility;
-write the manual, assumptions/sources, results and dangerous-error discussion.
+Before submission: report the nominal landing result separately from untested
+robustness; review sensor/filter error analysis and retain the truth-feedback
+limitations; confirm clean installation/reproducibility; write the manual,
+assumptions/sources, results and dangerous-error discussion. C's published code
+is already integrated; a further merge is needed only if new changes appear.
 
 
 ## Numerical and runtime verification
@@ -170,13 +171,13 @@ engineering integration check use:
 python main.py --case full --imu-rate 20 --dt 0.05 --no-show
 ```
 
-This explicitly records20 Hz IMU in the run plan/specs. It does not change C's
+This explicitly records 20 Hz IMU in the run plan/specs. It does not change C's
 sensor/filter implementation or establish a final hardware rate. Final team
-validation should also run the agreed100 Hz setting. A successful unit suite
+validation also ran the configured default 100 Hz setting. A successful unit suite
 or a complete saved trajectory does not imply a successful landing.
 
 
-## Latest continuous integration result
+## Pre-revision continuous integration result — commit4e83283
 
 The development run used0.05 s maximum dynamics step,20 Hz IMU and10 Hz
 GNSS/LiDAR, seed1, with the Earth-centred RK4 safeguard. It visited all phases
@@ -209,8 +210,8 @@ was38.015 t. A strict per-burn cutoff allowance remains a refinement.
 Status is `landing_failed`; `full_mission_completed` is false. Remaining fuel
 was8.979 t, above the declared reserve plus limiting-tank residual. Consumption:
 boostback38.015 t, entry14.184 t and landing7.712 t. Fuel shortage did not cause
-this last failed contact; terminal guidance accuracy remains the principal
-unfinished control task.
+this last failed contact; terminal guidance accuracy was the remaining control defect addressed by the
+revision below.
 
 The run generated9302 IMU,4651 GNSS and4651 LiDAR samples;492 LiDAR updates
 were accepted. Navigation position RMS over saved samples was1.154 m with
@@ -224,10 +225,10 @@ recorded integration run. All generated test trajectories stay under ignored
 `results/`, not the shared repository history.
 
 
-## Landing-controller revision under verification
+## Verified landing-controller revision — execution commit54d6312
 
 The acceptance limits and landing target remain unchanged. The vertical loop
-now uses the actual lowest leg-tip clearance hₗ and radial velocity wₗ, with
+uses the actual lowest leg-tip clearance hₗ and radial velocity wₗ, with
 wₜ=−0.5 m/s and descent braking acceleration (wₗ²−wₜ²)/(2hₗ). Rotational,
 CG-migration and radial-curvature terms convert the contact-point request to a
 CG acceleration request. This removes the former CG-target/contact-height mismatch.
@@ -247,3 +248,61 @@ There is no state reset or replacement of the touchdown metrics.
 The fetched remote C branch `Emilien-Branch` has zero commits absent from main.
 No additional C merge is currently required. This statement refers to published
 GitHub code, not any unpublished work on a teammate's computer.
+
+
+## Nominal full-flight verification after adjustment
+
+The run starts at liftoff, carries the accepted state through every phase,
+retains C's existing sensor/filter instance through separation and ends at
+actual leg contact. It is not a checkpoint-only demonstration.
+
+Engineering command:
+
+```text
+python main.py --case full --imu-rate 20 --dt 0.05 --no-show
+```
+
+| Contact metric | Before revision, 20 Hz | Revised, 20 Hz | Revised, default 100 Hz | Unchanged limit |
+| --- | --- | --- | --- | --- |
+| Vertical speed [m/s] | 2.625 | 0.503 | 0.497 | ≤2 |
+| Horizontal speed [m/s] | 1.0015 | 0.740 | 0.902 | ≤1 |
+| Target error [m] | 17.943 | 6.171 | 3.306 | ≤10 |
+| Tilt [deg] | 1.946 | 1.806 | 0.535 | ≤5 |
+| Angular rate [deg/s] | 0.289 | 0.113 | 0.013 | ≤1 |
+
+Result: `landing_success`, `full_mission_completed=true`, contact465.190 s.
+Remaining fuel8.865 t; all five limits, contact and leg-deployment conditions
+passed. No physical engine parameters, acceptance limits, target position or
+initial flight state were changed to obtain this result.
+
+A second full-flight dynamics run at0.025 s also passed: vertical0.497 m/s,
+horizontal0.855 m/s, target error4.225 m, tilt0.457° and angular rate0.030°/s.
+Its contact time was465.070 s. This is a timestep-sensitivity check of the hybrid
+simulation, not proof of an exact flight reconstruction.
+
+The20 Hz integration run produced9304 IMU,4652 GNSS and4652 LiDAR samples;
+496 LiDAR updates were accepted. Saved-sample navigation position RMS was
+1.173 m with truth attitude and provisional errors. Sensor/filter code is
+unchanged. The basic suite contains148 passing tests. Default100 Hz IMU
+settings remain in the plan; engineering20 Hz is an explicit runtime override.
+
+The default command was then verified without a sensor-rate or timestep override:
+
+```text
+python main.py --case full --no-show
+```
+
+With a 0.01 s maximum dynamics step and seed 1, it also returned
+`landing_success` and `full_mission_completed=true`. Contact occurred at
+465.083 s with 8.931 t of propellant remaining. It produced 46,509 IMU,
+4,651 GNSS and 4,651 LiDAR samples; 496 LiDAR updates were accepted.
+Saved-sample navigation position RMS was 0.918 m. This is one nominal noise
+realization with truth attitude, not a navigation robustness bound.
+
+All three full runs used computational source commit `54d6312`. Their compact
+checks are retained in `data/ascent_model_audit.json`; the local default-run
+trajectory, plot and verification are in `results/landing-control-default100/`.
+Generated trajectories remain ignored by Git. The audit JSON is output-only
+evidence and was updated after execution; all computational input hashes match
+the default run's recorded inputs. The controller uses truth state, so landing
+success does not yet demonstrate guidance driven by C's estimated state.
