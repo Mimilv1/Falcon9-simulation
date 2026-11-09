@@ -63,7 +63,7 @@ locator in `data/drag_curve_pezent.json`, paired with reference area 21.08 m².
 The current environment uses [USSA 1976](https://ntrs.nasa.gov/citations/19770009539) layers through 84.852 km, an assumed
 isothermal near-vacuum tail to 2000 km, inverse-square central gravity and
 separate Earth-rotation accelerations. See `Environement.py` and
-`docs/env_issues.md`. B's multi-configuration aerodynamics uses the sourced
+`Environment/environment.md`. B's multi-configuration aerodynamics uses the sourced
 full-stack axial curve plus explicitly estimated side-force, damping,
 booster and high-Mach terms; see `docs/aero_model.md`.
 
