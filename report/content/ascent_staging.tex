@@ -1,0 +1,102 @@
+\section{Ascent, Staging and Upper Stage}
+\label{sec:ascent}
+
+This chapter describes the command laws behind the mission phases of
+Section~\ref{sec:vehicle}: the ascent attitude program, the engine
+shutdown, the separation state map with its audit, and the separated
+upper-stage continuation. The event machine, step control and state bookkeeping of the run loop are
+described in the architecture chapter of this report.
+
+\subsection{Attitude program and ascent control}
+
+Powered ascent flies a pitch program with an ideal attitude-control law.
+The commanded tilt grows from vertical along
+%
+\begin{equation}
+\label{eq:pitch-program}
+\theta(t) = \theta_{\max}\,
+\frac{x^2}{1+x^2},
+\qquad x = \frac{t - t_s}{\tau},
+\end{equation}
+%
+with $t_s = 8\,\mathrm{s}$, $\tau = 100\,\mathrm{s}$ and
+$\theta_{\max} = 80^{\circ}$ toward a $45^{\circ}$ north-east heading (an
+\ac{ISS}-launch approximation). The tilt law is calibrated against the
+video-derived ascent reference used in the results chapter; it is not
+independently validated guidance (class A). Attitude tracking applies a
+proportional-derivative law on the Body-frame attitude error
+$\mathbf{e}$ and angular rate,
+%
+\begin{equation}
+\label{eq:attitude-pd}
+\boldsymbol{\alpha} = k_p\,\mathbf{e} - k_d\,\boldsymbol{\omega},
+\qquad
+\mathbf{M} = \mathbf{J}\,\boldsymbol{\alpha},
+\quad k_p = 2.0,\; k_d = 2.5,
+\end{equation}
+%
+an unlimited ideal moment: the ascent controller relies on the
+actuation chain only for realistic execution, and the provider optionally
+enforces a declared angle-of-attack limit, raising a domain error when the
+flight exceeds it.
+
+\subsection{Engine shutdown and event guards}
+
+Engine cutoff at $140\,\mathrm{s}$ follows a quintic flow envelope, not an
+instantaneous stop:
+%
+\begin{equation}
+\label{eq:quintic-shutdown}
+\gamma(u) = (1-u)^3 (1 + 3u + 6u^2),
+\qquad
+\gamma'(u) = -\,\frac{30\,u^2 (1-u)^2}{T},
+\quad u = \frac{t - t_0}{T},
+\end{equation}
+%
+with $T = 1\,\mathrm{s}$ and completion anchored to the published
+$141\,\mathrm{s}$ MECO reference. The envelope and its derivative are
+supplied together to the integrator, keeping mass flow and flow rate
+consistent during the ramp; the duration is a numerical design choice of
+class A, anchored to, not measured from, the reference
+timeline. Event transitions carry guards that must hold at the event:
+separation requires zero flow, engines off and the full stack attached;
+boostback, entry and landing ignitions additionally require the
+respective propellant budget (including the reserve),
+attitude readiness and propulsion readiness, and for the latter two a
+descending trajectory. Each burn ends through a smooth ramp with its own
+reason: predicted-miss tolerance, speed target, or budget cap.
+
+\subsection{Stage separation and conservation audit}
+
+Separation at $144\,\mathrm{s}$ is a zero-impulse, no-discard state map:
+the coasting parent is split into booster and upper stack at the
+stage-2 interface, both children keep the parent attitude and angular
+rate, and the upper stage's stations are renumbered to its own aft-skirt
+datum. The map refuses to run while any engine command or flow is active,
+and its result is only returned if a conservation audit confirms
+continuity to tight tolerances: mass, linear momentum, angular momentum
+about the Earth-centred origin and kinetic energy are conserved to
+$10^{-10}$ relative residual, fixed structural points keep their
+ECEF position and velocity to $10^{-8}\,\mathrm{m/m/s}$, and attitude and
+angular rate are preserved to $10^{-12}$. The audit quantities (all
+residuals, and both child masses) are recorded in the run's event record,
+and the results chapter quotes them.
+
+\subsection{Upper-stage continuation}
+
+After separation the upper stack continues under its own reduced provider
+as a six-degree-of-freedom propagation from the conserved separation
+state: a single MVac engine at $0.95$ throttle with quintic ignition and
+cutoff ramps (the standard $10u^3 - 15u^4 + 6u^5$ envelope) over
+$1\,\mathrm{s}$ at $152\,\mathrm{s}$ ignition and $545\,\mathrm{s}$
+cutoff, an attitude law of the form of Equation~\eqref{eq:attitude-pd}
+($k_p = 2.0$, $k_d = 2.5$) holding the separation heading, and a simple
+axial-drag estimate of $C_D = 0.3$ on the $10.52\,\mathrm{m^2}$ stage
+cross-section --- deliberately not the declared \texttt{second\_stack}
+aerodynamic configuration of Section~\ref{sec:aero}. These are
+demonstration commands of class A, not reconstructed flight data: the
+continuation exists to show the separated state and the conserved
+separation map, and its SECO state (about $200\,\mathrm{km}$ altitude at
+$1\,600\,\mathrm{km}$ surface distance in the nominal run) feeds the
+flight-path overview of Figure~\ref{fig:flightpaths} rather than any
+orbital-accuracy claim.

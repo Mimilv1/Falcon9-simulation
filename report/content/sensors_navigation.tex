@@ -1,0 +1,102 @@
+\section{Sensors and Navigation}
+\label{sec:navigation}
+
+The navigation subsystem generates sensor measurements from the truth
+trajectory and estimates the vehicle state with a nine-state Kalman
+filter. Sampling occurs only at accepted integration times: no random
+numbers are drawn during integration trial evaluations, so a fixed seed
+reproduces a run exactly.
+
+\subsection{Sensor models}
+\label{sec:sensors}
+
+\begin{table}[htbp]
+\centering
+\begin{tabular}{lllp{7.2cm}}
+\toprule
+Sensor & Rate & Station [m] & Error model \\
+\midrule
+IMU & $100\,\mathrm{Hz}$ & $[38, 0, 0]$ &
+accel $\sigma = 0.01\,\mathrm{m/s^2}$;
+gyro $\sigma = 10^{-4}\,\mathrm{rad/s}$;
+nominal biases $[0.05, -0.03, 0.02]\,\mathrm{m/s^2}$,
+scale factor $0.001$, bias random walk $10^{-4}$,
+$z$-axis gyro bias $10^{-4}\,\mathrm{rad/s}$;
+misalignment and temperature models supported \\
+GNSS & $10\,\mathrm{Hz}$ & $[41, 0, 0]$ &
+pos $\sigma = [1.5, 1.5, 2.5]\,\mathrm{m}$ plus
+Gauss-Markov $\sigma = [0.6, 0.6, 1.0]\,\mathrm{m}$ at
+$\tau = 300\,\mathrm{s}$;
+vel $\sigma = 0.1\,\mathrm{m/s}$;
+latency $0.1\,\mathrm{s}$; outages and dropouts supported \\
+LiDAR & $10\,\mathrm{Hz}$ & $[0.5, 0, 0]$ &
+slant range $1$--$1\,800\,\mathrm{m}$,
+$\sigma = 0.05\,\mathrm{m} + 10^{-4}\,R$;
+boresight body $-x$ \\
+\bottomrule
+\end{tabular}
+\caption{Sensor models and adopted settings. The noise and bias values
+are placeholder research assumptions (class A/C): not certified Falcon~9
+sensors.}
+\label{tab:sensors}
+\end{table}
+
+Table~\ref{tab:sensors} summarizes the three models. The \ac{IMU}
+measures specific force and angular rate at its fixed structural
+station; the measurement model includes the station kinematics
+(angular-rate and center-of-gravity migration terms) of the dynamics
+core. The \ac{GNSS} receiver provides position and velocity in the
+external frame, with a Gauss-Markov correlated error beside the white
+noise, lever-arm correction for its antenna station, outage and dropout
+support, and a latency model that carries and interpolates the delayed
+samples. The \ac{LIDAR} measures the slant range to the spherical ground
+along its boresight; its update uses the analytic intersection geometry
+with the planet sphere and rejects invalid pointing geometry rather
+than extrapolating.
+
+\subsection{Nine-state navigation filter}
+
+The filter (\texttt{kalman.py}) estimates \ac{IMU}-station position,
+velocity and accelerometer bias in the external frame,
+$\mathbf{x} = [\mathbf{p}, \mathbf{v}, \mathbf{b}_a]$, with the
+strapdown prediction
+%
+\begin{equation}
+\label{eq:nav-predict}
+\mathbf{a} = \mathbf{R}\,(\mathbf{f}_{\mathrm{meas}} - \hat{\mathbf{b}}_a)
++ \mathbf{g}(\mathbf{p}) + \mathbf{a}_{\mathrm{fr}}(\mathbf{p},\mathbf{v}),
+\quad
+\begin{aligned}
+\mathbf{p}^{+} &= \mathbf{p} + \mathbf{v}\,\Delta t
++ \tfrac{1}{2}\,\mathbf{a}\,\Delta t^2, \\
+\mathbf{v}^{+} &= \mathbf{v} + \mathbf{a}\,\Delta t,
+\end{aligned}
+\end{equation}
+%
+where the model gravity and rotating-frame acceleration come from the
+environment model of Section~\ref{sec:environment}, linearized through
+the same gravity and frame-gradient maps that the environment module
+supplies. The attitude rotation $\mathbf{R}$ is the truth attitude: the
+filter does not estimate attitude or gyro bias --- a declared, explicit
+limitation of the current implementation, not an oversight. The process
+noise follows from the accelerometer power spectral density
+$\sigma_a^2 / f_{\mathrm{IMU}}$ propagated through the strapdown
+kinematics, plus a bias random-walk term; the initial covariance is
+$\mathrm{diag}([2,2,2,\,0.05,0.05,0.05,\,0.1,0.1,0.1])$ with a seeded
+initial position error of $[1, -1, 0.5]\,\mathrm{m}$.
+
+GNSS updates correct position and velocity with the antenna lever arm
+and rotate the arm with the angular rate; latency is compensated by
+extrapolating the measurement with the current acceleration estimate.
+LiDAR updates are scalar and nonlinear, with the measurement Jacobian
+taken analytically at the sphere intersection. Both updates use the
+Joseph-form covariance update, and normalized innovation squares are
+recorded for monitoring. One filter instance and the same first-stage
+sensor stations run across separation without a reset to the new true
+center of gravity --- the estimated state is the IMU-station state, and
+that convention is retained deliberately through the staging event.
+
+The sensor and filter chain is verified end-to-end by the cross-module
+and mission-level test suites; in the nominal full-mission run the
+navigation position error holds $0.918\,\mathrm{m}$ \ac{RMS} with truth
+attitude (quoted and discussed in the results chapter of this report).

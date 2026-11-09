@@ -30,7 +30,11 @@ here are binding; skip them and the result will be rejected at the final check.
 1. **Research before writing.** For each chapter, read its sources (table below)
    and extract: the model equations, parameter names/values/units, where each
    parameter comes from, known simplifications, and test or validation results.
-   Never start a chapter from memory or plausibility alone.
+   Never start a chapter from memory or plausibility alone. Consult
+   `../docs/flags.md` first: it lists known places where the prose docs lag
+   the code or `data/*.json`. Flagged statements must be verified against
+   the code or data record before the report cites them; when you find a new
+   discrepancy, do not propagate it, and append it to `../docs/flags.md`.
 2. **Outline first.** Fix the chapter list and a per-chapter page budget
    (suggested outline below), sum the budget, and confirm the total lands in
    14–20 pages. Register all `\input` lines before writing content.
@@ -252,6 +256,9 @@ injected `LD_LIBRARY_PATH` breaks poppler otherwise.
 
 ## Template traps
 
+- The prose docs (`docs/*.md`) lag the code and `data/*.json` in places.
+  `../docs/flags.md` is the tracked list of them; read it before citing any
+  doc statement, and append flags for discrepancies you discover.
 - `main.tex` loads `lipsum` (placeholder filler) and `svg` (needs Inkscape).
   Do not use `\lipsum` anywhere in shipped content; remove the unused
   `\usepackage{lipsum}` and `\usepackage{svg}` from `main.tex` before the final
