@@ -34,6 +34,22 @@ MESOPAUSE_ALTITUDE_M=84852.0
 # documented near-vacuum placeholder to the 2000 km ceiling, not
 # thermospheric physics (rationale: docs/env_issues.md).
 ATMOSPHERE_CEILING_M=2000000.0
+# Wind speed fraction of the surface reference wind: (altitude [m], scale).
+# Stylized, documented profile: boundary-layer growth toward the ~11 km
+# jet-stream core, decay through the stratosphere, exactly zero at the
+# mesopause - there is no wind above the physically modeled atmosphere.
+WIND_PROFILE=(
+    (0.0,1.0),
+    (100.0,1.2),
+    (1000.0,1.45),
+    (5000.0,1.75),
+    (11000.0,2.0),
+    (20000.0,1.1),
+    (32000.0,0.5),
+    (47000.0,0.15),
+    (71000.0,0.02),
+    (MESOPAUSE_ALTITUDE_M,0.0),
+)
 
 
 @dataclass(frozen=True)
@@ -55,26 +71,50 @@ def _layer_pressure(base_pressure,base_temperature,lapse,height_above_base):
                                                           /(DRY_AIR_GAS_CONSTANT_JPKGK*lapse))
 
 
+def _wind_scale(altitude_m):
+    """Piecewise-linear WIND_PROFILE interpolation; zero above the mesopause."""
+    knots=WIND_PROFILE
+    height=max(0.0,float(altitude_m))
+    if height >= knots[-1][0]:
+        return float(knots[-1][1])
+    for index in range(len(knots)-1):
+        base,scale=knots[index]
+        top,upper=knots[index+1]
+        if height < top:
+            fraction=(height-base)/(top-base)
+            return float(scale+fraction*(upper-scale))
+    return float(knots[-1][1])
+
+
 class Environment:
     """Scenario configuration plus pure evaluators; validated once at construction."""
 
     def __init__(self,*,surface_gravity_mps2=STANDARD_GRAVITY_MPS2,
                  earth_radius_m=EARTH_MEAN_RADIUS_M,ground_altitude_m=0.0,
-                 wind_ecef_mps=(0,0,0)):
+                 wind_ecef_mps=(0,0,0),wind_rotation_rad=0.0):
         gravity=float(surface_gravity_mps2)
         wind=vector3(wind_ecef_mps)
+        wind_rotation=float(wind_rotation_rad)
         radius=float(earth_radius_m)
-        if (not np.all(np.isfinite([gravity,ground_altitude_m,radius]))
+        if (not np.all(np.isfinite([gravity,ground_altitude_m,radius,wind_rotation]))
                 or gravity < 1e-12 or not np.all(np.isfinite(wind))
                 or radius <= 0):
-            raise ValueError('Invalid surface gravity, Earth radius, ground altitude or wind.')
+            raise ValueError('Invalid surface gravity, Earth radius, ground altitude, '
+                             'wind or wind rotation.')
         self.planet_center_ecef_m=np.zeros(3)
         self.launch_site_ecef_m=np.array([0.0,0.0,radius])
         self.earth_radius_m=radius
         # mu = g_surface * R^2 reproduces the configured gravity at the launch site.
         self.gravity_mu_m3ps2=gravity*radius*radius
         self.ground_altitude_m=float(ground_altitude_m)
-        self.wind_ecef_mps=wind.copy()
+        # The scenario wind is the surface reference wind rotated about the
+        # launch-site vertical (ECEF +z), positive from ECEF +x toward +y: the
+        # rotation spreads the wind over the horizontal plane so crossflow
+        # (and not one lone coordinate) angles the vehicle.
+        cosine,sine=np.cos(wind_rotation),np.sin(wind_rotation)
+        self.wind_ecef_mps=np.array([cosine*wind[0]-sine*wind[1],
+                                     sine*wind[0]+cosine*wind[1],wind[2]])
+        self.wind_rotation_rad=wind_rotation
 
     @staticmethod
     def atmosphere(altitude_m):
@@ -113,7 +153,23 @@ class Environment:
         position=state.position_body_m
         if station_body_m is not None:
             position=position+vector3(station_body_m)-properties.cg_station_body_m
-        position_ecef=self._rotation_to_ecef(state)@position
+        return self._altitude_above_ground(self._rotation_to_ecef(state)@position)
+
+    def wind_body(self,state):
+        """The altitude-scaled ECEF wind expressed in current Body components.
+
+        The scenario wind is the surface reference wind rotated about the
+        launch-site vertical, multiplied by the WIND_PROFILE fraction of the
+        CG altitude: zero above the mesopause, the edge of the physically
+        modeled atmosphere.
+        """
+        rotation=self._rotation_to_ecef(state)
+        scale=_wind_scale(self._altitude_above_ground(rotation@state.position_body_m))
+        if scale==0.0:
+            return np.zeros(3)
+        return rotation.T@(scale*self.wind_ecef_mps)
+
+    def _altitude_above_ground(self,position_ecef):
         return float(np.linalg.norm(position_ecef)-self.earth_radius_m+self.ground_altitude_m)
 
     def gravity_body(self,state):
@@ -125,10 +181,6 @@ class Environment:
             raise ValueError('Gravity is undefined at the planet centre.')
         magnitude=self.gravity_mu_m3ps2/distance**2
         return rotation.T@(-magnitude*position_ecef/distance)
-
-    def wind_body(self,state):
-        """The fixed ECEF wind expressed in current Body components."""
-        return self._rotation_to_ecef(state).T@self.wind_ecef_mps
 
     @staticmethod
     def _rotation_to_ecef(state):

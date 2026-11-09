@@ -221,19 +221,73 @@ class WindChecks(unittest.TestCase):
         pad=env.wind_body(state_at(launch_position_body_m(R)))
         turned=env.wind_body(state_at(launch_position_body_m(R),yawed))
         self.assertFalse(np.allclose(pad,turned))
-        self.assertAlmostEqual(np.linalg.norm(pad),np.linalg.norm(turned),places=12)
+        # The yawed position's norm carries float roundoff, so the profile
+        # scale differs in the last bits: magnitudes agree to flight precision.
+        self.assertAlmostEqual(np.linalg.norm(pad),np.linalg.norm(turned),places=9)
         # Rotated back to ECEF it is always the original scenario wind.
         for quaternion in (LAUNCH_QUATERNION_BODY_TO_ECEF_WXYZ,yawed):
             vector=env.wind_body(state_at(launch_position_body_m(R),quaternion))
             np.testing.assert_allclose(body_to_ecef_matrix(quaternion)@vector,[3,-4,0],atol=1e-12)
 
-    def test_wind_ignores_position_velocity_and_time(self):
+    def test_wind_ignores_velocity_but_decays_with_altitude(self):
         env=Environment(wind_ecef_mps=(7,1,-2))
         pad=env.wind_body(state_at(launch_position_body_m(R)))
         moving=env.wind_body(state_at(launch_position_body_m(R),velocity=(100,20,-5)))
-        coasting=env.wind_body(state_at(launch_position_body_m(R,500000)))
         np.testing.assert_array_equal(pad,moving)
-        np.testing.assert_array_equal(pad,coasting)
+        # 21 km falls a tenth of the way down the 20..32 km profile segment.
+        scale=1.1+(21000-20000)/(32000-20000)*(0.5-1.1)
+        self.assertAlmostEqual(np.linalg.norm(env.wind_body(
+            state_at(launch_position_body_m(R,21000)))),scale*np.linalg.norm([7,1,-2]),places=9)
+
+    def test_wind_follows_the_profile_between_knots_and_peaks_at_the_jet_stream(self):
+        env=Environment(wind_ecef_mps=(10,0,0))
+        surface=np.linalg.norm(env.wind_body(state_at(launch_position_body_m(R))))
+        boundary_layer=np.linalg.norm(env.wind_body(state_at(launch_position_body_m(R,100))))
+        jet_stream=np.linalg.norm(env.wind_body(state_at(launch_position_body_m(R,11000))))
+        stratosphere=np.linalg.norm(env.wind_body(state_at(launch_position_body_m(R,47000))))
+        self.assertAlmostEqual(surface,10.0,places=9)
+        self.assertAlmostEqual(boundary_layer,12.0,places=9)
+        self.assertAlmostEqual(jet_stream,20.0,places=9)
+        self.assertAlmostEqual(stratosphere,1.5,places=9)
+
+    def test_wind_is_calm_above_the_modeled_atmosphere(self):
+        env=Environment(wind_ecef_mps=(3,-4,0))
+        mesopause=env.wind_body(state_at(launch_position_body_m(R,MESOPAUSE_ALTITUDE_M)))
+        space=env.wind_body(state_at(launch_position_body_m(R,500000)))
+        np.testing.assert_array_equal(mesopause,[0,0,0])
+        np.testing.assert_array_equal(space,[0,0,0])
+
+    def test_rotation_spreads_the_wind_over_two_horizontal_coordinates(self):
+        # A quarter turn moves the +x wind fully onto +y, a half turn onto -x;
+        # the vertical component and the magnitude are preserved.
+        env=Environment(wind_ecef_mps=(10,0,0),wind_rotation_rad=np.pi/2)
+        quaternion=LAUNCH_QUATERNION_BODY_TO_ECEF_WXYZ
+        vector=body_to_ecef_matrix(quaternion)@env.wind_body(state_at(launch_position_body_m(R)))
+        np.testing.assert_allclose(vector,[0,10,0],atol=1e-12)
+        env=Environment(wind_ecef_mps=(10,0,0),wind_rotation_rad=np.pi)
+        vector=body_to_ecef_matrix(quaternion)@env.wind_body(state_at(launch_position_body_m(R)))
+        np.testing.assert_allclose(vector,[-10,0,0],atol=1e-12)
+        env=Environment(wind_ecef_mps=(10,0,5),wind_rotation_rad=0.7)
+        vector=body_to_ecef_matrix(quaternion)@env.wind_body(state_at(launch_position_body_m(R)))
+        np.testing.assert_allclose(np.linalg.norm(vector),np.linalg.norm([10,0,5]),atol=1e-9)
+        np.testing.assert_allclose(vector[2],5.0,atol=1e-12)
+
+    def test_rotation_lets_a_crossflow_angle_the_vehicle(self):
+        # At the pad Body +x is ECEF +z, so a horizontal ECEF wind reads as a
+        # pure crossflow (zero axial, nonzero lateral Body components): the
+        # relative velocity it produces creates an angle of attack, hence a
+        # normal force acting away from the CG - a wind-induced moment.
+        env=Environment(wind_ecef_mps=(10,0,0),wind_rotation_rad=np.pi/4)
+        vector=env.wind_body(state_at(launch_position_body_m(R)))
+        upright=body_to_ecef_matrix(LAUNCH_QUATERNION_BODY_TO_ECEF_WXYZ)@vector
+        np.testing.assert_allclose(upright[2],0.0,atol=1e-12)
+        self.assertGreater(np.linalg.norm(upright[:2]),0.0)
+
+    def test_rejects_a_non_finite_wind_rotation(self):
+        with self.assertRaises(ValueError):
+            Environment(wind_rotation_rad=float('nan'))
+        with self.assertRaises(ValueError):
+            Environment(wind_rotation_rad=float('inf'))
 
     def test_constructor_stores_an_independent_copy(self):
         source=np.array([1,2,3])
@@ -348,13 +402,17 @@ class SimulatorSanityChecks(unittest.TestCase):
         position_ecef=np.array([3e5,7e5,R+21000])
         state=state_at_ecef(position_ecef,quaternion)
         air=Environment.atmosphere(env.altitude(state,None))
-        # Altitude reads the ECEF radius, gravity its centre, wind neither.
-        self.assertAlmostEqual(env.altitude(state,None),
-                               np.linalg.norm(position_ecef)-R,places=6)
+        # Altitude reads the ECEF radius, gravity its centre, wind neither -
+        # only the profile scale derived from that altitude.
+        altitude=np.linalg.norm(position_ecef)-R
+        self.assertAlmostEqual(env.altitude(state,None),altitude,places=6)
         self.assertAlmostEqual(np.linalg.norm(env.gravity_body(state)),
                                G0*R*R/np.linalg.norm(position_ecef)**2,places=8)
+        # Downrange, the downrange position sits ~66 km above the ground,
+        # inside the 47..71 km profile segment.
+        scale=0.15+(altitude-47000)/(71000-47000)*(0.02-0.15)
         self.assertAlmostEqual(np.linalg.norm(env.wind_body(state)),
-                               np.linalg.norm([-12,3,0]),places=9)
+                               scale*np.linalg.norm([-12,3,0]),places=9)
         self.assertGreater(air.sound_speed_mps,0)
 
 
