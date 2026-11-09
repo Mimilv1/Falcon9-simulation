@@ -10,6 +10,7 @@ from frames import body_to_ecef_matrix
 from load_interface import AppliedForce, assemble_loads
 from mass_flow import ExhaustPort
 from propulsion import evaluate_steady_engine, steady_mass_flow
+from dynamics import accelerations
 
 
 def smooth_command(t, start, duration, y0, d0, y1):
@@ -71,12 +72,12 @@ class RecoveryController:
         self.reason = ""
         self.phase_fuel = 0.0
         self.burns = []
-        self.landing_end = None
         self.legs = False
         self.landing_ready = False
         self.predicted_miss = None
         self.prediction_time = -1e9
         self.steering = None
+        self.terminal_nose = None
         self.control_period = self.cfg["guidance_period_s"]
 
     def command(self, t):
@@ -117,6 +118,7 @@ class RecoveryController:
         if phase != self.phase:
             self.phase = phase
             self.steering = None
+            self.terminal_nose = None
             self.started = self.time
             self.ending = False
             self.reason = ""
@@ -140,10 +142,6 @@ class RecoveryController:
                 )
             if phase == "landing_burn":
                 self.legs = True
-                p, v = self.point_state(self.state, self.properties)
-                up = p / np.linalg.norm(p)
-                h = max(self.contact_altitude(self.state, self.properties), 1)
-                self.landing_end = self.time + 2 * h / max(-np.dot(v, up) + 1.0, 1.0)
                 self.set_throttle(self.time, 1.0, self.cfg["ramp_s"])
             self.next_update = self.time
         return self
@@ -157,9 +155,9 @@ class RecoveryController:
             - properties.cg_rate_body_mps
         )
 
-    def contact_altitude(self, state, properties):
+    def contact_state(self, state, properties):
         c = self.cfg
-        foot = np.array(
+        feet = np.array(
             [
                 [-c["contact_below_base_m"], y, z]
                 for y, z in [
@@ -170,13 +168,17 @@ class RecoveryController:
                 ]
             ]
         )
+        rotation = body_to_ecef_matrix(state.quaternion_body_to_ecef_wxyz)
         points = (
-            body_to_ecef_matrix(state.quaternion_body_to_ecef_wxyz)
-            @ (state.position_body_m - properties.cg_station_body_m + foot).T
+            rotation @ (state.position_body_m - properties.cg_station_body_m + feet).T
         ).T
-        return float(
-            np.min(np.linalg.norm(points, axis=1)) - self.environment.earth_radius_m
-        )
+        index = int(np.argmin(np.linalg.norm(points, axis=1)))
+        position, velocity = self.point_state(state, properties, feet[index])
+        return position, velocity, feet[index] - properties.cg_station_body_m
+
+    def contact_altitude(self, state, properties):
+        position, _, _ = self.contact_state(state, properties)
+        return float(np.linalg.norm(position) - self.environment.earth_radius_m)
 
     def geometry(self, state, props):
         p, v = self.point_state(state, props)
@@ -381,7 +383,9 @@ class RecoveryController:
                     count
                     * (
                         value * engine.spec.thrust_vac
-                        - engine.spec.exit_area * air.pressure_pa
+                        - min(max(value / engine.spec.throttle_min, 0), 1)
+                        * engine.spec.exit_area
+                        * air.pressure_pa
                     )
                     * nose
                 )
@@ -389,11 +393,39 @@ class RecoveryController:
 
         limit = np.tan(
             np.deg2rad(
-                min(self.cfg["landing_tilt_limit_deg"], max(2.0, 0.02 * max(h, 0)))
+                min(
+                    self.cfg["landing_tilt_limit_deg"],
+                    max(self.cfg["landing_terminal_tilt_deg"], 0.02 * max(h, 0)),
+                )
                 if self.phase == "landing_burn"
                 else self.cfg["landing_tilt_limit_deg"]
             )
         )
+        if (
+            self.phase == "landing_burn"
+            and h <= self.cfg["landing_terminal_hold_height_m"]
+        ):
+            if self.terminal_nose is None:
+                self.terminal_nose = (
+                    up.copy() if self.steering is None else self.steering.copy()
+                )
+            nose = self.terminal_nose
+            x = np.array(
+                [
+                    nose @ first / max(nose @ up, 0.1),
+                    nose @ second / max(nose @ up, 0.1),
+                    0.0,
+                ]
+            )
+            passive = force(x)[0]
+            required = (goal - passive) @ up / max(nose @ up, 0.1)
+            throttle = np.clip(
+                (required / count + engine.spec.exit_area * air.pressure_pa)
+                / engine.spec.thrust_vac,
+                engine.spec.throttle_min,
+                1.0,
+            )
+            return nose.copy(), float(throttle)
         best = None
         center = np.zeros(2)
         step = limit / 4
@@ -407,10 +439,7 @@ class RecoveryController:
                     x = np.r_[angles, 0.0]
                     value, nose = force(x)
                     if throttle is None:
-                        pressure_force = (
-                            count * engine.spec.exit_area * air.pressure_pa * nose
-                        )
-                        passive = value + pressure_force
+                        passive = value
                         required = (goal - passive) @ up / max(nose @ up, 0.1)
                         x[2] = np.clip(
                             (required / count + engine.spec.exit_area * air.pressure_pa)
@@ -508,28 +537,38 @@ class RecoveryController:
                     self.stop_burn(t, "entry budget cap")
             elif self.phase == "landing_burn" and not self.ending:
                 rotation = body_to_ecef_matrix(state.quaternion_body_to_ecef_wxyz)
-                goal = self.target + (
-                    ev.properties.cg_station_body_m[0]
-                    + self.cfg["contact_below_base_m"]
-                ) * self.target / np.linalg.norm(self.target)
-                pcg = rotation @ state.position_body_m
-                vcg = rotation @ state.velocity_body_mps
-                tgo = max(
-                    2
-                    * max(self.contact_altitude(state, ev.properties), 0.05)
-                    / max(-vr - self.cfg["landing_target_vertical_velocity_mps"], 1),
-                    0.3,
+                foot, foot_velocity, arm = self.contact_state(state, ev.properties)
+                foot_up = foot / np.linalg.norm(foot)
+                clearance = max(
+                    np.linalg.norm(foot) - self.environment.earth_radius_m, 0.005
                 )
-                net = (
-                    6 * (goal - pcg) / tgo**2
-                    - 4 * vcg / tgo
-                    - 2 * self.cfg["landing_target_vertical_velocity_mps"] * up / tgo
+                foot_vertical = foot_velocity @ foot_up
+                desired_contact = (
+                    -foot_vertical * abs(foot_vertical)
+                    - self.cfg["landing_target_vertical_velocity_mps"] ** 2
+                ) / (2 * clearance)
+                _, angular_acceleration = accelerations(state, ev.loads, ev.properties)
+                migration = ev.properties.cg_rate_body_mps
+                migration_acceleration = ev.properties.cg_acceleration_body_mps2
+                relative = (
+                    np.cross(angular_acceleration, arm)
+                    + np.cross(
+                        state.omega_body_radps, np.cross(state.omega_body_radps, arm)
+                    )
+                    - 2 * np.cross(state.omega_body_radps, migration)
+                    - migration_acceleration
                 )
-                horizontal_time = max(
-                    2.0, tgo * self.cfg["landing_horizontal_horizon_fraction"]
+                curvature = (
+                    foot_velocity @ foot_velocity - foot_vertical**2
+                ) / np.linalg.norm(foot)
+                desired_vertical = (
+                    desired_contact - (rotation @ relative) @ foot_up - curvature
                 )
-                horizontal = -6 * error / horizontal_time**2 - 4 * vh / horizontal_time
-                net = (net @ up) * up + horizontal
+                horizontal = (
+                    -self.cfg["landing_lateral_kp"] * error
+                    - self.cfg["landing_lateral_kd"] * vh
+                )
+                net = desired_vertical * up + horizontal
                 self.steering, throttle = self.solve_force(state, ev.properties, net)
                 self.set_throttle(t, throttle)
                 if (
@@ -714,11 +753,20 @@ class RecoveryController:
         desired /= np.linalg.norm(desired)
         error = rotation.T @ np.cross(rotation[:, 0], desired)
         desired_rate = np.clip(
-            self.cfg["attitude_kp"] * error,
+            (
+                self.cfg["landing_attitude_kp"]
+                if self.phase == "landing_burn"
+                else self.cfg["attitude_kp"]
+            )
+            * error,
             -self.cfg["max_angular_rate_radps"],
             self.cfg["max_angular_rate_radps"],
         )
-        alpha = self.cfg["attitude_kd"] * (desired_rate - state.omega_body_radps)
+        alpha = (
+            self.cfg["landing_attitude_kd"]
+            if self.phase == "landing_burn"
+            else self.cfg["attitude_kd"]
+        ) * (desired_rate - state.omega_body_radps)
         length = np.linalg.norm(alpha)
         if length > self.cfg["max_angular_accel_radps2"]:
             alpha *= self.cfg["max_angular_accel_radps2"] / length
@@ -727,7 +775,18 @@ class RecoveryController:
         )
         moment -= aero.free_moment_body_nm
         fin = self.aero.configurations[configuration].grid_fin_control
-        if fin is not None and aero.dynamic_pressure_pa > 1:
+        fin_target = moment.copy()
+        if self.phase == "landing_burn":
+            magnitude = np.linalg.norm(fin_target)
+            preferred = fin_target * min(
+                1.0, self.cfg["max_control_moment_nm"] / max(magnitude, 1e-12)
+            )
+            fin_target -= preferred
+        if (
+            fin is not None
+            and aero.dynamic_pressure_pa > 1
+            and np.linalg.norm(fin_target) > 1e-6
+        ):
             basis = []
             cosine = np.cos(aero.angle_of_attack_rad)
             scale = (
@@ -749,7 +808,7 @@ class RecoveryController:
                 )
                 basis.append(np.cross(station - props.cg_station_body_m, force))
             fraction = np.clip(
-                np.linalg.lstsq(np.array(basis).T, moment, rcond=None)[0], -1, 1
+                np.linalg.lstsq(np.array(basis).T, fin_target, rcond=None)[0], -1, 1
             )
             controlled = self.aero.evaluate(
                 state,

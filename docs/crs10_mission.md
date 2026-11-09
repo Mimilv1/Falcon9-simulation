@@ -15,8 +15,9 @@ trials fail landing criteria. This is an experimental recovery controller.
 The existing C sensor/filter algorithms are unchanged. A revised 100 Hz IMU /
 10 Hz GNSS/LiDAR run through 160 s completed, seed 1, with 0.618 m saved-sample
 position RMS at the IMU station. This is an internal metric under assumed noise
-and truth attitude, not real Falcon navigation accuracy. C's later branch and
-closed-loop navigation feedback still require final integration.
+and truth attitude, not real Falcon navigation accuracy. The fetched Emilien-Branch has no unmerged commits relative to main as of
+9 November2026. Further C branch changes are not presumed. Closed-loop
+navigation feedback remains a distinct model-design choice.
 
 ## Why the previous speed was 44% high
 
@@ -150,7 +151,7 @@ estimates to guidance is a distinct final integration step. Its current filter
 also receives truth attitude. Neither fact should be hidden in the report.
 
 Before submission: finish recovery tuning/robustness or explicitly limit claims
-to demonstrated phases; merge C's final branch; run complete sensor/filter
+to demonstrated phases; check any newly published C changes; run complete sensor/filter
 integration and error analysis; confirm clean installation/reproducibility;
 write the manual, assumptions/sources, results and dangerous-error discussion.
 
@@ -221,3 +222,28 @@ A final short checkpoint-only tuning experiment was not promoted: it did not
 meet all acceptance criteria. The shared parameters remain those of the full
 recorded integration run. All generated test trajectories stay under ignored
 `results/`, not the shared repository history.
+
+
+## Landing-controller revision under verification
+
+The acceptance limits and landing target remain unchanged. The vertical loop
+now uses the actual lowest leg-tip clearance hₗ and radial velocity wₗ, with
+wₜ=−0.5 m/s and descent braking acceleration (wₗ²−wₜ²)/(2hₗ). Rotational,
+CG-migration and radial-curvature terms convert the contact-point request to a
+CG acceleration request. This removes the former CG-target/contact-height mismatch.
+
+Horizontal control is a critically damped fixed-gain loop:
+a⊥=−0.0576e⊥−0.48v⊥. Its natural rate is0.24 rad/s; it does not increase gains
+without bound as touchdown approaches. Landing attitude gains are1.5 and6,
+with the original0.22 rad/s desired-rate,0.12 rad/s² acceleration and2 MN·m
+virtual moment limits retained. Finite-travel grid fins supply residual moment
+after virtual TVC authority during landing; coast allocation is unchanged.
+
+Landing tilt tapers to4°, within the existing5° acceptance limit. Below20 m
+base altitude the last steering reference is held to let angular motion settle;
+actual attitude, velocity and position continue to evolve through dynamics.
+There is no state reset or replacement of the touchdown metrics.
+
+The fetched remote C branch `Emilien-Branch` has zero commits absent from main.
+No additional C merge is currently required. This statement refers to published
+GitHub code, not any unpublished work on a teammate's computer.

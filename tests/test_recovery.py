@@ -1,9 +1,10 @@
 import unittest
 import numpy as np
+from dynamics import State
 from Events import load_mission, MissionSequence
 from VehicleData import build_falcon9
 from recovery import RecoveryController, recovery_plan, smooth_command
-from frames import body_to_ecef_matrix
+from frames import body_to_ecef_matrix, quaternion_product
 
 
 class RecoveryChecks(unittest.TestCase):
@@ -99,6 +100,138 @@ class RecoveryChecks(unittest.TestCase):
         self.assertTrue(v.stages[0].engines[0].spec.throttle_min <= throttle <= 1)
         self.assertLessEqual(np.degrees(np.arccos(np.clip(nose @ up, -1, 1))), 20.00001)
         self.assertTrue(np.all(np.isfinite(nose)))
+
+    def test_lowest_leg_clearance_rate_matches_its_motion(self):
+        _, vehicle, controller, _ = self.setup_booster()
+        vehicle.omega = np.array([0, 0.03, 0.01])
+        vehicle.quaternion = quaternion_product(
+            vehicle.quaternion, np.array([np.cos(0.1), 0, np.sin(0.1), 0])
+        )
+        props = vehicle.get_mass_properties()
+        rot = body_to_ecef_matrix(vehicle.quaternion)
+        state = State(
+            rot.T @ np.array([0.0, 0.0, 6401000.0]),
+            rot.T @ np.array([20.0, 0.0, -500.0]),
+            vehicle.quaternion,
+            vehicle.omega,
+            [vehicle.stages[0].propellant_mass, 0],
+        )
+        position, velocity, _ = controller.contact_state(state, props)
+        rotation = body_to_ecef_matrix(state.quaternion_body_to_ecef_wxyz)
+        cg = rotation @ state.position_body_m
+        cg_velocity = rotation @ state.velocity_body_mps
+        dt = 0.001
+        heights = []
+        rate = np.linalg.norm(state.omega_body_radps)
+        for sign in (-1, 1):
+            delta = np.r_[
+                np.cos(rate * dt / 2),
+                sign * np.sin(rate * dt / 2) * state.omega_body_radps / rate,
+            ]
+            q = quaternion_product(state.quaternion_body_to_ecef_wxyz, delta)
+            rot = body_to_ecef_matrix(q)
+            trial = State(
+                rot.T @ (cg + sign * dt * cg_velocity),
+                rot.T @ cg_velocity,
+                q,
+                state.omega_body_radps,
+                state.propellant_kg,
+            )
+            heights.append(controller.contact_altitude(trial, props))
+        finite_difference = (heights[1] - heights[0]) / (2 * dt)
+        self.assertAlmostEqual(
+            finite_difference,
+            float(position @ velocity / np.linalg.norm(position)),
+            delta=2e-5,
+        )
+
+    def test_original_acceptance_limits_are_retained(self):
+        self.assertEqual(
+            load_mission()["landing_criteria"]["limits"],
+            {
+                "vertical_speed_mps": 2.0,
+                "horizontal_speed_mps": 1.0,
+                "tilt_deg": 5.0,
+                "angular_rate_degps": 1.0,
+                "target_error_m": 10.0,
+            },
+        )
+
+    def test_allocated_vertical_force_matches_the_propulsion_and_aero_models(self):
+        plan, vehicle, controller, _ = self.setup_booster()
+        vehicle.stages[0].propellant_mass = 15000
+        vehicle.position = np.array([6372500.0, 0, 0])
+        vehicle.velocity = np.array([-100.0, 10, 0])
+        original = vehicle.to_state()
+        props = vehicle.get_mass_properties()
+        controller.time = 0
+        controller.state = original
+        controller.properties = props
+        controller.provider(vehicle, "landing_burn", plan)
+        position, velocity, up, *_ = controller.geometry(original, props)
+        desired = 5 * up + np.array([1.0, 0, 0])
+        nose, throttle = controller.solve_force(original, props, desired)
+        rot = body_to_ecef_matrix(original.quaternion_body_to_ecef_wxyz)
+        first = rot[:, 0]
+        axis = np.cross(first, nose)
+        angle = np.arccos(np.clip(first @ nose, -1, 1))
+        delta = np.r_[
+            np.cos(angle / 2),
+            axis / max(np.linalg.norm(axis), 1e-12) * np.sin(angle / 2),
+        ]
+        q = quaternion_product(delta, original.quaternion_body_to_ecef_wxyz)
+        turned = body_to_ecef_matrix(q)
+        state = State(
+            turned.T @ (rot @ original.position_body_m),
+            turned.T @ (rot @ original.velocity_body_mps),
+            q,
+            [0, 0, 0],
+            original.propellant_kg,
+        )
+        air = controller.environment.atmosphere(
+            controller.environment.altitude(state, props)
+        )
+        aero = controller.aero.evaluate(
+            state,
+            props,
+            air,
+            controller.environment.wind_body(state),
+            "booster_landing",
+        )
+        from dataclasses import replace
+        from propulsion import evaluate_steady_engine
+
+        pressure = controller.environment.atmosphere(
+            controller.environment.altitude(state, props, [0, 0, 0])
+        ).pressure_pa
+        output = evaluate_steady_engine(
+            replace(vehicle.stages[0].engines[0], running=True, throttle=throttle),
+            pressure,
+            stage_index=0,
+            stage_offset_m=0,
+            nozzle_exit_axial_m=0,
+        )
+        actual = (
+            turned
+            @ (aero.force_body_n + output.applied_force.force_body_n)
+            / props.mass_kg
+            + controller.environment.gravity_ecef(rot @ original.position_body_m)
+            + controller.environment.frame_acceleration_ecef(
+                rot @ original.position_body_m, rot @ original.velocity_body_mps
+            )
+        )
+        self.assertAlmostEqual(float(actual @ up), float(desired @ up), delta=0.02)
+
+    def test_landing_uses_fin_force_only_after_virtual_tvc_authority_is_used(self):
+        plan, vehicle, controller, state = self.setup_booster()
+        controller.state = state
+        controller.properties = vehicle.get_mass_properties()
+        controller.provider(vehicle, "landing_burn", plan)
+        evaluation = controller.evaluate(controller.time + 1, state)
+        self.assertAlmostEqual(evaluation.aero.grid_fin_control_force_n, 0.0, places=6)
+        self.assertEqual(plan["recovery"]["max_control_moment_nm"], 2000000)
+        self.assertEqual(plan["recovery"]["max_angular_accel_radps2"], 0.12)
+        self.assertEqual(plan["recovery"]["max_angular_rate_radps"], 0.22)
 
     def test_return_budget_fits_revised_meco_inventory(self):
         p = load_mission()["recovery"]

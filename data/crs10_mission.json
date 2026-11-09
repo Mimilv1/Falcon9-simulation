@@ -291,7 +291,7 @@
     "Independent validation of the calibrated ascent operating point and pitch program.",
     "Robust recovery success under coefficient, mass, wind and navigation uncertainty.",
     "Restart health/settling and deployed-leg inertia/contact-force dynamics.",
-    "C final merge and replacing truth-attitude input with an explicitly justified navigation interface."
+    "Validate the final sensor/filter settings and explicitly document the truth-attitude and truth-state-feedback interfaces."
   ],
   "environment": {
     "launch_latitude_deg": 28.6,
@@ -350,10 +350,15 @@
     "assume_restart_ready": true,
     "restart_basis": "A: engine health, propellant settling and ignition transients not resolved; successful restart is assumed after zero-flow and attitude checks. One-second smooth flow ramp is numerical design, not a measured transient.",
     "landing_budget_basis": "Planning allocation. Unused boostback/entry allocation can transfer to landing; reserve plus limiting-tank residual is protected.",
-    "landing_force_allocation": "A: bounded search over body tilt and throttle using thrust PLUS B aerodynamic force; vertical-force error weighted 100:1. Grid fins allocate attitude moment, with remaining ideal actuator moment bounded separately.",
+    "landing_force_allocation": "A: bounded force allocation; landing moment authority uses the existing virtual TVC first and grid fins only for residual demand. Vertical deceleration tracks the lowest leg clearance/rate with rotational corrections. No change to acceptance limits or target coordinates.",
     "boostback_prediction": "A: reduced-order predictor includes central gravity, rotation, B force coefficients and a prospective entry burn. Used for feedback; prediction errors remain.",
-    "landing_target_vertical_velocity_mps": -1.0,
-    "landing_horizontal_horizon_fraction": 0.5,
-    "landing_margin_basis": "A: 1.5 km early-ignition clearance allowance for reduced stopping-predictor and attitude/force uncertainty, selected in development trials; not an actual CRS-10 altitude or validated robustness bound."
+    "landing_target_vertical_velocity_mps": -0.5,
+    "landing_margin_basis": "A: 1.5 km early-ignition clearance allowance for reduced stopping-predictor and attitude/force uncertainty, selected in development trials; not an actual CRS-10 altitude or validated robustness bound.",
+    "landing_lateral_kp": 0.0576,
+    "landing_lateral_kd": 0.48,
+    "landing_terminal_tilt_deg": 4.0,
+    "landing_attitude_kp": 1.5,
+    "landing_attitude_kd": 6.0,
+    "landing_terminal_hold_height_m": 20.0
   }
 }
