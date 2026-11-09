@@ -1,0 +1,782 @@
+from contextlib import ExitStack
+from copy import deepcopy
+from dataclasses import asdict, is_dataclass
+from pathlib import Path
+import csv
+import hashlib
+import json
+import subprocess
+import numpy as np
+
+from Aerodynamics import Aerodynamics
+from Environement import Environment
+from Events import (
+    EventConditionError,
+    MissionSequence,
+    landing_verdict,
+    load_mission,
+    restart_conditions,
+)
+from VehicleData import build_falcon9
+from ascent import SteadyPoweredAscent, ControlledAscent, PitchProgram
+from dynamics import rk4_step
+from engine_schedule import SmoothShutdown
+from frames import body_to_ecef_matrix
+from kalman import NavigationKF
+from mass_flow import PropellantLimitError
+from sensors import GNSS, GNSSSpec, IMU, IMUSpec, Lidar, LidarSpec
+from staging import separate_coasting_vehicle
+
+ROOT = Path(__file__).parent
+
+
+def json_value(value):
+    if is_dataclass(value):
+        return json_value(asdict(value))
+    if isinstance(value, dict):
+        return {str(k): json_value(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple, np.ndarray)):
+        return [json_value(v) for v in value]
+    if isinstance(value, (float, np.floating)):
+        return float(value) if np.isfinite(value) else None
+    if isinstance(value, (bool, np.bool_)):
+        return bool(value)
+    if isinstance(value, np.integer):
+        return int(value)
+    if callable(value):
+        return "constant_at_temp_ref_c"
+    return value
+
+
+def save_json(path, value):
+    path.write_text(
+        json.dumps(json_value(value), indent=2, allow_nan=False) + "\n",
+        encoding="utf-8",
+    )
+
+
+def vector_row(prefix, vector, axes="xyz"):
+    return {f"{prefix}_{axis}": float(value) for axis, value in zip(axes, vector)}
+
+
+def structural_state(state, properties, station):
+    rotation = body_to_ecef_matrix(state.quaternion_body_to_ecef_wxyz)
+    arm = np.asarray(station) - properties.cg_station_body_m
+    position = rotation @ (state.position_body_m + arm)
+    velocity = rotation @ (
+        state.velocity_body_mps
+        + np.cross(state.omega_body_radps, arm)
+        - properties.cg_rate_body_mps
+    )
+    return position, velocity
+
+
+def prepare_launch(plan, vehicle=None):
+    vehicle = build_falcon9() if vehicle is None else vehicle
+    if plan.get("vehicle_configuration") == "booster":
+        vehicle, _ = vehicle.separate()
+        vehicle.stages[0].propellant_mass = plan["terminal_test"][
+            "stage1_propellant_kg"
+        ]
+    initial = plan["initial_state"]
+    vehicle.position = np.asarray(initial["structural_base_position_body_m"], float)
+    vehicle.velocity = np.asarray(initial["structural_base_velocity_body_mps"], float)
+    vehicle.quaternion = np.asarray(initial["quaternion_body_to_ecef_wxyz"], float)
+    vehicle.omega = np.asarray(initial["omega_body_radps"], float)
+    for stage in vehicle.stages:
+        for engine in stage.engines:
+            engine.running = stage.name == "stage1" and (
+                plan.get("vehicle_configuration") != "booster"
+                or engine is stage.engines[0]
+            )
+            engine.throttle = initial["stage1_throttle"] if engine.running else 0.0
+    return vehicle
+
+
+def default_provider(vehicle, phase, plan):
+    if phase not in {
+        "powered_ascent",
+        "engine_shutdown",
+        "full_stack_coast",
+        "booster_coast",
+        "terminal_braking",
+    }:
+        raise EventConditionError("Current B models do not implement " + phase + ".")
+    environment = Environment(**plan["environment"])
+    aerodynamics = Aerodynamics.from_json(ROOT / "data" / "aero_configurations.json")
+    envelope = None
+    if phase != "terminal_braking":
+        end = next(e["time_s"] for e in plan["transitions"] if e["name"] == "meco")
+        envelope = SmoothShutdown(
+            end - plan["shutdown"]["duration_s"], plan["shutdown"]["duration_s"]
+        )
+    base = SteadyPoweredAscent(
+        vehicle,
+        environment,
+        aerodynamics,
+        command_envelope=envelope,
+        aero_configuration=(
+            "booster_landing"
+            if phase == "terminal_braking"
+            else "booster_alone" if phase == "booster_coast" else "full_stack"
+        ),
+    )
+    if phase in {"powered_ascent", "engine_shutdown"}:
+        p = plan["attitude_program"]
+        return ControlledAscent(
+            base,
+            PitchProgram(p["start_s"], p["tau_s"], np.deg2rad(p["tilt_max_deg"])),
+            p["kp"],
+            p["kd"],
+        )
+    return base
+
+
+def physical_conditions(vehicle, state, loads):
+    lower = vehicle.mass_model().propellant_bounds(None)[0]
+    return {
+        "fuel_available": bool(state.propellant_kg[0] > lower[0]),
+        "zero_flow": bool(
+            np.all(loads.consumption_kgps == 0)
+            and np.all(loads.consumption_rate_kgps2 == 0)
+        ),
+        "engines_off": all(
+            not e.running and e.throttle == 0
+            for stage in vehicle.stages
+            for e in stage.engines
+        ),
+        "full_stack_attached": [s.name for s in vehicle.stages] == ["stage1", "stage2"],
+        "detached": [s.name for s in vehicle.stages] == ["stage1"],
+    }
+
+
+class NavigationRun:
+    def __init__(self, plan, state, properties, seed):
+        settings = plan["integration"]
+        self.environment = Environment(**plan["environment"])
+        self.imu = IMU(
+            IMUSpec(
+                settings["imu_station_body_m"],
+                rate_hz=settings["imu_rate_hz"],
+                **settings["imu_errors"],
+            ),
+            seed=seed,
+        )
+        self.gnss = GNSS(GNSSSpec(settings["gnss_station_body_m"]), seed=seed + 1)
+        self.lidar = Lidar(
+            LidarSpec(
+                settings["lidar_station_body_m"],
+                planet_radius_m=self.environment.earth_radius_m,
+            ),
+            seed=seed + 2,
+        )
+        p, v = structural_state(state, properties, self.imu.spec.station_body_m)
+        self.filter = NavigationKF.from_imu_spec(
+            self.imu.spec,
+            p + settings["initial_position_error_m"],
+            v,
+            settings["initial_sigma"],
+            environment=self.environment,
+        )
+        self.last_time = None
+        self.last_omega = np.zeros(3)
+        self.lidar_updates = 0
+        self.nis = []
+
+    def observe(self, time_s, state, loads, properties):
+        rotation = body_to_ecef_matrix(state.quaternion_body_to_ecef_wxyz)
+        imu = self.imu.update(time_s, state, loads, properties)
+        if imu is not None:
+            if self.last_time is not None:
+                self.filter.predict(
+                    imu.accel_meas_mps2, rotation, time_s - self.last_time
+                )
+            self.last_time, self.last_omega = time_s, imu.gyro_meas_radps
+        gnss = self.gnss.update(time_s, state, properties)
+        if gnss is not None and gnss.valid:
+            arm = self.gnss.spec.antenna_station_body_m - self.imu.spec.station_body_m
+            self.filter.update_gnss(
+                gnss.pos_meas_m,
+                gnss.vel_meas_mps,
+                rotation,
+                self.last_omega,
+                arm,
+                gnss.pos_sigma_m,
+                gnss.vel_sigma_mps,
+                self.gnss.spec.latency_s,
+            )
+            self.nis.append(self.filter.last_nis)
+        lidar = self.lidar.update(time_s, state, properties)
+        if lidar is not None and lidar.valid:
+            arm = self.lidar.spec.station_body_m - self.imu.spec.station_body_m
+            update = self.filter.update_lidar(
+                lidar.range_meas_m,
+                rotation,
+                arm,
+                self.lidar.spec.boresight_body,
+                self.lidar.spec.planet_center_ecef_m,
+                self.lidar.spec.planet_radius_m,
+                lidar.sigma_m,
+            )
+            self.lidar_updates += int(update is not None)
+        return imu, gnss, lidar
+
+    def row(self, time_s, state, properties):
+        p, v = structural_state(state, properties, self.imu.spec.station_body_m)
+        x = self.filter.x
+        return {
+            "time_s": time_s,
+            **vector_row("position_ecef_m", x[:3]),
+            **vector_row("velocity_ecef_mps", x[3:6]),
+            **vector_row("accel_bias_body_mps2", x[6:9]),
+            **vector_row("position_error_ecef_m", x[:3] - p),
+            **vector_row("velocity_error_ecef_mps", x[3:6] - v),
+            **{
+                f"sigma_{i}": float(s)
+                for i, s in enumerate(np.sqrt(np.diag(self.filter.P)))
+            },
+        }
+
+
+def measurement_rows(samples):
+    imu, gnss, lidar = samples
+    rows = []
+    if imu is not None:
+        rows.append(
+            {
+                "time_s": imu.t,
+                "sensor": "imu",
+                "valid": True,
+                **vector_row("accel_body_mps2", imu.accel_meas_mps2),
+                **vector_row("gyro_body_radps", imu.gyro_meas_radps),
+            }
+        )
+    if gnss is not None:
+        rows.append(
+            {
+                "time_s": gnss.t,
+                "sensor": "gnss",
+                "valid": gnss.valid,
+                **vector_row("position_ecef_m", gnss.pos_meas_m),
+                **vector_row("velocity_ecef_mps", gnss.vel_meas_mps),
+            }
+        )
+    if lidar is not None:
+        rows.append(
+            {
+                "time_s": lidar.t,
+                "sensor": "lidar",
+                "valid": lidar.valid,
+                "range_m": lidar.range_meas_m,
+                "range_sigma_m": lidar.sigma_m,
+            }
+        )
+    return rows
+
+
+def truth_row(time_s, phase, state, evaluation):
+    properties = evaluation.properties
+    rotation = body_to_ecef_matrix(state.quaternion_body_to_ecef_wxyz)
+    base_position, base_velocity = structural_state(state, properties, [0, 0, 0])
+    return {
+        "time_s": time_s,
+        "phase": phase,
+        **vector_row("cg_position_body_m", state.position_body_m),
+        **vector_row("cg_velocity_body_mps", state.velocity_body_mps),
+        **vector_row(
+            "quaternion_body_to_ecef",
+            state.quaternion_body_to_ecef_wxyz,
+            "wxyz",
+        ),
+        **vector_row("omega_body_radps", state.omega_body_radps),
+        "stage1_propellant_kg": float(state.propellant_kg[0]),
+        "stage2_propellant_kg": float(state.propellant_kg[1]),
+        **vector_row("cg_position_ecef_m", rotation @ state.position_body_m),
+        **vector_row("cg_velocity_ecef_mps", rotation @ state.velocity_body_mps),
+        **vector_row("force_body_n", evaluation.loads.force_body_n),
+        **vector_row("moment_body_nm", evaluation.loads.moment_body_nm),
+        **vector_row("gravity_body_mps2", evaluation.loads.gravity_body_mps2),
+        **vector_row(
+            "frame_acceleration_body_mps2",
+            evaluation.loads.frame_acceleration_body_mps2,
+        ),
+        "base_vertical_velocity_mps": float(
+            np.dot(base_position, base_velocity) / np.linalg.norm(base_position)
+        ),
+        "speed_mps": float(np.linalg.norm(state.velocity_body_mps)),
+        "mach": evaluation.aero.mach,
+        "mass_kg": properties.mass_kg,
+        "cg_station_m": float(properties.cg_station_body_m[0]),
+        **vector_row("inertia_kgm2", np.diag(properties.inertia_body_kgm2)),
+        "base_altitude_m": evaluation.base_altitude_m,
+        "cg_altitude_m": evaluation.cg_altitude_m,
+        "thrust_n": evaluation.thrust_n,
+        "dynamic_pressure_pa": evaluation.aero.dynamic_pressure_pa,
+        "angle_of_attack_rad": evaluation.aero.angle_of_attack_rad,
+    }
+
+
+def run_mission(
+    output,
+    *,
+    until_s=160.0,
+    step_s=None,
+    seed=None,
+    navigation=True,
+    plan=None,
+    provider_factory=default_provider,
+    conditions_provider=None,
+):
+    plan = load_mission() if plan is None else plan
+    settings = plan["integration"]
+    step_s = settings["step_s"] if step_s is None else step_s
+    seed = settings["seed"] if seed is None else seed
+    if (
+        not np.isfinite(until_s)
+        or until_s <= 0
+        or not np.isfinite(step_s)
+        or step_s <= 0
+    ):
+        raise ValueError("Require positive finite duration and step.")
+    if navigation and step_s > 1 / settings["imu_rate_hz"] + 1e-12:
+        raise ValueError("Step must not exceed the configured IMU period.")
+    output = Path(output)
+    output.mkdir(parents=True, exist_ok=True)
+    names = (
+        "truth.csv",
+        "measurements.csv",
+        "navigation.csv",
+        "events.json",
+        "summary.json",
+    )
+    if any((output / name).exists() for name in names):
+        raise FileExistsError("Choose an output directory without existing run files.")
+    input_hashes = {
+        str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest()
+        for p in (
+            *ROOT.glob("*.py"),
+            *ROOT.glob("data/*.json"),
+            *ROOT.glob("data/*.csv"),
+        )
+    }
+    vehicle = prepare_launch(plan)
+    sequence = MissionSequence(plan)
+    provider = provider_factory(vehicle, sequence.phase, plan)
+    flow, derivative = provider.flow_at(0.0)
+    state = vehicle.to_state(
+        consumption_by_stage={"stage1": flow[0]},
+        consumption_derivative_by_stage={"stage1": derivative[0]},
+    )
+    evaluation = provider.evaluate(0.0, state)
+    nav = (
+        NavigationRun(plan, state, evaluation.properties, seed) if navigation else None
+    )
+    time_s, next_output, next_progress = 0.0, 0.0, 10.0
+    status, detail = "requested_interval_complete", ""
+    truth_rows, nav_rows, sensor_counts = [], [], {"imu": 0, "gnss": 0, "lidar": 0}
+    with ExitStack() as stack:
+
+        def writer(name, fields):
+            stream = stack.enter_context(
+                (output / name).open("w", newline="", encoding="utf-8")
+            )
+            result = csv.DictWriter(stream, fieldnames=fields)
+            result.writeheader()
+            return result
+
+        tw = writer("truth.csv", list(truth_row(0, sequence.phase, state, evaluation)))
+        fields = ["time_s", "sensor", "valid", "range_m", "range_sigma_m"]
+        for prefix in (
+            "accel_body_mps2",
+            "gyro_body_radps",
+            "position_ecef_m",
+            "velocity_ecef_mps",
+        ):
+            fields.extend(f"{prefix}_{axis}" for axis in "xyz")
+        sw = writer("measurements.csv", fields)
+        nw = (
+            writer("navigation.csv", list(nav.row(0, state, evaluation.properties)))
+            if nav
+            else None
+        )
+        while True:
+            conditions = (
+                {}
+                if conditions_provider is None
+                else dict(
+                    conditions_provider(time_s, vehicle, state, evaluation, sequence)
+                )
+            )
+            conditions.update(physical_conditions(vehicle, state, evaluation.loads))
+            event = sequence.due(time_s, conditions)
+            clock = sequence.next_clock_time
+            if (
+                sequence.next_event is not None
+                and sequence.next_event.time_s is None
+                and clock is not None
+            ):
+                if time_s >= clock - 1e-9 and event is None:
+                    status, detail = (
+                        "unresolved_event",
+                        sequence.next_event.name + " was not completed.",
+                    )
+                    break
+            if event is not None:
+                try:
+                    if event.name in {
+                        "boostback_start",
+                        "entry_start",
+                        "landing_start",
+                    }:
+                        position, velocity = structural_state(
+                            state, evaluation.properties, [0, 0, 0]
+                        )
+                        descending = np.dot(position, velocity) < 0
+                        conditions.update(
+                            restart_conditions(
+                                vehicle,
+                                state,
+                                evaluation.loads,
+                                required_propellant_kg=conditions.get(
+                                    "required_propellant_kg"
+                                ),
+                                attitude_ready=conditions.get("attitude_ready", False),
+                                propulsion_ready=conditions.get(
+                                    "propulsion_ready", False
+                                ),
+                                descending=descending,
+                            )
+                        )
+                    if event.name == "touchdown":
+                        landing = plan["landing_criteria"]
+                        if (
+                            landing["contact_height_m"] is None
+                            or landing["landing_target_ecef_m"] is None
+                        ):
+                            raise EventConditionError(
+                                "Define the landing target and leg-contact height first."
+                            )
+                        metrics = dict(conditions.get("landing_metrics", {}))
+                        metrics["ground_contact"] = conditions.get(
+                            "ground_contact", False
+                        )
+                        conditions.update(landing_verdict(metrics, landing["limits"]))
+                    record = sequence.accept(event.name, time_s, conditions)
+                    if event.name == "meco":
+                        for stage in vehicle.stages:
+                            for engine in stage.engines:
+                                engine.running, engine.throttle = False, 0.0
+                        vehicle.apply_state(state, time_s)
+                    elif event.name == "stage_separation":
+                        record["parent_state"] = state.to_vector().tolist()
+                        split = separate_coasting_vehicle(
+                            vehicle, state, time_s, evaluation.loads
+                        )
+                        vehicle, state = split.lower, split.lower_state
+                        record["conservation_audit"] = split.audit
+                        record["booster_state"] = state.to_vector().tolist()
+                        record["upper_state"] = split.upper_state.to_vector().tolist()
+                    if event.name == "touchdown":
+                        record["landing_metrics"] = json_value(metrics)
+                        status = (
+                            "landing_success"
+                            if conditions["landing_success"]
+                            else "landing_failed"
+                        )
+                    else:
+                        provider = provider_factory(vehicle, sequence.phase, plan)
+                        evaluation = provider.evaluate(time_s, state)
+                except EventConditionError as error:
+                    status, detail = "event_conditions_unmet", str(error)
+                    break
+            samples = (
+                nav.observe(time_s, state, evaluation.loads, evaluation.properties)
+                if nav
+                else None
+            )
+            if samples:
+                for row in measurement_rows(samples):
+                    sw.writerow(row)
+                    sensor_counts[row["sensor"]] += 1
+            if time_s >= next_output - 1e-9 or time_s >= until_s - 1e-9:
+                row = truth_row(time_s, sequence.phase, state, evaluation)
+                tw.writerow(row)
+                truth_rows.append(row)
+                if nav:
+                    row = nav.row(time_s, state, evaluation.properties)
+                    nw.writerow(row)
+                    nav_rows.append(row)
+                next_output += settings["output_period_s"]
+            if time_s >= until_s - 1e-9 or sequence.phase in {
+                "landed",
+                "landing_failed",
+            }:
+                break
+            clock = sequence.next_clock_time
+            boundary = until_s if clock is None else min(until_s, clock)
+            h = min(step_s, boundary - time_s)
+            if next_output > time_s + 1e-9:
+                h = min(h, next_output - time_s)
+            if nav:
+                future = [
+                    sensor.next_t
+                    for sensor in (nav.imu, nav.gnss, nav.lidar)
+                    if sensor.next_t > time_s + 1e-9
+                ]
+                h = min(h, min(future) - time_s)
+            if h <= 1e-12:
+                raise RuntimeError("Mission did not advance past an event boundary.")
+            try:
+                candidate = rk4_step(
+                    time_s, state, h, vehicle.mass_model(), None, provider
+                )
+                candidate_time = min(time_s + h, until_s)
+                if abs(candidate_time - boundary) < 1e-10:
+                    candidate_time = boundary
+                candidate_evaluation = provider.evaluate(candidate_time, candidate)
+            except PropellantLimitError as error:
+                status, detail = "propellant_limit", str(error)
+                break
+            except ValueError as error:
+                if not any(
+                    text in str(error)
+                    for text in (
+                        "supports altitude",
+                        "outside the adopted drag curve",
+                        "outside the configuration",
+                    )
+                ):
+                    raise
+                status, detail = "model_domain_limit", str(error)
+                break
+            state, time_s, evaluation = candidate, candidate_time, candidate_evaluation
+            if time_s >= next_progress - 1e-9:
+                print(
+                    f"  {time_s:7.2f} s | {sequence.phase:18s} | h={evaluation.cg_altitude_m/1000:6.2f} km",
+                    flush=True,
+                )
+                next_progress += 10.0
+            vehicle.apply_state(
+                state,
+                time_s,
+                consumption_by_stage=dict(
+                    zip(("stage1", "stage2"), evaluation.loads.consumption_kgps)
+                ),
+                consumption_derivative_by_stage=dict(
+                    zip(("stage1", "stage2"), evaluation.loads.consumption_rate_kgps2)
+                ),
+            )
+        last = truth_row(time_s, sequence.phase, state, evaluation)
+        if not truth_rows or abs(truth_rows[-1]["time_s"] - time_s) > 1e-9:
+            tw.writerow(last)
+            truth_rows.append(last)
+            if nav:
+                row = nav.row(time_s, state, evaluation.properties)
+                nw.writerow(row)
+                nav_rows.append(row)
+    summary = {
+        "mission": plan["mission"],
+        "status": status,
+        "detail": detail,
+        "requested_end_s": until_s,
+        "actual_end_s": time_s,
+        "phase": sequence.phase,
+        "final_state_vector": state.to_vector().tolist(),
+        "full_mission_completed": sequence.phase == "landed",
+        "step_s": step_s,
+        "seed": seed,
+        "sensor_counts": sensor_counts,
+        "initial_truth": truth_rows[0],
+        "final_truth": last,
+        "plan": plan,
+        "limitations": [
+            "B multilayer atmosphere, inverse-square gravity, Earth-rotation accelerations and multi-configuration aero are active.",
+            "Generic fairing-based full-stack Cd used for Dragon as A; high-Mach extension and booster coefficients estimated. Mach >10 rejected.",
+            "Ideal pitch PD adds an unlimited pure couple; no physical TVC or booster flip. Return burns and touchdown are not implemented.",
+            "Liquid geometry remains a settled-fluid approximation during coast.",
+            "Navigation uses truth attitude; sensor specifications remain placeholders.",
+            "Published planned times are not actual observed event times.",
+        ],
+        "input_sha256": input_hashes,
+    }
+    summary["physical_state_finite"] = bool(np.all(np.isfinite(state.to_vector())))
+    summary["max_dynamic_pressure_pa"] = max(
+        r["dynamic_pressure_pa"] for r in truth_rows
+    )
+    summary["max_dynamic_pressure_time_s"] = max(
+        truth_rows, key=lambda r: r["dynamic_pressure_pa"]
+    )["time_s"]
+    summary["next_event"] = sequence.next_event.name if sequence.next_event else None
+    if nav:
+        summary["lidar_updates"] = nav.lidar_updates
+        summary["gnss_nis_mean"] = float(np.mean(nav.nis)) if nav.nis else None
+        summary["sensor_specs"] = {
+            "imu": nav.imu.spec,
+            "gnss": nav.gnss.spec,
+            "lidar": nav.lidar.spec,
+        }
+        errors = np.array(
+            [[r[f"position_error_ecef_m_{a}"] for a in "xyz"] for r in nav_rows]
+        )
+        summary["navigation_position_rms_m"] = float(
+            np.sqrt(np.mean(np.sum(errors**2, axis=1)))
+        )
+    summary["physics_case"] = (
+        "independent_terminal_test"
+        if plan.get("vehicle_configuration") == "booster"
+        else "ascent_to_booster_coast"
+    )
+    summary["reference_comparison"] = (
+        compare_reference(output, truth_rows)
+        if plan.get("vehicle_configuration") != "booster"
+        else {
+            "count": 0,
+            "status": "Not applicable: independent assumed terminal-descent case.",
+        }
+    )
+    try:
+        summary["git_commit"] = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True, stderr=subprocess.DEVNULL
+        ).strip()
+    except (OSError, subprocess.CalledProcessError):
+        summary["git_commit"] = None
+    save_json(output / "events.json", sequence.log)
+    save_json(output / "summary.json", summary)
+    return json_value(summary)
+
+
+def compare_reference(output, truth_rows):
+    path = ROOT / "data" / "crs10_ascent_reference.csv"
+    with path.open(encoding="utf-8-sig") as stream:
+        reference = list(csv.DictReader(stream))
+    times = np.array([r["time_s"] for r in truth_rows])
+    rows = []
+    for r in reference:
+        t = float(r["time_s"])
+        if times[0] <= t <= times[-1]:
+            item = {"time_s": t}
+            for name, field in (
+                ("altitude_m", "cg_altitude_m"),
+                ("speed_mps", "speed_mps"),
+            ):
+                value = float(r[name])
+                simulated = float(np.interp(t, times, [x[field] for x in truth_rows]))
+                item.update(
+                    {
+                        "reference_" + name: value,
+                        "simulated_" + name: simulated,
+                        "error_" + name: simulated - value,
+                    }
+                )
+            rows.append(item)
+    if not rows:
+        return {"count": 0, "status": "no overlapping reference samples"}
+    with (output / "validation.csv").open("w", newline="", encoding="utf-8") as stream:
+        writer = csv.DictWriter(stream, fieldnames=list(rows[0]))
+        writer.writeheader()
+        writer.writerows(rows)
+    result = {
+        "count": len(rows),
+        "interval_s": [rows[0]["time_s"], rows[-1]["time_s"]],
+        "basis": "Video-digitized ascent telemetry, E. Speed reference frame not independently verified. Not first-stage return data.",
+        "final_sample": rows[-1],
+    }
+    for name in ("altitude_m", "speed_mps"):
+        result["rmse_" + name] = float(
+            np.sqrt(np.mean([r["error_" + name] ** 2 for r in rows]))
+        )
+    return result
+
+
+def plot_results(output, *, show=False, save=None):
+    import matplotlib
+
+    if not show:
+        matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    output = Path(output)
+
+    def read(name):
+        with (output / name).open(encoding="utf-8") as stream:
+            return list(csv.DictReader(stream))
+
+    truth = read("truth.csv")
+    nav = read("navigation.csv") if (output / "navigation.csv").exists() else []
+    events = json.loads((output / "events.json").read_text())
+    validation = read("validation.csv") if (output / "validation.csv").exists() else []
+    t = np.array([float(r["time_s"]) for r in truth])
+    fig, axes = plt.subplots(3, 2, figsize=(13, 11), sharex=True)
+    for ax, field, label, scale in (
+        (axes[0, 0], "cg_altitude_m", "CG altitude [km]", 0.001),
+        (axes[0, 1], "speed_mps", "Ground-relative CG speed [m/s]", 1),
+        (axes[1, 0], "stage1_propellant_kg", "Stage-1 propellant [t]", 0.001),
+        (axes[1, 1], "cg_station_m", "CG above structural base [m]", 1),
+    ):
+        ax.plot(t, [float(r[field]) * scale for r in truth], label="Simulation")
+        ax.set_ylabel(label)
+    for ax, field, scale in (
+        (axes[0, 0], "altitude_m", 0.001),
+        (axes[0, 1], "speed_mps", 1),
+    ):
+        if validation:
+            ax.plot(
+                [float(r["time_s"]) for r in validation],
+                [float(r["reference_" + field]) * scale for r in validation],
+                "--",
+                label="Video readout (E)",
+            )
+        ax.legend()
+    if nav:
+        nt = [float(r["time_s"]) for r in nav]
+        for ax, prefix, label in (
+            (axes[2, 0], "position_error_ecef_m", "Navigation position error [m]"),
+            (axes[2, 1], "velocity_error_ecef_mps", "Navigation velocity error [m/s]"),
+        ):
+            error = np.array([[float(r[prefix + "_" + a]) for a in "xyz"] for r in nav])
+            ax.plot(nt, np.linalg.norm(error, axis=1))
+            ax.set_ylabel(label)
+    else:
+        for ax in axes[2]:
+            ax.text(
+                0.5, 0.5, "Navigation disabled", ha="center", transform=ax.transAxes
+            )
+    for ax in axes.flat:
+        ax.grid(alpha=0.3)
+        for event in events[1:]:
+            ax.axvline(event["time_s"], color=".6", lw=0.7, ls=":")
+    for ax in axes[2]:
+        ax.set_xlabel("Simulation time [s]")
+    fig.suptitle(
+        "Team integration: "
+        + truth[0]["phase"]
+        + " to "
+        + truth[-1]["phase"]
+        + "\nAssumed commands; navigation supplied with truth attitude"
+    )
+    fig.tight_layout()
+    destination = Path(save) if save else output / "overview.png"
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(destination, dpi=150)
+    if show:
+        plt.show()
+    plt.close(fig)
+    return destination
+
+
+def terminal_plan(plan=None):
+    plan = deepcopy(load_mission() if plan is None else plan)
+    case = plan["terminal_test"]
+    plan["initial_phase"] = "terminal_braking"
+    plan["vehicle_configuration"] = "booster"
+    plan["scope"] = case["basis"]
+    plan["transitions"] = []
+    initial = plan["initial_state"]
+    initial["structural_base_position_body_m"][0] += case["base_altitude_m"]
+    initial["structural_base_velocity_body_mps"] = [
+        case["base_vertical_velocity_mps"],
+        0,
+        0,
+    ]
+    initial["stage1_throttle"] = case["central_engine_throttle"]
+    return plan

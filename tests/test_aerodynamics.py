@@ -334,7 +334,7 @@ class TestHypersonicExtension(unittest.TestCase):
         for engine in vehicle.stages[0].engines:
             engine.running=True
             engine.throttle=1.0
-        provider=SteadyPoweredAscent(vehicle,Environment(ground_altitude_m=10.0),
+        provider=SteadyPoweredAscent(vehicle,Environment(ground_altitude_m=10.0,earth_rotation_rate_radps=0.0),
                                      self.model,aero_configuration='full_stack')
         initial=vehicle.to_state(consumption_by_stage={
             'stage1':provider.consumption_kgps[0]})
@@ -611,7 +611,7 @@ class TestProviderIntegration(unittest.TestCase):
         model=Aerodynamics.from_json(CONFIGURATIONS)
         # Pad exit nozzles sit at the site level; the strict environment
         # requires the site above the ground datum (ground_altitude_m>0).
-        provider=SteadyPoweredAscent(vehicle,Environment(ground_altitude_m=10.0),model,
+        provider=SteadyPoweredAscent(vehicle,Environment(ground_altitude_m=10.0,earth_rotation_rate_radps=0.0),model,
                                      aero_configuration='full_stack')
         initial=vehicle.to_state(consumption_by_stage={
             'stage1':provider.consumption_kgps[0]})

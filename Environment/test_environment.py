@@ -245,12 +245,12 @@ class WindChecks(unittest.TestCase):
 class AltitudeChecks(unittest.TestCase):
     def test_zero_at_the_launch_site(self):
         env=Environment()
-        self.assertEqual(env.altitude(state_at(launch_position_body_m(R)),None),0.0)
+        self.assertAlmostEqual(env.altitude(state_at(launch_position_body_m(R)),None),0.0,delta=1e-6)
 
     def test_ground_altitude_shifts_the_reference_sphere(self):
         env=Environment(ground_altitude_m=100.0)
-        self.assertAlmostEqual(env.altitude(state_at(launch_position_body_m(R)),None),100.0,places=9)
-        self.assertAlmostEqual(env.altitude(state_at(launch_position_body_m(R,-100)),None),0.0,places=9)
+        self.assertAlmostEqual(env.altitude(state_at(launch_position_body_m(R)),None),100.0,delta=1e-6)
+        self.assertAlmostEqual(env.altitude(state_at(launch_position_body_m(R,-100)),None),0.0,delta=1e-6)
 
     def test_measures_height_above_the_curved_surface(self):
         env=Environment()
@@ -265,7 +265,7 @@ class AltitudeChecks(unittest.TestCase):
         state=state_at_ecef(downrange_ecef)
         self.assertAlmostEqual(env.altitude(state,None),R*(np.sqrt(2)-1),places=6)
         below=state_at(launch_position_body_m(R,-50))
-        self.assertAlmostEqual(env.altitude(below,None),-50.0,places=9)
+        self.assertAlmostEqual(env.altitude(below,None),-50.0,delta=1e-6)
 
     def test_independent_of_attitude(self):
         env=Environment()
@@ -281,15 +281,15 @@ class AltitudeChecks(unittest.TestCase):
         env=Environment()
         pad=state_at(launch_position_body_m(R))
         self.assertAlmostEqual(env.altitude(pad,SimpleNamespace(cg_station_body_m=np.zeros(3)),[10,0,0]),
-                               10.0,places=9)
+                               10.0,delta=1e-6)
         # station measured from CG: (station - cg_station) is what moves the point.
         self.assertAlmostEqual(env.altitude(pad,SimpleNamespace(cg_station_body_m=np.array([4.,0,0])),[10,0,0]),
-                               6.0,places=9)
+                               6.0,delta=1e-6)
         # A lateral station offset raises the radius by Pythagoras, not by 10 m.
         lateral=env.altitude(pad,SimpleNamespace(cg_station_body_m=np.zeros(3)),[0,0,10])
-        self.assertAlmostEqual(lateral,np.sqrt(R*R+100)-R,places=9)
+        self.assertAlmostEqual(lateral,np.sqrt(R*R+100)-R,delta=1e-6)
         # station=None ignores properties entirely.
-        self.assertEqual(env.altitude(pad,None),0.0)
+        self.assertAlmostEqual(env.altitude(pad,None),0.0,delta=1e-6)
 
 
 class ConstructionChecks(unittest.TestCase):

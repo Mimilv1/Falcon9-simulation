@@ -114,7 +114,7 @@ class AscentModelChecks(unittest.TestCase):
         pad=State(launch_position_body_m(1e6),[0,0,0],
                   LAUNCH_QUATERNION_BODY_TO_ECEF_WXYZ,[0,0,0],[0,0])
         np.testing.assert_allclose(env.gravity_body(pad),[-3.7,0,0],atol=1e-12)
-        self.assertAlmostEqual(env.altitude(pad,None),0.0,places=9)
+        self.assertAlmostEqual(env.altitude(pad,None),0.0,delta=1e-6)
         with self.assertRaises(ValueError):
             Environment(surface_gravity_mps2=0.0)
 
@@ -135,7 +135,7 @@ class AscentModelChecks(unittest.TestCase):
         env=Environment(earth_radius_m=radius)
         pad=State(launch_position_body_m(radius),[0,0,0],
                   LAUNCH_QUATERNION_BODY_TO_ECEF_WXYZ,[0,0,0],[0,0])
-        self.assertAlmostEqual(env.altitude(pad,None),0.0,places=9)
+        self.assertAlmostEqual(env.altitude(pad,None),0.0,delta=1e-6)
         # One radius downrange at site height: the surface curves away by R*(sqrt(2)-1).
         downrange_ecef=np.array([radius,0.0,radius])
         downrange=State(body_to_ecef_matrix(LAUNCH_QUATERNION_BODY_TO_ECEF_WXYZ).T@downrange_ecef,

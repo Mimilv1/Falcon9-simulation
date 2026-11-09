@@ -1,0 +1,318 @@
+{
+  "mission": "CRS-10",
+  "scope": "Full stack through stage separation; first-stage booster only afterward.",
+  "clock": "Elapsed seconds from liftoff. Official preflight approximate times are adopted as A-class simulation commands, not measured actual times or onboard thresholds.",
+  "sources": {
+    "M1": {
+      "title": "SpaceX CRS-10 Dragon Resupply Mission press kit, February 2017",
+      "url": "https://www.nasa.gov/wp-content/uploads/2018/07/crs10presskitfinal.pdf",
+      "locator": "PDF p.2, Mission Timeline (all times approximate)",
+      "sha256": "73d2640bb313c9dc9dceb4f7c28b8e82a1b243db4f9085bae6d24c6d2ac2114f",
+      "class": "K",
+      "scope": "Official published preflight schedule; no actual cutoff thresholds or restart state vectors."
+    },
+    "M2": {
+      "title": "SpaceX CRS-10 Technical Webcast, 19 February 2017",
+      "url": "https://www.youtube.com/watch?v=rUDLxFUMC9c",
+      "scope": "Primary flight record. No frame-by-frame event timing was measured for this revision."
+    },
+    "M3": {
+      "title": "shahar603 Telemetry-Data CRS-10 mission README",
+      "url": "https://github.com/shahar603/Telemetry-Data/blob/b245d3b81aa36b7941ec10f3f4b508999d106a6d/SpaceX%20CRS-10/README.md",
+      "class": "E",
+      "scope": "Author reports MECO at 143 s, altitude 63.082 km and speed 1675.209 m/s. Analysed telemetry is labelled Stage 2. Not adopted as an exact first-stage state or flight command."
+    }
+  },
+  "initial_state": {
+    "class": "A",
+    "structural_base_position_body_m": [
+      6371000,
+      0,
+      0
+    ],
+    "structural_base_velocity_body_mps": [
+      0,
+      0,
+      0
+    ],
+    "quaternion_body_to_ecef_wxyz": [
+      0.7071067811865476,
+      0,
+      -0.7071067811865476,
+      0
+    ],
+    "omega_body_radps": [
+      0,
+      0,
+      0
+    ],
+    "stage1_throttle": 1.0,
+    "basis": "Earth-centred launch-aligned frame; base at [0,0,R] externally. Body +x nose. Initial base at rest relative Earth; initial CG velocity includes moving CG. Masses from Falcon9Parameters."
+  },
+  "shutdown": {
+    "duration_s": 1.0,
+    "class": "A",
+    "basis": "Quintic smooth envelope required by the existing continuous-flow dynamics. Completion anchored to the published 141 s MECO; duration is not measured. Check 0.5, 1 and 2 s sensitivity."
+  },
+  "transitions": [
+    {
+      "name": "shutdown_start",
+      "phase": "engine_shutdown",
+      "time_s": 140.0,
+      "guards": [
+        "fuel_available"
+      ],
+      "class": "A",
+      "source_ids": [
+        "M1"
+      ],
+      "basis": "141 s reference minus assumed 1 s shutdown."
+    },
+    {
+      "name": "meco",
+      "phase": "full_stack_coast",
+      "time_s": 141.0,
+      "guards": [
+        "zero_flow"
+      ],
+      "class": "A",
+      "source_ids": [
+        "M1"
+      ],
+      "basis": "Completion of smooth shutdown, not instantaneously discontinuous flow."
+    },
+    {
+      "name": "stage_separation",
+      "phase": "booster_coast",
+      "time_s": 144.0,
+      "guards": [
+        "zero_flow",
+        "engines_off",
+        "full_stack_attached"
+      ],
+      "class": "A",
+      "source_ids": [
+        "M1"
+      ],
+      "basis": "Existing zero-impulse, no-discard-mass state map; preserve fixed structural points."
+    },
+    {
+      "name": "boostback_start",
+      "phase": "boostback_burn",
+      "time_s": 161.0,
+      "guards": [
+        "detached",
+        "zero_flow",
+        "engines_off",
+        "fuel_budget_available",
+        "attitude_ready",
+        "propulsion_ready"
+      ],
+      "class": "A",
+      "source_ids": [
+        "M1"
+      ]
+    },
+    {
+      "name": "boostback_end",
+      "phase": "return_coast",
+      "time_s": null,
+      "guards": [
+        "burn_complete",
+        "zero_flow",
+        "engines_off"
+      ],
+      "class": "unresolved",
+      "source_ids": [],
+      "basis": "Burn end must be supplied from verified footage or a declared return-target condition with smooth shutdown. No duration invented."
+    },
+    {
+      "name": "entry_start",
+      "phase": "entry_burn",
+      "time_s": 392.0,
+      "guards": [
+        "detached",
+        "zero_flow",
+        "engines_off",
+        "fuel_budget_available",
+        "attitude_ready",
+        "propulsion_ready",
+        "descending"
+      ],
+      "class": "A",
+      "source_ids": [
+        "M1"
+      ]
+    },
+    {
+      "name": "entry_end",
+      "phase": "aerodynamic_descent",
+      "time_s": null,
+      "guards": [
+        "burn_complete",
+        "zero_flow",
+        "engines_off"
+      ],
+      "class": "unresolved",
+      "source_ids": [],
+      "basis": "Burn end needs a sourced time or an explicit speed/thermal-envelope design target. No duration invented."
+    },
+    {
+      "name": "landing_start",
+      "phase": "landing_burn",
+      "time_s": 453.0,
+      "guards": [
+        "detached",
+        "zero_flow",
+        "engines_off",
+        "fuel_budget_available",
+        "attitude_ready",
+        "propulsion_ready",
+        "descending"
+      ],
+      "class": "A",
+      "source_ids": [
+        "M1"
+      ]
+    },
+    {
+      "name": "touchdown",
+      "phase": "landed",
+      "time_s": null,
+      "guards": [
+        "ground_contact"
+      ],
+      "class": "A",
+      "source_ids": [],
+      "basis": "First descending crossing of landing-contact height, not a forced clock stop. Evaluate pre-contact velocity and attitude; no state reset to create a successful landing."
+    }
+  ],
+  "reference_markers": [
+    {
+      "name": "max_q",
+      "time_s": 75.0,
+      "source_id": "M1",
+      "use": "Comparison marker only. Detect the simulated dynamic-pressure maximum independently."
+    },
+    {
+      "name": "stage2_ignition",
+      "time_s": 152.0,
+      "source_id": "M1",
+      "use": "Upper vehicle; not a first-stage restart."
+    },
+    {
+      "name": "seco",
+      "time_s": 545.0,
+      "source_id": "M1",
+      "use": "Upper vehicle; outside tracked booster scope."
+    },
+    {
+      "name": "dragon_separation",
+      "time_s": 605.0,
+      "source_id": "M1",
+      "use": "Dragon from second stage, not first/second-stage separation."
+    }
+  ],
+  "landing_criteria": {
+    "class": "A",
+    "basis": "Provisional project acceptance limits for a near-stationary upright contact. Not Falcon 9 certified limits; evaluate 0.5x and 2x sensitivity.",
+    "limits": {
+      "vertical_speed_mps": 2.0,
+      "horizontal_speed_mps": 1.0,
+      "tilt_deg": 5.0,
+      "angular_rate_degps": 1.0,
+      "target_error_m": 10.0
+    },
+    "required": [
+      "ground_contact",
+      "legs_deployed"
+    ],
+    "contact_height_m": null,
+    "unresolved": "Define deployed landing-leg contact geometry and LZ-1 in the chosen initial reference before running a landing case. Tail-base height zero is not assumed to be leg contact.",
+    "landing_target_ecef_m": null
+  },
+  "integration": {
+    "step_s": 0.01,
+    "output_period_s": 0.1,
+    "seed": 1,
+    "class": "A",
+    "basis": "Accepted steps aligned to fixed 100 Hz IMU, 10 Hz GNSS/LiDAR, output and event boundaries. No random sampling during RK4 trial evaluations.",
+    "attitude_source": "truth; current C filter does not estimate attitude",
+    "initial_position_error_m": [
+      1.0,
+      -1.0,
+      0.5
+    ],
+    "initial_sigma": [
+      2,
+      2,
+      2,
+      0.05,
+      0.05,
+      0.05,
+      0.1,
+      0.1,
+      0.1
+    ],
+    "sensor_settings_basis": "Existing C-class defaults, including placeholder noise; not certified Falcon 9 sensors.",
+    "imu_station_body_m": [
+      38,
+      0,
+      0
+    ],
+    "gnss_station_body_m": [
+      41,
+      0,
+      0
+    ],
+    "lidar_station_body_m": [
+      0.5,
+      0,
+      0
+    ],
+    "imu_rate_hz": 100,
+    "imu_errors": {
+      "accel_bias_mps2": [
+        0.05,
+        -0.03,
+        0.02
+      ],
+      "accel_scale_factor": 0.001,
+      "accel_bias_rw": 0.0001,
+      "gyro_bias_radps": [
+        0,
+        0,
+        0.0001
+      ]
+    }
+  },
+  "unresolved_before_full_flight": [
+    "Physical TVC/attitude control, booster flip and return steering.",
+    "Dragon/booster-specific validation of estimated aerodynamic coefficients.",
+    "Boostback and entry completion rules, engine sets, throttle and fuel budgets.",
+    "Restart transients and settled-fluid validity during coast/flip.",
+    "Landing target, deployed-leg contact height and landing control law."
+  ],
+  "environment": {
+    "launch_latitude_deg": 28.6,
+    "earth_rotation_rate_radps": 7.292115e-05
+  },
+  "attitude_program": {
+    "start_s": 8.0,
+    "tau_s": 60.0,
+    "tilt_max_deg": 80.0,
+    "kp": 2.0,
+    "kd": 2.5,
+    "class": "A",
+    "basis": "Latest team main ideal eastward pitch program and unlimited pure control couple retained for powered ascent and shutdown. Not CRS-10 guidance or a physical TVC actuator. No flip is commanded after MECO."
+  },
+  "terminal_test": {
+    "class": "A",
+    "base_altitude_m": 1500.0,
+    "base_vertical_velocity_mps": -100.0,
+    "stage1_propellant_kg": 15000.0,
+    "central_engine_throttle": 0.65,
+    "duration_s": 10.0,
+    "basis": "Independent terminal powered-descent integration fixture, not a state inherited from CRS-10 return. Initial altitude within the existing C LiDAR range (1800 m), tail down and centred engine to test retro-flow aero, braking, mass depletion and sensor interfaces. Fuel inventory and throttle are provisional assumptions; no claim of a complete landing. Legs/fins deployed for booster_landing configuration."
+  }
+}

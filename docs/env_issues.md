@@ -13,9 +13,10 @@ a spherical planet centered on the ECEF origin; gravity is inverse-square
 toward that centre and altitude is measured above the curved surface. The
 atmosphere envelope is 0..2000 km, with the isothermal tail above the
 mesopause acting as a documented near-vacuum placeholder. Earth rotation (the
-orbital half of the upgrade) remains open: the ECEF axes are currently treated
-as non-rotating (inertial). The sections below are kept as the rationale for
-that change.
+translational part of the upgrade) is implemented through separate Coriolis
+and centrifugal acceleration. Rotational Earth-rate coupling remains approximate.
+The sections below are historical rationale for the completed spherical upgrade;
+statements about the former flat-Earth implementation describe the old model.
 
 ## What the model covers
 

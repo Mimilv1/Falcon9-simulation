@@ -60,12 +60,12 @@ masses. Source RFZ x-axial stations now match the agreed Body +x convention.
 
 The retained temporary drag model uses the approximate Mach table and source
 locator in `data/drag_curve_pezent.json`, paired with reference area 21.08 m².
-The temporary environment uses the dry 0–11 km troposphere from the
-[US Standard Atmosphere 1976](https://ntrs.nasa.gov/citations/19770009539):
-T₀ = 288.15 K, p₀ = 101,325 Pa, lapse = 0.0065 K/m,
-R = 287.05287 J/(kg·K), γ = 1.4. Geometric height approximates geopotential
-height (E/A); constant gravity magnitude and default zero wind are assumptions.
-These component models do not define a team flight schedule.
+The current environment uses [USSA 1976](https://ntrs.nasa.gov/citations/19770009539) layers through 84.852 km, an assumed
+isothermal near-vacuum tail to 2000 km, inverse-square central gravity and
+separate Earth-rotation accelerations. See `Environement.py` and
+`docs/env_issues.md`. B's multi-configuration aerodynamics uses the sourced
+full-stack axial curve plus explicitly estimated side-force, damping,
+booster and high-Mach terms; see `docs/aero_model.md`.
 
 - **S1** [SpaceX Falcon User Guide, May 2025](https://www.spacex.com/assets/media/falcon-users-guide-2025-05-09.pdf). Table 2-1, printed p.9. Official external geometry, not internal tank/CG data
 - **S2** [Pezent dissertation, 2024](https://ir-api.ua.edu/api/core/bitstreams/cafcf02b-b6e7-47d8-a41b-24b1ba12a154/content). Tables 2.16-2.17, printed p.77 / PDF p.94. Consistent literature engine and mass set; not measured Block 5 flight data
@@ -90,6 +90,6 @@ These component models do not define a team flight schedule.
 | Initial model mass | 553,030 kg | E/A | 22,200+410,900+4,000+107,500+8,430. Inherited stage budgets remain estimates. |
 
 The generic satellite fairing and separate CRS10Parameters class are removed.
-Falcon9Parameters is the only default. No new mission run or event schedule is
-introduced. Temporary force models remain unchanged; their fairing-based drag
-curve still requires reconciliation with Dragon geometry before flight validation.
+Falcon9Parameters is the only default. Mission commands and evidence are in
+`data/crs10_mission.json` and `docs/crs10_mission.md`. The fairing-derived axial
+drag curve still requires reconciliation with Dragon geometry before flight validation.
