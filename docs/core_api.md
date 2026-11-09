@@ -6,6 +6,8 @@ the Earth centre is the origin (0,0,0), and the initial structural base is
 (0,0,6371000) m. This is a launch-aligned Earth-centred frame, not conventional
 Greenwich-axis ECEF. At the pad north is external +x, east −y and up +z.
 The quaternion maps Body to this frame: [√0.5,0,−√0.5,0] initially.
+With this actual matrix, initial Body +x → external +z, Body +y → external +y,
+and Body +z → external −x.
 Earth rotation is included in translation through separate Coriolis and
 centrifugal accelerations. Angular dynamics and gyro Earth-rate treatment
 retain the team's approximate model; no complete inertial-rate correction

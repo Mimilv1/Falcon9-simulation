@@ -1,14 +1,3 @@
-"""Body +x vector/quaternion operations; the fixed reference frame is ECEF.
-
-ECEF convention (project-wide): the Earth centre is the origin (0,0,0) and the
-vehicle launches from (0,0,earth_radius) on the +z axis. Earth rotation is not
-modeled in v0: the ECEF axes are treated as non-rotating (inertial), so only
-the datum changes relative to the former launch-point origin. Quaternions map
-current Body components into ECEF. At launch the vehicle stands vertical,
-Body +x toward the nose along ECEF +z; that fixed alignment is
-LAUNCH_QUATERNION_BODY_TO_ECEF_WXYZ below.
-"""
-
 import numpy as np
 
 
@@ -40,9 +29,6 @@ def quaternion_product(left, right):
     ])
 
 
-# Fixed launch alignment: -90 degree rotation about the common Body/ECEF y axis
-# maps Body +x (nose) onto ECEF +z (radially up at the launch site), Body y
-# onto ECEF y and Body z onto ECEF x.
 LAUNCH_TILT_RAD = -np.pi / 2
 LAUNCH_QUATERNION_BODY_TO_ECEF_WXYZ = np.array([
     np.cos(LAUNCH_TILT_RAD / 2), 0.0, np.sin(LAUNCH_TILT_RAD / 2), 0.0

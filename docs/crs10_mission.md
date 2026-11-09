@@ -130,3 +130,37 @@ burn budgets and goals, attitude/flip commands, restart envelopes and contact
 geometry. Do not claim those phases from the independent terminal fixture.
 C's algorithm design remains C's work; this merge only adapts its existing API
 and writes the measurements/truth needed to verify the final integration.
+
+
+## Verified run, 9 November 2026
+
+Execution source commit: `986fc50` (later edits only remove stale frame comments
+and update documentation). All 100 core/mission tests and 36 environment tests
+passed. Default 0.01 s integration with fixed 100 Hz IMU, seed 1:
+
+| Check | Result |
+| --- | --- |
+| Ascent → shutdown → separation → booster coast | Completed to 160 s, no model-domain or fuel stop |
+| Event times | Shutdown start 140 s, zero-thrust MECO 141 s, separation 144 s |
+| Final CG altitude / ground-relative speed | 74.03 km / 2271.9 m/s |
+| Final booster mass / propellant | 54148.2 kg / 31948.2 kg |
+| Coast | Zero thrust and constant propellant after 141 s |
+| Separation | All mass/momentum/energy relative residuals below 1×10⁻¹⁰; structural position continuity error below 1×10⁻⁸ m |
+| Samples | IMU 16001; GNSS 1601; LiDAR 1601 generated samples, including invalid out-of-range returns |
+| Internal navigation position RMS | 0.690 m over saved 0.1 s samples; truth attitude and provisional sensor errors |
+| Independent terminal check | Base altitude 1500 → 777.6 m; vertical velocity −100 → −44.69 m/s over 10 s; LiDAR updates 101 |
+| Numerical step comparison | 0.05 versus 0.01 s, same event times; final altitude difference <0.001 m and speed difference <0.00001 m/s |
+
+Independent reference comparison exposes a substantial modeling mismatch:
+at 139.973 s the reference altitude/speed are 59.4 km and 1609.444 m/s;
+the simulation gives about 57.53 km and 2317.03 m/s. Speed is about 44% high.
+Across the 140 reference samples, altitude RMSE is about 2.402 km and speed
+RMSE 297.1 m/s. Simulated maximum q̄ is about 35.7 kPa at 63.4 s, compared with
+the approximate 75 s preflight marker. Numerical consistency is therefore
+verified, but CRS-10 trajectory fidelity is not. Review the assumed pitch and
+full-throttle history, reference-frame interpretation and B-model applicability
+before any physical tuning or claim of validation.
+
+`verification.json` in the ascent result directory records runtime assertions
+and the step comparison. Generated CSV/JSON/PNG files remain local under
+`results/`; team members regenerate them with the documented commands.

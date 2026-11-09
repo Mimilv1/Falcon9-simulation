@@ -15,11 +15,11 @@ and remaps the longitudinal axis to Body +x. No RocketPy implementation code was
 - Gᵢ: local exit gyration per unit mass about its own centroid, in m².
 - S(d) = (d·d)I − ddᵀ, the per-unit-mass parallel-axis tensor.
 - F: net nongravitational force including thrust reaction; M: net CG moment.
-- g, ω, a: Body gravity, angular velocity and Earth-relative CG acceleration; a_frame: Coriolis plus centrifugal acceleration.
+- g, ω, a: Body gravity, angular velocity and Earth-relative CG acceleration; aᵣ: Coriolis plus centrifugal acceleration.
 
 The CG-form balances implemented in `dynamics.accelerations` are:
 
-**m a = F + m g + m a_frame + Σ[2μᵢ(ω × dᵢ − ċ) + μ̇ᵢdᵢ]**
+**m a = F + m g + m aᵣ + Σ[2μᵢ(ω × dᵢ − ċ) + μ̇ᵢdᵢ]**
 
 **Jω̇ = M − ω × (Jω) − J̇ω + Σ μᵢ[S(dᵢ) + Gᵢ]ω**
 
@@ -65,10 +65,10 @@ derivatives. These are geometric model derivatives, not independent thrusts.
 
 For a sensor at fixed structural station s, define l=s−c. Its acceleration is:
 
-**a_sensor = a_CG + ω̇ × l + ω × (ω × l) − 2ω × ċ − c̈**
+**aₛ = a + ω̇ × l + ω × (ω × l) − 2ω × ċ − c̈**
 
 All terms here are current Body components. Ideal accelerometer specific force
-is computed in code as a_sensor−g−a_frame, using the CG frame-acceleration
+is computed in code as aₛ−g−aᵣ, using the CG frame-acceleration
 value. Station-dependent frame-acceleration differences are not resolved. The default station in acceleration_truth is coincident with the
 current CG at that instant; C should explicitly supply a fixed s for an IMU.
 
