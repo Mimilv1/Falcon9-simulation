@@ -4,3 +4,21 @@ __pycache__/
 .pytest_cache/
 results/
 .DS_Store
+
+# LaTeX build artifacts (report/)
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.lof
+*.log
+*.lot
+*.out
+*.synctex.gz
+*.tdo
+*.toc
+_minted-*/
+svg-inkscape/
+
+.vscode/
