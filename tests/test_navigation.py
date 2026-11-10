@@ -8,7 +8,8 @@ from frames import (
     quaternion_to_rotation_vector, earth_rotation_quaternion,
 )
 from kalman import NavigationKF, _right_jacobian
-from sensors import StarTrackerSpec
+from sensors import StarTrackerSpec, StarTracker, GNSS, GNSSSpec
+from types import SimpleNamespace
 
 
 def error_between(reference, trial):
@@ -205,6 +206,57 @@ class NavigationChecks(unittest.TestCase):
         k.accel_sf[0] = -1
         with self.assertRaises(ValueError):
             k.predict([0, 0, 0], None, .01, gyro_meas=[0, 0, 0])
+
+    def test_gnss_startup_reports_only_available_history_age(self):
+        sensor = GNSS(GNSSSpec(np.zeros(3), pos_sigma_m=np.zeros(3),
+                     pos_gm_sigma_m=np.zeros(3), vel_sigma_mps=np.zeros(3)), seed=1)
+        properties = SimpleNamespace(cg_station_body_m=np.zeros(3), cg_rate_body_mps=np.zeros(3))
+        state = SimpleNamespace(quaternion_body_to_ecef_wxyz=np.array([1., 0, 0, 0]),
+            position_body_m=np.array([0., 0., 6471000.]),
+            velocity_body_mps=np.array([10., 0., 0.]), omega_body_radps=np.zeros(3))
+        initial = sensor.update(0., state, properties)
+        self.assertEqual(initial.latency_s, 0.)
+        np.testing.assert_allclose(initial.pos_true_m, state.position_body_m)
+        state.position_body_m += state.velocity_body_mps*.1
+        delayed = sensor.update(.1, state, properties)
+        self.assertAlmostEqual(delayed.latency_s, .1)
+        np.testing.assert_allclose(delayed.pos_true_m, initial.pos_true_m)
+
+    def test_star_startup_does_not_invent_an_exposure_before_history(self):
+        spec = StarTrackerSpec(boresight_body=np.array([0., 0., 1.]), rate_hz=10.)
+        sensor = StarTracker(spec, np.array([0., 0., 7e-5]), seed=1)
+        state = SimpleNamespace(quaternion_body_to_ecef_wxyz=np.array([1., 0, 0, 0]),
+             position_body_m=np.array([0., 0., 6471000.]), omega_body_radps=np.zeros(3))
+        first = sensor.update(0., state)
+        self.assertTrue(first.valid)
+        self.assertEqual(first.t_meas_s, 0.)
+        self.assertEqual(first.latency_s, 0.)
+        later = sensor.update(.1, state)
+        self.assertAlmostEqual(later.t_meas_s, 0.)
+        self.assertAlmostEqual(later.latency_s, .1)
+
+    def test_nonzero_accelerometer_scale_and_bias_identification(self):
+        from report.validate_navigation import accel_scale_case
+        result = accel_scale_case()
+        self.assertLess(result['scale_error_norm'], result['scale_tolerance'])
+        self.assertLess(result['bias_error_norm_mps2'], result['bias_tolerance_mps2'])
+
+    def test_nonzero_gyro_calibration_with_independent_analytic_motion(self):
+        from report.validate_navigation import attitude_case
+        result = attitude_case()
+        self.assertLess(result['final_attitude_error_deg'], result['attitude_tolerance_deg'])
+        self.assertLess(result['bias_error_norm_radps'], result['bias_tolerance_radps'])
+        self.assertLess(result['scale_error_norm'], result['scale_tolerance'])
+        self.assertLess(result['misalignment_error_norm_rad'], result['misalignment_tolerance_rad'])
+        self.assertLess(result['calibrated_rate_rms_degps'], result['raw_rate_rms_degps'])
+
+    def test_covariance_consistency_across_twenty_independent_realizations(self):
+        from report.validate_navigation import covariance_case
+        result = covariance_case()
+        low, high = result['position_anees_95_bounds']
+        self.assertGreaterEqual(result['position_anees'], low)
+        self.assertLessEqual(result['position_anees'], high)
+        self.assertTrue(5.5 <= result['gnss_nis_mean'] <= 6.5)
 
 
 if __name__ == '__main__':

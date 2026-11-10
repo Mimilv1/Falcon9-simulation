@@ -232,6 +232,7 @@ class GNSSSample:
     vel_true_mps: np.ndarray
     pos_sigma_m: np.ndarray
     vel_sigma_mps: np.ndarray
+    latency_s: float = 0.0
 
 
 class GNSS:
@@ -290,7 +291,7 @@ class GNSS:
             return False
         return not (s.dropout_prob > 0.0 and self.rng.random() < s.dropout_prob)
 
-    def measure(self, t, p_true, v_true, dt=None):
+    def measure(self, t, p_true, v_true, dt=None, *, latency_s=0.0):
         s = self.spec
         dt = self.period_s if dt is None else dt
         pos_meas = p_true + self.gm + self.rng.normal(0.0, s.pos_sigma_m, 3)
@@ -314,6 +315,7 @@ class GNSS:
             v_true.copy(),
             pos_sigma,
             s.vel_sigma_mps.copy(),
+            float(latency_s),
         )
 
     def update(self, t, state, properties):
@@ -321,8 +323,9 @@ class GNSS:
         self._push(t, p, v)
         if t + 1e-9 < self.next_t:
             return None
-        p_d, v_d = self._delayed(t - self.spec.latency_s)
-        sample = self.measure(t, p_d, v_d)
+        epoch = max(t - self.spec.latency_s, self._hist_t[0])
+        p_d, v_d = self._delayed(epoch)
+        sample = self.measure(t, p_d, v_d, latency_s=t - epoch)
         self.log.append(sample)
         self.next_t += self.period_s
         return sample
@@ -644,7 +647,7 @@ class StarTracker:
         rot_true = body_to_ecef_matrix(q_ecef_body)
         self._push(t, q_ecef_body)
         reason = self._block_reason(t, state, rot_true)
-        t_meas = t - s.latency_s
+        t_meas = max(t - s.latency_s, self._hist_t[0])
         q_delayed = self._delayed_attitude(t_meas)
         q_true = quaternion_product(
             quaternion_product(
@@ -662,7 +665,7 @@ class StarTracker:
         else:
             q_meas = np.full(4, np.nan)
         return StarTrackerSample(
-            t, reason == "ok", reason, t_meas, q_meas, q_true, sigma.copy(), s.latency_s
+            t, reason == "ok", reason, t_meas, q_meas, q_true, sigma.copy(), t - t_meas
         )
 
     def update(self, t, state):

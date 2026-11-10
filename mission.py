@@ -298,7 +298,7 @@ class NavigationRun:
                 if self.filter.gnss_bias_enabled
                 else gnss.pos_sigma_m,
                 gnss.vel_sigma_mps,
-                self.gnss.spec.latency_s,
+                gnss.latency_s,
             )
             self.nis.append(self.filter.last_nis)
         lidar = self.lidar.update(time_s, state, properties)
@@ -402,6 +402,8 @@ def measurement_rows(samples):
                 "time_s": gnss.t,
                 "sensor": "gnss",
                 "valid": gnss.valid,
+                "latency_s": gnss.latency_s,
+                "measurement_epoch_s": gnss.t - gnss.latency_s,
                 **vector_row("position_ecef_m", gnss.pos_meas_m),
                 **vector_row("velocity_ecef_mps", gnss.vel_meas_mps),
             }
@@ -422,6 +424,8 @@ def measurement_rows(samples):
                 "time_s": star.t,
                 "sensor": "startracker",
                 "valid": star.valid,
+                "latency_s": star.latency_s,
+                "measurement_epoch_s": star.t_meas_s,
                 "startracker_reason": star.reason,
                 **vector_row(
                     "quaternion_meas_sensor_to_eci",
@@ -560,7 +564,8 @@ def run_mission(
             return result
 
         tw = writer("truth.csv", list(truth_row(0, sequence.phase, state, evaluation)))
-        fields = ["time_s", "sensor", "valid", "range_m", "range_sigma_m"]
+        fields = ["time_s", "sensor", "valid", "range_m", "range_sigma_m",
+                  "measurement_epoch_s", "latency_s"]
         for prefix in (
             "accel_body_mps2",
             "gyro_body_radps",
