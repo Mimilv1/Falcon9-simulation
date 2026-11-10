@@ -60,3 +60,45 @@ def quaternion_rate_body_to_ecef(quaternion_wxyz, omega_body_radps):
     return 0.5 * quaternion_product(
         normalize_quaternion(quaternion_wxyz), np.r_[0.0, vector3(omega_body_radps)]
     )
+
+
+def quaternion_conjugate(quaternion_wxyz):
+    q = np.asarray(quaternion_wxyz, dtype=float)
+    return np.array([q[0], -q[1], -q[2], -q[3]])
+
+
+def quaternion_from_rotation_vector(rotation_vector_rad):
+    """Exact exponential map: rotation vector [rad] -> unit quaternion [w,x,y,z]."""
+    rv = vector3(rotation_vector_rad)
+    angle = float(np.linalg.norm(rv))
+    if angle < 1e-12:
+        return normalize_quaternion(np.r_[1.0, 0.5 * rv])
+    half = 0.5 * angle
+    return np.r_[np.cos(half), np.sin(half) * rv / angle]
+
+
+def skew(vector):
+    """Cross-product matrix: skew(a) @ b == cross(a, b)."""
+    x, y, z = vector3(vector)
+    return np.array([[0.0, -z, y], [z, 0.0, -x], [-y, x, 0.0]])
+
+def quaternion_to_rotation_vector(quaternion_wxyz):
+    """Shortest rotation vector [rad] of a unit quaternion [w,x,y,z] (log map)."""
+    q = normalize_quaternion(quaternion_wxyz)
+    if q[0] < 0.0:
+        q = -q
+    vector_norm = float(np.linalg.norm(q[1:]))
+    if vector_norm < 1e-15:
+        return 2.0 * q[1:]
+    return 2.0 * np.arctan2(vector_norm, q[0]) * q[1:] / vector_norm
+
+
+def earth_rotation_quaternion(time_s, earth_rotation_ecef_radps):
+    """Quaternion ECEF -> ECI at time_s (ECI and ECEF coincide at t = 0).
+
+    The Earth rotation axis has the same components in both frames, so
+    v_eci = R(exp(w * t)) v_ecef.
+    """
+    return quaternion_from_rotation_vector(
+        float(time_s) * vector3(earth_rotation_ecef_radps)
+    )

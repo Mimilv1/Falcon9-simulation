@@ -11,7 +11,7 @@ def parse_args():
         description="CRS-10 ascent, shutdown, separation and booster coast."
     )
     parser.add_argument(
-        "--case", choices=["ascent", "terminal", "full"], default="ascent"
+        "--case", choices=["ascent", "terminal", "full"], default="full"
     )
     parser.add_argument("--until", type=float, default=None)
     parser.add_argument("--dt", type=float, default=None)
@@ -69,7 +69,31 @@ def main():
         print(result["detail"])
     if "navigation_position_rms_m" in result:
         print(
-            f"Navigation position RMS={result['navigation_position_rms_m']:.3f} m (truth attitude)"
+            f"Navigation position RMS={result['navigation_position_rms_m']:.3f} m "
+            f"(attitude source: {result.get('attitude_source', 'truth')})"
+        )
+        if "attitude_error_rms_deg" in result:
+            print(
+                f"Attitude error RMS={result['attitude_error_rms_deg']:.3f} deg, "
+                f"final={result['attitude_error_final_deg']:.3f} deg "
+                f"(gyro-only baseline final="
+                f"{result['gyro_only_attitude_error_final_deg']:.3f} deg)"
+            )
+    if "startracker_updates" in result:
+        print(
+            f"Star tracker: {result['startracker_updates']} updates, "
+            f"{result['startracker_rejected']} rejected by the NIS gate"
+        )
+    if "gyro_scale_factor_estimate_final" in result:
+        print(
+            "Gyro scale factor (est / true): "
+            f"{result['gyro_scale_factor_estimate_final']} / "
+            f"{result['gyro_scale_factor_true']}"
+        )
+        print(
+            "Gyro misalignment xy,xz,yx,yz,zx,zy [rad] (est / true): "
+            f"{result['gyro_misalignment_estimate_final_rad']} / "
+            f"{result['gyro_misalignment_true_rad']}"
         )
     print("Full return flight completed:", result["full_mission_completed"])
     if "stage2" in result:

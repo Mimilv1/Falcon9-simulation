@@ -222,7 +222,12 @@ class Vehicle:
 
     def navigation_predict(self, imu_sample, previous_time_s, rotation):
         kf = self._require_navigation()
-        kf.predict(imu_sample.accel_meas_mps2, rotation, imu_sample.t - previous_time_s)
+        kf.predict(
+            imu_sample.accel_meas_mps2,
+            rotation,
+            imu_sample.t - previous_time_s,
+            gyro_meas=imu_sample.gyro_meas_radps,
+        )
 
     def navigation_update_gnss(
         self, gnss_sample, gnss_spec, rotation, omega_meas_radps

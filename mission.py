@@ -22,9 +22,21 @@ from ascent import SteadyPoweredAscent, ControlledAscent, PitchProgram
 from dynamics import rk4_step
 from engine_schedule import SmoothShutdown
 from frames import body_to_ecef_matrix
-from kalman import NavigationKF
+from kalman import NavigationKF, misalignment_terms
 from mass_flow import PropellantLimitError
-from sensors import GNSS, GNSSSpec, IMU, IMUSpec, Lidar, LidarSpec
+from sensors import (
+    GNSS,
+    GNSSSpec,
+    GyroAttitude,
+    GyroAttitudeSpec,
+    attitude_error_rotation_vector,
+    IMU,
+    IMUSpec,
+    Lidar,
+    LidarSpec,
+    StarTracker,
+    StarTrackerSpec,
+)
 from staging import separate_coasting_vehicle
 
 ROOT = Path(__file__).parent
@@ -172,25 +184,89 @@ class NavigationRun:
             seed=seed + 2,
         )
         p, v = structural_state(state, properties, self.imu.spec.station_body_m)
+        # Open-loop gyro propagation: kept as a dead-reckoning baseline to compare
+        # against the MEKF. It starts from the same (possibly misaligned) attitude.
+        self.attitude = GyroAttitude(
+            GyroAttitudeSpec(
+                initial_error_rotvec_rad=settings.get(
+                    "initial_attitude_error_rad", (0.0, 0.0, 0.0)
+                )
+            ),
+            state.quaternion_body_to_ecef_wxyz,
+        )
+        # True : the navigation filter is a MEKF; it estimates attitude and gyro
+        #        bias from the noisy gyros + GNSS/lidar and uses its own attitude.
+        # False: the filter uses the true attitude (original behaviour).
+        self.use_estimated_attitude = settings.get("use_estimated_attitude", True)
+        attitude_kwargs = {}
+        if self.use_estimated_attitude:
+            attitude_kwargs = dict(
+                q0=self.attitude.q.copy(),
+                attitude_sigma0=settings.get("initial_attitude_sigma_rad", 0.01),
+                gyro_bias_sigma0=settings.get("initial_gyro_bias_sigma_radps", 1e-3),
+                # Gyro scale factor + misalignment estimated by the MEKF (the truth
+                # values live in plan["integration"]["imu_errors"]; filter starts at 0)
+                estimate_gyro_calibration=settings.get("estimate_gyro_calibration", True),
+                gyro_sf_sigma0=settings.get("initial_gyro_scale_factor_sigma", 1e-3),
+                gyro_mis_sigma0=settings.get(
+                    "initial_gyro_misalignment_sigma_rad", 1e-3
+                ),
+                gyro_sf_rw=settings.get("gyro_scale_factor_rw", 0.0),
+                gyro_mis_rw=settings.get("gyro_misalignment_rw", 0.0),
+            )
         self.filter = NavigationKF.from_imu_spec(
             self.imu.spec,
             p + settings["initial_position_error_m"],
             v,
             settings["initial_sigma"],
             environment=self.environment,
+            **attitude_kwargs,
+        )
+        # Star tracker (absolute attitude aiding of the MEKF). Optional keys in
+        # plan["integration"]["star_tracker"]: "enabled" (default True), "gate_nis"
+        # (default 16.27 = 99.9 % for 3 dof) and any StarTrackerSpec field.
+        st_cfg = dict(settings.get("star_tracker", {}))
+        st_enabled = st_cfg.pop("enabled", True) and self.use_estimated_attitude
+        self.startracker_gate_nis = st_cfg.pop("gate_nis", 16.27)
+        st_cfg.setdefault("planet_radius_m", self.environment.earth_radius_m)
+        self.startracker = (
+            StarTracker(
+                StarTrackerSpec(**st_cfg),
+                earth_rotation_ecef_radps=self.environment.earth_rotation_ecef_radps,
+                seed=seed + 3,
+            )
+            if st_enabled
+            else None
         )
         self.last_time = None
         self.last_omega = np.zeros(3)
         self.lidar_updates = 0
+        self.startracker_updates = 0
+        self.startracker_nis = []
         self.nis = []
 
+    @property
+    def sensors(self):
+        """Sensors that schedule their own sample times."""
+        sensors = [self.imu, self.gnss, self.lidar]
+        return sensors + ([self.startracker] if self.startracker is not None else [])
+
     def observe(self, time_s, state, loads, properties):
-        rotation = body_to_ecef_matrix(state.quaternion_body_to_ecef_wxyz)
+        truth_rotation = body_to_ecef_matrix(state.quaternion_body_to_ecef_wxyz)
         imu = self.imu.update(time_s, state, loads, properties)
+        if imu is not None:
+            self.attitude.update(time_s, imu, state.quaternion_body_to_ecef_wxyz)
+        # With the MEKF the filter ignores `rotation` and uses its own attitude
+        rotation = (
+            self.filter.rotation if self.use_estimated_attitude else truth_rotation
+        )
         if imu is not None:
             if self.last_time is not None:
                 self.filter.predict(
-                    imu.accel_meas_mps2, rotation, time_s - self.last_time
+                    imu.accel_meas_mps2,
+                    rotation,
+                    time_s - self.last_time,
+                    gyro_meas=imu.gyro_meas_radps,
                 )
             self.last_time, self.last_omega = time_s, imu.gyro_meas_radps
         gnss = self.gnss.update(time_s, state, properties)
@@ -220,13 +296,54 @@ class NavigationRun:
                 lidar.sigma_m,
             )
             self.lidar_updates += int(update is not None)
-        return imu, gnss, lidar
+        star = None
+        if self.startracker is not None:
+            star = self.startracker.update(time_s, state)
+            if star is not None and star.valid:
+                residual = self.filter.update_startracker(
+                    star.q_meas_sensor_to_eci_wxyz,
+                    star.t_meas_s,
+                    self.startracker.spec.q_body_from_sensor,
+                    star.sigma_sensor_rad,
+                    self.environment.earth_rotation_ecef_radps,
+                    star.latency_s,
+                    gate_nis=self.startracker_gate_nis,
+                )
+                if residual is not None:
+                    self.startracker_updates += 1
+                    self.startracker_nis.append(self.filter.last_st_nis)
+        return imu, gnss, lidar, star
 
     def row(self, time_s, state, properties):
         p, v = structural_state(state, properties, self.imu.spec.station_body_m)
         x = self.filter.x
+        q_true = state.quaternion_body_to_ecef_wxyz
+        gyro_only_error = attitude_error_rotation_vector(self.attitude.q, q_true)
+        if self.use_estimated_attitude:
+            q_est = self.filter.q
+            attitude_sigma = self.filter.attitude_sigma_rad
+        else:
+            q_est = q_true
+            attitude_sigma = np.full(3, np.nan)
+        attitude_error = attitude_error_rotation_vector(q_est, q_true)
         return {
             "time_s": time_s,
+            # Attitude used by the navigation filter (MEKF estimate, or truth)
+            **vector_row("quaternion_est_body_to_ecef", q_est, "wxyz"),
+            **vector_row("attitude_error_body_rad", attitude_error),
+            "attitude_error_deg": float(np.rad2deg(np.linalg.norm(attitude_error))),
+            **vector_row("attitude_sigma_body_rad", attitude_sigma),
+            **vector_row("gyro_bias_est_body_radps", self.filter.bg),
+            **vector_row("gyro_scale_factor_est", self.filter.gyro_sf),
+            **vector_row(
+                "gyro_misalignment_est_rad",
+                self.filter.gyro_mis,
+                ("xy", "xz", "yx", "yz", "zx", "zy"),
+            ),
+            # Open-loop gyro propagation baseline (no aiding)
+            "gyro_only_attitude_error_deg": float(
+                np.rad2deg(np.linalg.norm(gyro_only_error))
+            ),
             **vector_row("position_ecef_m", x[:3]),
             **vector_row("velocity_ecef_mps", x[3:6]),
             **vector_row("accel_bias_body_mps2", x[6:9]),
@@ -240,7 +357,7 @@ class NavigationRun:
 
 
 def measurement_rows(samples):
-    imu, gnss, lidar = samples
+    imu, gnss, lidar, star = samples
     rows = []
     if imu is not None:
         rows.append(
@@ -270,6 +387,20 @@ def measurement_rows(samples):
                 "valid": lidar.valid,
                 "range_m": lidar.range_meas_m,
                 "range_sigma_m": lidar.sigma_m,
+            }
+        )
+    if star is not None:
+        rows.append(
+            {
+                "time_s": star.t,
+                "sensor": "startracker",
+                "valid": star.valid,
+                "startracker_reason": star.reason,
+                **vector_row(
+                    "quaternion_meas_sensor_to_eci",
+                    star.q_meas_sensor_to_eci_wxyz,
+                    "wxyz",
+                ),
             }
         )
     return rows
@@ -386,7 +517,11 @@ def run_mission(
     )
     time_s, next_output, next_progress = 0.0, 0.0, 10.0
     status, detail = "requested_interval_complete", ""
-    truth_rows, nav_rows, sensor_counts = [], [], {"imu": 0, "gnss": 0, "lidar": 0}
+    truth_rows, nav_rows, sensor_counts = (
+        [],
+        [],
+        {"imu": 0, "gnss": 0, "lidar": 0, "startracker": 0},
+    )
     with ExitStack() as stack:
 
         def writer(name, fields):
@@ -406,6 +541,8 @@ def run_mission(
             "velocity_ecef_mps",
         ):
             fields.extend(f"{prefix}_{axis}" for axis in "xyz")
+        fields.append("startracker_reason")
+        fields.extend(f"quaternion_meas_sensor_to_eci_{a}" for a in "wxyz")
         sw = writer("measurements.csv", fields)
         nw = (
             writer("navigation.csv", list(nav.row(0, state, evaluation.properties)))
@@ -555,7 +692,7 @@ def run_mission(
             if nav:
                 future = [
                     sensor.next_t
-                    for sensor in (nav.imu, nav.gnss, nav.lidar)
+                    for sensor in nav.sensors
                     if sensor.next_t > time_s + 1e-9
                 ]
                 h = min(h, min(future) - time_s)
@@ -702,13 +839,59 @@ def run_mission(
             "imu": nav.imu.spec,
             "gnss": nav.gnss.spec,
             "lidar": nav.lidar.spec,
+            **(
+                {"startracker": nav.startracker.spec}
+                if nav.startracker is not None
+                else {}
+            ),
         }
+        summary["startracker_updates"] = nav.startracker_updates
+        summary["startracker_rejected"] = (
+            nav.filter.startracker_rejected if nav.startracker is not None else 0
+        )
+        summary["startracker_nis_mean"] = (
+            float(np.mean(nav.startracker_nis)) if nav.startracker_nis else None
+        )
         errors = np.array(
             [[r[f"position_error_ecef_m_{a}"] for a in "xyz"] for r in nav_rows]
         )
         summary["navigation_position_rms_m"] = float(
             np.sqrt(np.mean(np.sum(errors**2, axis=1)))
         )
+        summary["attitude_source"] = (
+            "mekf_gyro_gnss_lidar" if nav.use_estimated_attitude else "truth"
+        )
+        summary["limitations"][4] = (
+            "Navigation attitude and gyro bias are estimated by a MEKF from noisy gyros "
+            "with GNSS/lidar aiding (roll about the thrust axis is weakly observable); "
+            "sensor specifications remain placeholders."
+            if nav.use_estimated_attitude
+            else "Navigation uses truth attitude; sensor specifications remain placeholders."
+        )
+        summary["attitude_error_final_deg"] = nav_rows[-1]["attitude_error_deg"]
+        summary["attitude_error_rms_deg"] = float(
+            np.sqrt(np.mean([r["attitude_error_deg"] ** 2 for r in nav_rows]))
+        )
+        summary["gyro_only_attitude_error_final_deg"] = nav_rows[-1][
+            "gyro_only_attitude_error_deg"
+        ]
+        summary["gyro_bias_estimate_final_radps"] = [
+            nav_rows[-1][f"gyro_bias_est_body_radps_{a}"] for a in "xyz"
+        ]
+        if nav.filter.calibration_enabled:
+            pairs = ("xy", "xz", "yx", "yz", "zx", "zy")
+            summary["gyro_scale_factor_estimate_final"] = [
+                nav_rows[-1][f"gyro_scale_factor_est_{a}"] for a in "xyz"
+            ]
+            summary["gyro_scale_factor_true"] = nav.imu.spec.gyro_scale_factor
+            summary["gyro_scale_factor_sigma_final"] = nav.filter.gyro_sf_sigma
+            summary["gyro_misalignment_estimate_final_rad"] = [
+                nav_rows[-1][f"gyro_misalignment_est_rad_{p}"] for p in pairs
+            ]
+            summary["gyro_misalignment_true_rad"] = misalignment_terms(
+                nav.imu.spec.gyro_misalignment
+            )
+            summary["gyro_misalignment_sigma_final_rad"] = nav.filter.gyro_mis_sigma_rad
     summary["physics_case"] = (
         "independent_terminal_test"
         if plan.get("vehicle_configuration") == "booster"
@@ -863,7 +1046,7 @@ def plot_results(output, *, show=False, save=None):
         + truth[0]["phase"]
         + " to "
         + truth[-1]["phase"]
-        + "\nAssumed commands; navigation supplied with truth attitude"
+        + "\nAssumed commands; navigation attitude source: see summary.json (attitude_source)"
     )
     fig.tight_layout()
     destination = Path(save) if save else output / "overview.png"
