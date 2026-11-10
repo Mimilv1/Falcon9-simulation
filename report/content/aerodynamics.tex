@@ -53,7 +53,8 @@ with reference area and length per configuration
 (Table~\ref{tab:aero-configurations}). The normal force acts along the
 negative lateral relative-velocity direction at the configuration's
 windward-end station ($57.6\,\mathrm{m}$ full stack, $41.0\,\mathrm{m}$
-booster), mirrored about the center-of-gravity station for retro flow;
+booster, $17.3\,\mathrm{m}$ second stack), mirrored about the
+center-of-gravity station for retro flow;
 crossflow segments act at their side-area centroids. For
 \texttt{booster\_landing} the body segment (width $3.66\,\mathrm{m}$,
 $C_{Dc} = 1.1$) is supplemented by the combined grid-fin segment
@@ -86,7 +87,8 @@ Rotary damping closes the moment set:
 %
 with pitch and yaw tied by symmetry and roll treated separately (declared
 coefficients $c$: $-10$ full stack, $-20$ booster, roll $-3$ with fins
-deployed).
+deployed; a declared zero means roll damping is modeled as unmodeled for
+that configuration).
 
 \subsection{Configurations and axial curves}
 
@@ -181,14 +183,12 @@ Within the domain, declared-estimate coefficients do not fail --- they
 produce plausible numbers with real uncertainty.
 
 The test suite (\texttt{tests/test\_aerodynamics.py}, 42 tests) pins the
-conventions class by class: zero-angle flight reproduces the simple drag
-baseline byte for byte; normal-force direction, retro-flow reversal and the
-windward-end mirror convention hold in both flow directions; the damping
-formula is checked term by term; physical invariants (the flow extracts
-energy at every angle, damping dissipates, wind enters only through the
-relative velocity, continuity at $\alpha = 90^{\circ}$) are enforced; the
-fin combinatorics of Equation~\eqref{eq:aero-fin} are verified at all
-azimuths including retro reversal; and all five configurations load from
-the JSON with the sourced knot intact, while a two-second vertical
-propagation exercises the provider integration into the shared dynamics
-core.
+conventions: the zero-angle drag baseline, normal-force direction and the
+windward-end mirror convention in both flow directions, the damping
+formula term by term, the physical invariants (energy extraction at every
+angle, dissipative damping, wind entering only through the relative
+velocity, continuity at $\alpha = 90^{\circ}$), the fin combinatorics of
+Equation~\eqref{eq:aero-fin} at all azimuths including retro reversal,
+and the loading of all five configurations from the JSON with the sourced
+knot intact, plus a two-second vertical propagation through the shared
+dynamics core.

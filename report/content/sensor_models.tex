@@ -1,0 +1,121 @@
+\section{Sensor Models and Measurement Generation}
+\label{sec:sensors}
+
+Four sensor front-ends generate measurements from the truth trajectory:
+an \ac{IMU}, a \ac{GNSS} receiver, a \ac{LIDAR} altimeter, and a star
+tracker (\texttt{sensors.py}). Sampling occurs only at accepted
+integration times whose $0.01\,\mathrm{s}$ step is an integer multiple of
+every sensor period, so all rates in Table~\ref{tab:sensors} are hit
+exactly; no random numbers are drawn during integration trial
+evaluations, and a fixed seed reproduces a run sample for sample. The
+navigation-consumer side of these streams is the filter of
+Section~\ref{sec:navigation}; this section covers measurement generation
+only. All specs are placeholder research assumptions (classes A/C), not
+certified Falcon~9 hardware.
+
+\begin{table}[htbp]
+\centering
+\begin{tabular}{lllp{6.6cm}}
+\toprule
+Sensor & Rate & Mounting & Error model \\
+\midrule
+IMU & $100\,\mathrm{Hz}$ & station $[38,0,0]$ &
+accel $\sigma = 0.01\,\mathrm{m/s^2}$, bias $[0.05,-0.03,0.02]\,\mathrm{m/s^2}$,
+scale factor $10^{-3}$, bias random walk $10^{-4}$;
+gyro $\sigma = 10^{-4}\,\mathrm{rad/s}$, bias $[0,0,10^{-4}]\,\mathrm{rad/s}$;
+misalignment and temperature models supported \\
+GNSS & $10\,\mathrm{Hz}$ & antenna $[41,0,0]$ &
+pos $\sigma = [1.5, 1.5, 2.5]\,\mathrm{m}$ plus Gauss-Markov
+$\sigma = [0.6, 0.6, 1.0]\,\mathrm{m}$ at $\tau = 300\,\mathrm{s}$;
+vel $\sigma = 0.1\,\mathrm{m/s}$;
+latency $0.1\,\mathrm{s}$; outages and dropouts supported \\
+LiDAR & $10\,\mathrm{Hz}$ & station $[0.5,0,0]$, boresight $-x$ &
+slant range $1$--$1\,800\,\mathrm{m}$,
+$\sigma = 0.05\,\mathrm{m} + 10^{-4}\,R$ \\
+Star tracker & $4\,\mathrm{Hz}$ & boresight $60^{\circ}$ from $+x$ toward $+y$ &
+cross-boresight $\sigma = 5\,\mathrm{arcsec}$, boresight roll
+$\sigma = 40\,\mathrm{arcsec}$; latency $0.1\,\mathrm{s}$ \\
+\bottomrule
+\end{tabular}
+\caption{Sensor front-ends and adopted settings; the stations are Body
+coordinates. Every entry is a placeholder research assumption (class A/C),
+not a certified Falcon~9 sensor.}
+\label{tab:sensors}
+\end{table}
+
+\subsection{Inertial measurement unit}
+
+The \ac{IMU} measures specific force and angular rate at its fixed
+structural station. The ideal specific force includes the station
+kinematics of the dynamics core --- the angular-rate and
+center-of-gravity-migration terms of moving the measurement point off the
+center of gravity --- so the accelerometer senses what a real strapped-down
+unit at that station would sense. Per sample, the measured pair is
+%
+\begin{equation}
+\label{eq:imu-model}
+\mathbf{f}_{\mathrm{meas}} = \mathbf{A}\,\mathbf{f}_{\mathrm{true}}
++ \mathbf{b}_a + \mathbf{b}_{a,T} + \mathbf{b}_{a,\mathrm{rw}} + \mathbf{n}_a,
+\qquad
+\boldsymbol{\omega}_{\mathrm{meas}} = \mathbf{G}\,\boldsymbol{\omega}_{\mathrm{true}}
++ \mathbf{b}_g + \mathbf{n}_g,
+\end{equation}
+%
+with per-axis scale-factor/misalignment matrices
+$\mathbf{A},\mathbf{G} = \mathbf{I} + \mathrm{diag}(\cdot) + \mathbf{M}$
+(zero diagonal of $\mathbf{M}$), constant biases, temperature coefficients
+about a $20\,^{\circ}\mathrm{C}$ reference, bias random walks driven per
+sample as $\mathcal{N}(0, \sigma_{\mathrm{rw}}^2\,\Delta t)$, and white
+noise at the sigmas of Table~\ref{tab:sensors}. The nominal mission uses
+the biases, scale factor and random walk listed in the table, with
+misalignment, temperature and gyro scale-factor terms at zero (modeled
+but switched off). The gyro measures the Body rate relative to the
+rotating \ac{ECEF} frame, consistent with the quaternion transport
+equation the navigation filter propagates.
+
+\subsection{GNSS, LiDAR and star tracker}
+
+The \ac{GNSS} receiver provides antenna position and velocity in the
+external frame, transformed from the truth state with the full lever-arm
+kinematics (antenna station minus \ac{IMU} station, angular-rate cross
+term and center-of-gravity migration). A $0.1\,\mathrm{s}$ latency model
+feeds a truth-side history buffer that is linearly interpolated at the
+delayed epoch, so the emitted sample is a measurement of the past state,
+not of the present one. The position error is a first-order Gauss-Markov
+process beside the white noise (updating per sample with the configured
+$300\,\mathrm{s}$ correlation time), modelling the slow, correlated
+component absent from naive white-noise \ac{GNSS} error. First-fix delays,
+scheduled outages and random dropouts are supported and reported through
+a validity flag; the nominal run has none of them, and every sample is
+valid.
+
+The \ac{LIDAR} measures slant range to the spherical ground along its
+$-x$ boresight. Validity is geometric: the analytic line--sphere
+intersection must exist, point downward and land inside the declared
+$1$--$1\,800\,\mathrm{m}$ envelope; invalid geometry is reported as an
+invalid sample, never extrapolated. Range noise is
+$0.05\,\mathrm{m} + 10^{-4}R$.
+
+The star tracker provides absolute attitude as a sensor-frame-to-\ac{ECI}
+quaternion. The \ac{ECI} frame is defined to coincide with the
+launch-aligned \ac{ECEF} frame at $t = 0$, and the Earth rotation carries
+the conversion, so the injection of rotation into the attitude chain is
+explicit rather than implicit. Noise is $5\,\mathrm{arcsec}$
+cross-boresight and $40\,\mathrm{arcsec}$ about the boresight per
+exposure, with a $0.1\,\mathrm{s}$ latency applied on the attitude
+history. Availability is physical: the unit is blinded above
+$2^{\circ}/\mathrm{s}$ body rate, below $60\,\mathrm{km}$ altitude
+(dense atmosphere), inside the $20^{\circ}$ Earth-limb exclusion, and
+optionally inside a $40^{\circ}$ solar exclusion; first-fix, outage and
+dropout faults are supported (nominally off). The reported sample always
+carries its blinding reason, making the availability record auditable in
+the run output.
+
+\paragraph*{Assumptions and limitations}
+All noise, bias and latency values are declared placeholders, not datasheet
+values; the \ac{GNSS} model has no ionospheric, tropospheric or multipath
+terms; the \ac{LIDAR} assumes the bare sphere of
+Section~\ref{sec:environment} as ground; the star tracker mounting is a
+placeholder that keeps the boresight sky-pointing for an upright vehicle,
+and vehicle-generated obscuration (plumes, stage interfaces) is not
+modeled.
