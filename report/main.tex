@@ -1,34 +1,38 @@
-
-\documentclass[
-  english,        % define the document language (english, german)
-  font=libertine,     % define main text font (helvet, times, palatino, libertine)
-  onecolumn,      % use onecolumn or twocolumn layout
-]{tumarticle}
+\documentclass[english,font=times,onecolumn]{tumarticle}
 
 \usepackage{acro}
-\input{content/acronyms}
-
-% load additional packages
-\usepackage{lipsum}
 \usepackage{booktabs}
-\usepackage{svg}
+\usepackage{graphicx}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{placeins}
+\usepackage{url}
+\input{content/acronyms}
+\newcommand{\vect}[1]{\boldsymbol{#1}}
+\newcommand{\mat}[1]{\mathbf{#1}}
+\setlength{\emergencystretch}{2em}
+\setlength{\textfloatsep}{10pt plus 2pt minus 2pt}
+\setlength{\intextsep}{8pt plus 2pt minus 2pt}
+\setlength{\floatsep}{8pt plus 2pt minus 2pt}
+\RedeclareSectionCommand[beforeskip=2ex plus .5ex minus .2ex,afterskip=.8ex]{section}
+\RedeclareSectionCommand[beforeskip=1.5ex plus .4ex minus .2ex,afterskip=.6ex]{subsection}
+\RedeclareSectionCommand[beforeskip=1.2ex plus .3ex minus .2ex,afterskip=.5ex]{subsubsection}
+\clubpenalty=10000
+\widowpenalty=10000
+\brokenpenalty=10000
+\raggedbottom
+\ifdefined\setmonofont
+\setmonofont{lmmono10-regular.otf}[Scale=MatchLowercase]
+\fi
 
-
-% article metadata
-\title{Falcon9 Simulation}
+\title{Falcon 9 CRS-10 Vehicle Simulator and Navigation}
 \subtitle{Topics in Aerospace Engineering - Team 5}
-
 \author{Park Kwanwoo}
 \author{Lambin Emilien}
 \author{Bieser Philipp}
-
 \date{\today}
 
-
-
 \begin{document}
-
-
 \maketitle
 \tableofcontents
 
@@ -49,7 +53,13 @@
 %\input{content/assessment}         % Ch 10 - to be written
 %\input{content/conclusions}        % Ch 11 - to be written
 % further chapters are inserted here in document order
+\clearpage
+\input{content/introduction}
+\FloatBarrier
+\input{content/architecture}
+\FloatBarrier
+\clearpage
+\input{content/vehicle_mission}
+\FloatBarrier
 \input{content/references}
-
-
 \end{document}
