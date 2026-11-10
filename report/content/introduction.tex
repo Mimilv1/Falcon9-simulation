@@ -2,23 +2,21 @@
 \label{sec:introduction}
 
 \subsection{Project 2 objectives}
-Project 2 develops a physics-based Falcon 9 simulator and a navigation system driven by simulated sensor measurements. Forces, moments, changing mass properties, and numerical integration generate the vehicle motion; the navigation algorithm estimates states from imperfect observations of that motion. The course identifies this environment as the computational foundation for guidance design in Project 3 and integrated control in Project 4 \cite[slides 2--4]{project2}.
+Project 2 develops a physics-based Falcon 9 simulator and navigation driven by simulated sensor measurements. Forces, moments, changing mass properties and numerical integration generate motion; imperfect observations of that motion drive state estimation. The course defines this environment as the computational foundation for guidance in Project 3 and integrated control in Project 4 \cite[slides 2--4]{project2}.
 
-The assignment covers equations of motion and coordinate systems, gravity and atmosphere, propulsion and aerodynamics, mass/inertia variation, configuration changes, and estimation of position, velocity, attitude, and angular velocity. Its validation requirement combines representative flight phases, public flight-data comparisons, and navigation-error analysis \cite[slides 4--6]{project2}. Accordingly, the report distinguishes physical-model verification, agreement with external flight evidence, and estimation error relative to simulation truth. These comparisons establish different aspects of the simulator's credibility.
+The required models cover equations of motion, coordinate systems, gravity, atmosphere, propulsion, aerodynamics, mass/inertia variation and configuration changes. Navigation addresses position, velocity, attitude and angular velocity. Evaluation therefore separates model verification, comparison with public flight evidence, and estimation error relative to simulation truth \cite[slides 4--6]{project2}.
 
-\subsection{CRS-10 selection and vehicle configuration}
-CRS-10 is SpaceX's tenth contracted Dragon cargo-resupply mission to the International Space Station. The official mission material identifies a Falcon 9/Dragon launch from Launch Complex 39A, first-stage recovery at Landing Zone 1, and an approximate sequence of cutoff, separation, and restart events \cite{nasacrs10press}. The public technical webcast and its published ascent digitization provide an accessible reference for a quantitative comparison \cite{crs10webcast,crs10telemetry}.
+\subsection{Why CRS-10?}
+CRS-10 is SpaceX's tenth contracted Dragon cargo-resupply mission to the ISS. Official material identifies LC-39A launch, first-stage recovery at LZ-1, and approximate cutoff, separation and restart times \cite{nasacrs10press}. Its webcast and published ascent digitization provide a quantitative reference \cite{crs10webcast,crs10telemetry}. Common-stack ascent, booster return and upper-stage continuation exercise both continuous propagation and configuration changes.
 
-The mission exercises three connected trajectory segments: common-stack ascent, first-stage return, and upper-stage continuation. It therefore tests configuration changes and inherited states as well as continuous motion. The Dragon payload also fixes the configuration choice: the model carries one loaded Dragon/trunk assembly rather than a generic satellite and fairing. NASA's $2490\,\mathrm{kg}$ cargo inventory is a subset of that loaded assembly, not its total mass \cite{nasacrs10overview}.
-
-Figure~\ref{fig:crs10-context} identifies the selected hardware and official mission document. The press kit supplies mission context and approximate preflight timing; generic Falcon user guides supply supplementary geometry and operating-point evidence with their configuration/date limitations. Internal dimensions and mass properties require the evidence-qualified modeling described in the vehicle chapter.
+The modeled payload is one loaded Dragon/trunk assembly, not a satellite and separate fairing. NASA's $2490\,\mathrm{kg}$ cargo inventory is included within that assembly, not its total mass \cite{nasacrs10overview}. Figure~\ref{fig:crs10-context} identifies the hardware and official mission document; Section~\ref{sec:vehicle} qualifies the mixed-source internal properties.
 
 \begin{figure}[!htbp]
 \centering
-\begin{minipage}[c]{0.57\linewidth}
+\begin{minipage}[c]{0.45\linewidth}
 \includegraphics[width=\linewidth]{images/crs10_pad_nasa.jpg}
 \end{minipage}\hfill
-\begin{minipage}[c]{0.39\linewidth}
+\begin{minipage}[c]{0.43\linewidth}
 \centering
 \includegraphics[width=\linewidth]{images/crs10_presskit_header.pdf}\\[1ex]
 \includegraphics[width=0.60\linewidth]{images/crs10_mission_patch.pdf}
@@ -27,10 +25,7 @@ Figure~\ref{fig:crs10-context} identifies the selected hardware and official mis
 \label{fig:crs10-context}
 \end{figure}
 
-\clearpage
-\subsection{Simulation and validation scope}
-The initial vehicle contains both stages and the loaded Dragon assembly. At separation, a conservative state map creates two children. The first stage proceeds through boostback, coast, entry burn, aerodynamic descent, landing burn, and first geometric contact. The upper child retains Dragon and continues under its own engine and attitude commands. Both children inherit the propagated separation state; a separately selected descent checkpoint does not create the full-return trajectory.
+\subsection{Demonstration and validation scope}
+Both children inherit the propagated separation state. The booster returns to geometric contact, while the upper-stage/Dragon child continues under assumed commands. First-stage navigation uses gyro-propagated attitude and GNSS/LiDAR updates with a gated star-tracker interface. Truth supplies virtual observations, assumed initial alignment and evaluation, rather than continuous estimator attitude input.
 
-Flight commands provide a repeatable scenario for exercising the physical models. Scheduled reference times are distinguished from state-triggered return conditions, and project-designed return commands are classified as assumptions. The upper continuation demonstrates independent propagation rather than validated orbital insertion. First-stage navigation propagates its own quaternion from noisy gyros in a multiplicative extended Kalman filter (MEKF) with GNSS/LiDAR updates. A simulated star tracker supplies gated attitude observations; acceptance is checked per run. Physical attitude supplies sensor generation, an assumed initial alignment, and the evaluation reference; it is not continuously supplied to the active estimator.
-
-External trajectory comparison uses the retained video-derived ascent observations over approximately $0$--$140\,\mathrm{s}$. Their classification is E: they are digitized public readouts, not released onboard telemetry. The ascent operating point and pitch timescale were adjusted using the same record, so their agreement is calibration evidence. Model-level tests, continuous state transfer, return/upper trajectories, and navigation errors provide additional evidence with their own stated assumptions. Navigation error against the simulator's truth does not by itself establish the accuracy of the physical vehicle model.
+External comparison covers approximately $0$--$140\,\mathrm{s}$ of E-class digitized ascent readouts. The ascent operating point and pitch timescale were tuned against this same record; their agreement is calibration evidence, not independent validation. The later chapters retain that distinction when reporting flight, contact and navigation results. Return robustness, reconstructed SpaceX guidance and validated orbital insertion are outside the demonstrated scope.

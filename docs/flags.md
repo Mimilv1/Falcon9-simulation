@@ -56,6 +56,25 @@ docs/image.png include?
   not be quoted in the report; cite `mission.py` and the run record instead
   (the report Chapter 7 already does). Action: update the json record.
 
+- **FL-6 — Navigation covariance and gate performance** (open,
+  2026-11-10): The seed-1 full run rejects all 381 valid star fixes.
+  Position-error time fractions within reported three-sigma envelopes are
+  about 0.500/0.344/0.752. Chapters 7 and 9 now distinguish accuracy from
+  consistency; runtime covariance/gating still requires investigation.
+
+- **FL-7 — Jacobian certification** (open, 2026-11-10):
+  `tests/test_gyrostartracker.py` prints finite-difference diagnostics without
+  tolerance assertions. Chapter 9 now states that limitation explicitly.
+  Quantified tolerance/step-size acceptance is still needed for a stronger
+  verification claim.
+
+- **FL-8 — Ascent heading field** (open, 2026-11-10):
+  `ControlledAscent` stores `heading_ecef` from the configured angle but
+  constructs the target using projected `EAST_ECEF`. The JSON's 45-degree
+  heading explanation does not describe the active pointing direction.
+  Chapter 8 documents the implemented eastward command without changing
+  the runtime or reinterpreting the trajectory as an identified ISS plane.
+
 ## Resolved flags
 
 - **FL-0 — `docs/env_issues.md` references and Earth-rotation wording**
@@ -65,3 +84,12 @@ docs/image.png include?
   in the same session: rotation is documented as supplied Coriolis and
   centrifugal accelerations, the wind profile is documented, and dead
   references were removed. Kept for history; no action needed.
+
+- **FL-5 — Report frame and notation review** (resolved in the local
+  Chapters 1-9 report, 2026-11-10): Corrected rotating-frame wording,
+  lateral-flow norm, per-axis damping, active versus declared upper-stage
+  drag, sensor period relation, A classification, gyro random-walk terms,
+  nominal/error-state dimensions and strict monotonic-drift wording.
+  Navigation performance moved to Chapter 9; statistical consistency is
+  no longer asserted from mean NIS alone. Runtime limitations remain open
+  under FL-6/7/8.

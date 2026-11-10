@@ -1,26 +1,18 @@
 \section{Aerodynamics}
 \label{sec:aero}
 
-The aerodynamic model (\texttt{Aerodynamics.py}, data in
-\texttt{data/aero\_configurations.json}) supplies aerodynamic forces and
-moments in current Body components, Body $+x$ toward the nose, stations
-measured from the structural datum of the active configuration. One model
-instance serves the whole flight through five declared vehicle
-configurations, switched by the mission layer at phase transitions; every
-coefficient entry in the data file carries an evidence and uncertainty
-record (the evidence-class convention of Section~\ref{sec:vehicle}).
+\path{Aerodynamics.py} returns Body-frame forces and CG moments using the evidence-qualified register \path{data/aero_configurations.json}. Four configurations serve stack/booster phases; a fifth, \texttt{second\_stack}, is declared but not selected by the independent upper-stage drag provider (Section~\ref{sec:mission-exec}).
 
 \subsection{Flow state and force build-up}
 
-All aerodynamic terms act on the relative flow velocity
+Equation~\eqref{eq:aero-flow} defines the relative flow and total angle:
 %
 \begin{equation}
 \label{eq:aero-flow}
 \mathbf{v}_{\mathrm{rel}} = \mathbf{v}_{\mathrm{CG}}
 - \dot{\mathbf{c}} - \mathbf{w},
 \qquad
-\alpha = \operatorname{atan2}\bigl(\, \lfloor \mathbf{v}_{\mathrm{rel},yz}
-\rfloor, \; v_{\mathrm{rel},x} \,\bigr),
+\alpha = \operatorname{atan2}\bigl(\, \lVert \mathbf{v}_{\mathrm{rel},yz}\rVert, \; v_{\mathrm{rel},x} \,\bigr),
 \end{equation}
 %
 where $\dot{\mathbf{c}}$ is the axial center-of-gravity migration rate
@@ -31,8 +23,7 @@ the lateral plane is handled, not only a pitch plane. The dynamic pressure
 is $\bar{q} = \tfrac{1}{2}\,\rho\,v_{\mathrm{rel}}^2$ with the atmosphere
 state of Section~\ref{sec:environment}.
 
-The model decomposes the load into an axial, a potential-normal and
-per-segment crossflow terms:
+The axial and potential-normal loads follow Equation~\eqref{eq:aero-axial-normal}; side segments add the crossflow terms of Equation~\eqref{eq:aero-crossflow}:
 %
 \begin{equation}
 \label{eq:aero-axial-normal}
@@ -49,50 +40,25 @@ D_i = \bar{q}\; C_{Dc,i}\, S_i \,\sin^2\alpha
 \qquad \text{per side segment } i,
 \end{equation}
 %
-with reference area and length per configuration
-(Table~\ref{tab:aero-configurations}). The normal force acts along the
-negative lateral relative-velocity direction at the configuration's
-windward-end station ($57.6\,\mathrm{m}$ full stack, $41.0\,\mathrm{m}$
-booster, $17.3\,\mathrm{m}$ second stack), mirrored about the
-center-of-gravity station for retro flow;
-crossflow segments act at their side-area centroids. For
-\texttt{booster\_landing} the body segment (width $3.66\,\mathrm{m}$,
-$C_{Dc} = 1.1$) is supplemented by the combined grid-fin segment
-($38.6$--$40.6\,\mathrm{m}$, $2.4\,\mathrm{m}$, $C_{Dc} = 1.0$) and the
-deployed-leg segment ($0$--$3.6\,\mathrm{m}$, $1.6\,\mathrm{m}$,
-$C_{Dc} = 1.2$).
+Reference areas/lengths appear in Table~\ref{tab:aero-configurations}. Normal force opposes lateral flow at a windward-end station (57.6 m for the stack, 41.0 m for the booster), mirrored about CG for retro flow. Crossflow forces act at side-area centroids. The landing configuration adds fin and deployed-leg segments to the body model.
 
-The $\cos\alpha\,|\!\cos\alpha|$ factor appears in
-Equation~\eqref{eq:aero-axial-normal} on purpose: the axial force scales
-with the axial dynamic-pressure share and reverses direction for retro
-flight, and the grid-fin effectiveness below scales the same way, so a
-fixed deflection command reverses its steering effect in engine-first
-flight and vanishes at $\alpha = 90^{\circ}$. Station moments are computed
-once as $(\text{station} - \text{CG}) \times \mathbf{F}$ and returned as a
-force through the center of gravity plus a free moment, so the load
-interface cannot double-count. Windward-end pressure centers toward the
-nose are destabilizing in nose-first flight; deployed hardware near the
-trailing end stabilizes tail-first descent. The model reproduces this
-textbook behavior from the stated geometry --- it does not stabilize the
-vehicle on its own.
+The $\cos\alpha|\cos\alpha|$ factor reverses the axial load and fixed-deflection fin effect in engine-first flight and makes them vanish at $90^\circ$. Station moments are assembled once as $(\vect s-\vect c)\times\vect F$. Geometry determines restoring or destabilizing effects; the model does not impose passive stability.
 
-Rotary damping closes the moment set:
+Equation~\eqref{eq:aero-damping} closes the moment set with per-axis damping:
 %
 \begin{equation}
 \label{eq:aero-damping}
-\mathbf{M}_{\mathrm{damp}} = c\,
+\mathbf{M}_{\mathrm{damp}} = \operatorname{diag}(c_l,c_m,c_m)\,
 \frac{\bar{q}\, S_{\mathrm{ref}}\, L_{\mathrm{ref}}^2}{2\,v_{\mathrm{rel}}}
 \;\boldsymbol{\omega},
 \end{equation}
 %
-with pitch and yaw tied by symmetry and roll treated separately (declared
-coefficients $c$: $-10$ full stack, $-20$ booster, roll $-3$ with fins
-deployed; a declared zero means roll damping is modeled as unmodeled for
-that configuration).
+with pitch and yaw coefficient $c_m$ tied by symmetry and roll coefficient $c_l$ separate (declared values: $-10$ full stack, $-20$ booster, roll $-3$ with fins
+deployed; a zero coefficient means that no roll-damping contribution is applied).
 
 \subsection{Configurations and axial curves}
 
-\begin{table}[htbp]
+\par\medskip\noindent\begin{minipage}{\linewidth}
 \centering
 \begin{tabular}{llrrl}
 \toprule
@@ -105,90 +71,37 @@ Configuration & Phase & $S_{\mathrm{ref}}$ [m$^2$] & $L_{\mathrm{ref}}$ [m] & Ax
 \texttt{second\_stack} & stage-2 body (declared) & 10.52 & 19.8 & declared, sleeker estimate \\
 \bottomrule
 \end{tabular}
-\caption{The five aerodynamic configurations. Station datum is the
+\captionof{table}{The five aerodynamic configurations. Station datum is the
 configuration's own structural base. Fins deploy after boostback; the legs
 deploy at landing ignition, which is represented by the segment difference
 between \texttt{booster\_return} and \texttt{booster\_landing}.}
 \label{tab:aero-configurations}
-\end{table}
+\end{minipage}\par\medskip
 
-Figure~\ref{fig:aero-axial-curves} shows the adopted axial coefficient
-curves $CA_0(M)$. Only the full-stack curve is sourced: a raster readout of
-Pezent's RasAeroII analysis (0$^{\circ}$ angle of attack, full
-Falcon-9-like stack with fairing) \cite{pezent2024}, whose transonic peak
-$CA_0 \approx 1.16$ near $M \approx 1.06$ carries the worst readout
-uncertainty. Beyond Mach~7 the curve continues as a declared slow
-hypersonic decay to $CA_0 = 0.75$ at Mach~10, where the vehicle flies
-above roughly $55\,\mathrm{km}$ and axial drag stays below about
-$0.5\,\%$ of thrust. All other curves are declared engineering estimates:
-a blunt-ended cylinder for the booster ($CA_0 = 0.42$ subsonic, raised to
-$0.67$ by the flat fin/leg increment), a sleeker estimate for stage 2 plus
-Dragon ($0.32$ subsonic), uncertain to roughly $\pm 50\,\%$. They close
-the simulation loop and produce plausible dynamics; they are not good
-enough to predict quantitative trajectories beyond the sourced regime.
-Replacing them is a data change in the JSON, not a code change.
+Figure~\ref{fig:aero-axial-curves} shows the adopted $CA_0(M)$ curves. The full-stack curve to Mach 7 is read from Pezent's RasAeroII analysis of a Falcon-9-like stack with fairing \cite{pezent2024}; its transonic peak is about 1.16 near Mach 1.06. The extension to Mach 10 and all booster/upper curves are engineering estimates, with declared uncertainties around $\pm50\%$ for the unsourced curves. The fairing-stack curve is transferred to Dragon geometry as an E/A approximation: reference area and coefficient normalization must be retained together. It is not a CRS-10-specific aerodynamic identification.
 
-\begin{figure}[htbp]
+\par\medskip\noindent\begin{minipage}{\linewidth}
 \centering
-\includegraphics[width=0.72\linewidth]{images/aero_axial_curves.pdf}
-\caption{Axial drag coefficient $CA_0(M)$ of the five configurations.
+\includegraphics[width=0.85\linewidth]{images/aero_axial_curves.pdf}
+\captionof{figure}{Axial drag coefficient $CA_0(M)$ of the five configurations.
 Only the full-stack curve to Mach~7 is sourced; everything else is a
 declared estimate (evidence classes in the legend). The transonic peak of
 the full stack reaches $CA_0 \approx 1.16$.}
 \label{fig:aero-axial-curves}
-\end{figure}
+\end{minipage}\par\medskip
 
 \subsection{Grid fin control}
 
-The \texttt{booster\_return} and \texttt{booster\_landing} configurations
-declare four grid fins at intercardinal azimuths
-($45^{\circ}$, $135^{\circ}$, $225^{\circ}$, $315^{\circ}$ about Body
-$+x$), mounted at station $39.6\,\mathrm{m}$ on a $1.83\,\mathrm{m}$
-pivot radius; each fin is modeled as a porous lattice panel of
-$1.65\,\mathrm{m^2}$ with lift slope $c_{\ell,\delta} = 1.2/\mathrm{rad}$
-(about half of a solid panel of aspect ratio near one, because of lattice
-porosity) and a travel limit of $\pm 0.35\,\mathrm{rad}$
-($\approx\pm 20^{\circ}$). A positive deflection of fin $i$ produces the
-force
-%
+The return/landing configurations have four fins at $45^\circ$, $135^\circ$, $225^\circ$ and $315^\circ$ about Body $+x$, station 39.6 m and pivot radius 1.83 m. Each uses area $1.65\,\mathrm{m^2}$, effective lift slope $1.2\,\mathrm{rad^{-1}}$ and travel $\pm0.35\,\mathrm{rad}$, all research-model assumptions. Equation~\eqref{eq:aero-fin} gives the force for deflection $\delta_i$ and azimuth $\varphi_i$:
 \begin{equation}
+ \vect F_i=\bar q S_{\mathrm{fin}}c_{\ell,\delta}\delta_i\cos\alpha|\cos\alpha|
+ \begin{bmatrix}0&-\sin\varphi_i&\cos\varphi_i\end{bmatrix}^{\mathsf T}.
 \label{eq:aero-fin}
-\mathbf{F}_i = \bar{q}\, S_{\mathrm{fin}}\, c_{\ell,\delta}\;
-\delta_i \cos\alpha\,|\!\cos\alpha|
-\; \bigl(0, -\sin\varphi_i, \cos\varphi_i\bigr),
 \end{equation}
-%
-applied at the fin's three-dimensional mount station, so the axial lever
-carries pitch/yaw and the radial offset carries roll --- the moment
-combinatorics are automatic: equal deflections give pure roll, opposite
-differential pairs give pure pitch, a single fin gives both. At the
-declared values, full deflection at Mach~3 and $15\,\mathrm{km}$ commands
-about $1.4\,\mathrm{MN\,m}$ of pitch and $385\,\mathrm{kN\,m}$ of roll,
-an order of magnitude less above $30\,\mathrm{km}$ --- consistent with
-grid fins mattering mainly below entry-burn altitudes. Command shaping
-(rates, travel dynamics, deadbands) belongs to the actuator layer of the
-control chain and is not part of this model: the aerodynamics accept
-instantaneous validated commands only. Mach- and
-angle-of-attack-dependent fin effectiveness, interference with the
-passive crossflow segments, lattice state and the deflection axial-drag
-increment are declared unmodeled.
+The three-dimensional mount arm generates pitch/yaw through axial offset and roll through radial offset. Equal deflections produce roll; differential pairs generate transverse moments. Command selection belongs to Section~\ref{sec:mission-exec}. The aerodynamic interface applies instantaneous deflections without servo dynamics. Mach/angle-dependent effectiveness, plume interference and deflection-induced axial drag are unresolved.
 
 \subsection{Domain and verification}
 
-Following the project convention, the model rejects rather than
-extrapolates: Mach outside the adopted curve (all configurations end at
-$M = 10$), unknown configuration names, command shape or travel
-violations, and construction-time station violations all raise errors.
-Within the domain, declared-estimate coefficients do not fail --- they
-produce plausible numbers with real uncertainty.
+The model rejects unsupported Mach values (the curves end at 10), unknown configurations, invalid stations and out-of-travel commands. Declared coefficient uncertainty remains an uncertainty within that domain, not an execution error.
 
-The test suite (\texttt{tests/test\_aerodynamics.py}, 42 tests) pins the
-conventions: the zero-angle drag baseline, normal-force direction and the
-windward-end mirror convention in both flow directions, the damping
-formula term by term, the physical invariants (energy extraction at every
-angle, dissipative damping, wind entering only through the relative
-velocity, continuity at $\alpha = 90^{\circ}$), the fin combinatorics of
-Equation~\eqref{eq:aero-fin} at all azimuths including retro reversal,
-and the loading of all five configurations from the JSON with the sourced
-knot intact, plus a two-second vertical propagation through the shared
-dynamics core.
+The 42 aerodynamic tests check axial baselines, force direction, retro reversal, moment arms, dissipative damping, continuity, fin combinations and all configuration records, plus a short propagation through the dynamics provider. These checks verify the implementation; they do not validate the unsourced coefficient curves against flight data.

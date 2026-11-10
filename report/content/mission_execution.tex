@@ -1,3 +1,79 @@
 \section{Mission Execution and Numerical Implementation}
 \label{sec:mission-exec}
 
+The mission layer connects the models of Chapters~1--7. Commands are A-class project designs: official schedule entries anchor selected events and state-triggered conditions determine return transitions. This chapter defines execution; observed times belong in Section~\ref{sec:results}.
+
+\subsection{Ascent and upper-stage commands}
+The ascent program tilts the nose away from local vertical. Equation~\eqref{eq:ascent-command} defines its target angle and ideal angular-acceleration command, with $x=\max[(t-8\,\mathrm{s})/(100\,\mathrm{s}),0]$ and Body attitude error $\vect e_R$:
+\begin{equation}
+ \theta_{\mathrm{cmd}}=80^\circ\frac{x^2}{1+x^2},\qquad
+ \vect\alpha_{\mathrm{cmd}}=k_p\vect e_R-k_d\vect\omega,\qquad
+ k_p=2\,\mathrm{s^{-2}},\quad k_d=2.5\,\mathrm{s^{-1}}.
+\label{eq:ascent-command}
+\end{equation}
+Here $\vect e_R=\mat C_{BE}^{\mathsf T}(\vect n\times\vect n_{\mathrm{cmd}})$, with actual and commanded unit nose directions in $E$. The implemented direction uses projected launch-east. Although the configuration contains a $45^\circ$ heading field, the current controller does not use that field in constructing the target; no reconstructed ISS ascent plane is claimed. The pitch timescale and operating point were calibrated against the ascent record used again in Section~\ref{sec:ascent-results}.
+
+All nine engines initially run at full throttle. The shutdown envelope of Equation~\eqref{eq:shutdown} reduces both thrust and flow from 140 to $141\,\mathrm{s}$; zero-flow guards then permit separation at $144\,\mathrm{s}$. The conserved upper child ignites at 152 and cuts off at $545\,\mathrm{s}$: throttle 0.95, one-second ramps, $200\,\mathrm{km}$ height target and a $0.05\,\mathrm{s}$ maximum step. Height/radial-speed feedback selects attitude. Its drag uses $C_D=0.3$ on the stage cross-section, not the declared \texttt{second\_stack} configuration.
+
+\subsection{Return commands and fuel management}
+Table~\ref{tab:return-settings} collects the principal return settings. The three-engine set is the central engine and an opposite outer pair (indices 0, 1, 5); landing uses only the central engine. Restart guards require separation, zero flow, engines off, available fuel and assumed propulsion readiness, plus the required descent condition and pointing error below $25^\circ$. Propellant settling and ignition health are assumed rather than simulated.
+
+\begin{table}[!htbp]
+\centering\small
+\begin{tabularx}{\linewidth}{@{}lX@{}}
+\toprule
+Setting & Project value and use \\
+\midrule
+Planning fuel allocations & Boostback 38 t; entry 16 t; landing 10 t; protected reserve 2 t \\
+Boostback & Throttle 1; 10--60 s planning window; predicted-miss target 500 m \\
+Entry & Descending through 45 km; throttle 0.8; shutdown target $500\,\mathrm{m\,s^{-1}}$ \\
+Landing ignition & Reduced stopping predictor, factor 1.05 and 1.5 km clearance allowance \\
+Landing targets & Contact vertical velocity $-0.5\,\mathrm{m\,s^{-1}}$; lateral gains $0.0576\,\mathrm{s^{-2}}$ and $0.48\,\mathrm{s^{-1}}$ \\
+Pointing limits & Tilt $20^\circ$, terminal $4^\circ$ below 20 m; rate $0.22\,\mathrm{rad\,s^{-1}}$; acceleration $0.12\,\mathrm{rad\,s^{-2}}$ \\
+Ideal-couple authority & $2\,\mathrm{MN\,m}$ during burns; $200\,\mathrm{kN\,m}$ in coast \\
+\bottomrule
+\end{tabularx}
+\caption{A-class return settings from \texttt{data/crs10\_mission.json}. Fuel allocations guide burn termination; they are not measured CRS-10 reserves. The limiting-tank residual remains separate from the protected reserve.}
+\label{tab:return-settings}
+\end{table}
+
+Boostback points against the reduced-order predicted impact miss. The predictor advances central gravity, frame acceleration, approximate drag and a prospective entry burn in $0.5\,\mathrm{s}$ steps; it is refreshed once per second. The pointing vector is proportional to $-\hat{\vect e}_{\mathrm{miss}}/(8t_f)+0.8\vect u$, where $t_f$ is predicted flight time and $\vect u$ local up. The first satisfied miss, fuel or duration condition starts shutdown; a 500 kg margin anticipates ramp consumption.
+
+Entry starts on descending altitude and ends on speed or fuel cap. A constrained force solver selects pointing from desired vertical/lateral acceleration and aerodynamic reaction. Landing starts when the $0.1\,\mathrm{s}$ stopping predictor leaves no more than the declared clearance allowance.
+
+Landing feedback operates on the lowest leg tip. If $h_\ell$ and $\dot h_\ell$ are its clearance and radial velocity, the commanded contact acceleration is $[-\dot h_\ell|\dot h_\ell|-v_t^2]/[2\max(h_\ell,0.005\,\mathrm{m})]$, with target $v_t$ from Table~\ref{tab:return-settings}. Rotational, moving-CG and ground-curvature corrections convert this to the required CG acceleration. Lateral position and velocity feedback drive the assumed target. Unused boostback/entry allocations may transfer to landing, while the reserve and limiting-tank residual are protected; a 200 kg margin anticipates landing shutdown. Contact geometry and acceptance limits are defined in Section~\ref{sec:vehicle}.
+
+\subsection{Force/moment allocation and actuator representation}
+The force solver respects the tilt envelope. Throttle ramps are numerical envelopes, not additional validated steady operating points. Fins receive static deflections through Section~\ref{sec:aero}; travel-rate dynamics are absent.
+
+Equation~\eqref{eq:ideal-moment} distinguishes the ideal attitude input from physical TVC:
+\begin{equation}
+ \vect M_{\mathrm{ideal}}=\mat J_C\vect\alpha_{\mathrm{cmd}},\qquad
+ \mat J_C^{-1}\vect M_{\mathrm{ideal}}=\vect\alpha_{\mathrm{cmd}}.
+\label{eq:ideal-moment}
+\end{equation}
+The ascent couple is unlimited. Return control adds gyroscopic feedforward and aerodynamic-moment compensation, allocates fin demand, then saturates the residual ideal couple at the declared authority. Changing-inertia and exhaust-flow terms still enter the physical dynamics. Inertia cancellation in the commanded contribution is model inversion, not a loss of inertia or proof that aerodynamic stability removes the need for TVC. \path{Actuators.py} remains empty and the propulsion evaluator rejects nonzero gimbal angles. Thus landing results test an assumed moment authority, not nozzle/servo dynamics or closed-loop robustness to actuator/model error.
+
+\subsection{Integration, event and sensor timing}
+The accepted-state loop follows this order:
+\begin{enumerate}
+\item Evaluate phase conditions and accept a due event; apply engine/configuration changes and preserve both children at separation.
+\item Generate due sensor samples and update navigation. Record truth/estimate output when due.
+\item Select a step bounded by $0.01\,\mathrm{s}$, scheduled events, control/ramp knots, output time and the next sensor clock. Near contact, clearance and speed impose a tighter bound.
+\item Apply RK4 to the physical state with trial-state loads and mass properties, then synchronize the accepted vehicle object.
+\end{enumerate}
+RHS evaluations are pure with respect to clocks and random sampling. Guidance normally updates every $0.2\,\mathrm{s}$; landing adapts that interval between 0.02 and $0.2\,\mathrm{s}$. Sensors retain their independent clocks from Table~\ref{tab:sensors}, and output is normally every $0.1\,\mathrm{s}$. The internal translation representation follows Section~\ref{sec:vehicle}.
+
+When a trial crosses the ground sphere at a leg tip, bisection refines the contact epoch with up to 35 iterations and a $10^{-9}\,\mathrm{s}$ interval criterion. Acceptance uses the pre-contact state; position, speed or attitude are not reset to create success. Propellant-limit, model-domain and unmet-event failures produce explicit run status. A full run requires both an acceptable contact and completion of the intended return sequence.
+
+\subsection{Two-vehicle execution and reproducible operation}
+The booster is advanced until contact or failure. The saved upper-child state is then propagated on its own time interval, using the same mission clock; the two trajectories are physically independent after separation even though their computations are executed sequentially. Navigation remains attached to stage 1.
+
+From the repository root, install the pinned dependencies and execute:
+\begin{quote}\ttfamily\small
+python -m pip install -r requirements.txt\\
+python main.py --case full --no-show
+\end{quote}
+The full case requests 600 s; booster output ends at contact and the upper child continues. \texttt{--output} selects a fresh directory; \texttt{--plot-only} reopens saved results without integration.
+
+Outputs are truth for both vehicles, measurements, navigation, events/timeline, ascent comparison data and \path{summary.json}. The summary retains settings, seed, status and input hashes. Section~\ref{sec:results} identifies the records behind its figures and tables.

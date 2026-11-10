@@ -1,0 +1,107 @@
+\section{Verification, Validation, and Simulation Results}
+\label{sec:results}
+
+This chapter separates three questions: whether the implemented equations and interfaces pass their checks, how the generated trajectory compares with public evidence, and how well navigation estimates the simulator's own truth. The nominal record R1 is \path{results/gyro-final-review-20261110}: seed 1, $0.01\,\mathrm{s}$ maximum step, 100 Hz IMU and $0.1\,\mathrm{s}$ output. Its runtime input hashes match the present physical/navigation code and data. Figures and numerical tables are regenerated from its saved CSV/JSON files; the file hashes and derived metrics are retained in \path{report/figure_sources.json}. No new full-flight integration is required to reproduce these plots.
+
+\subsection{Model verification and state continuity}
+The vehicle/navigation suite contains 115 passing assertion-based tests; the environment suite adds 41. They cover mass aggregation and derivatives, force-arm signs, fixed-mass free fall and constant-moment rotation, rotating Body storage, propellant bounds, aerodynamic flow reversal/damping, event guards, separation and two-vehicle execution. These tests establish behavior in their fixtures; they do not measure agreement with the real vehicle. The additional gyro/star-tracker script prints finite-difference and calibration diagnostics without asserting their error tolerances, so it is not presented as complete independent certification of the filter Jacobians.
+
+At $144\,\mathrm{s}$, parent mass is $211019.374\,\mathrm{kg}$ and child masses are $91089.374$ and $119930.000\,\mathrm{kg}$. Their mass residual is zero. Relative linear- and angular-momentum residuals are $9.95\times10^{-19}$ and $9.54\times10^{-12}$; recombined-CG position error is $4.66\times10^{-10}\,\mathrm{m}$. These satisfy the numerical criteria of Section~\ref{sec:vehicle} for the assumed zero-impulse map. Both child states remain finite and are propagated without replacing their inherited initial conditions. Conservation under an assumed map does not establish the accuracy of real separation impulses or discarded hardware.
+
+\subsection{Continuous mission and separated trajectories}
+Figure~\ref{fig:results-flight} shows the complete generated sequence, and Figure~\ref{fig:results-trajectories} distinguishes the two children. Shutdown completes at 141 and separation occurs at $144\,\mathrm{s}$. The three return burns and their measured consumption appear in Table~\ref{tab:burn-results}; their endpoints are integration results of the conditions in Section~\ref{sec:mission-exec}.
+
+\par\medskip\noindent\begin{minipage}{\linewidth}
+\centering
+\includegraphics[width=\linewidth]{images/results_flight_profiles.pdf}
+\captionof{figure}{R1 continuous flight. Green denotes stack/booster and blue the upper child where both are shown. The mass jump is a change of tracked configuration at separation. Flow angle near $180^\circ$ means engine-first relative flow, not attitude-estimation error. The trajectories use project commands and truth-state feedback.}
+\label{fig:results-flight}
+\end{minipage}\par\medskip
+
+\par\medskip\noindent\begin{minipage}{\linewidth}
+\centering\small
+\begin{tabular}{@{}lrrl@{}}
+\toprule
+Burn & Start--end [s] & Consumed [t] & End condition \\
+\midrule
+Boostback & 161.00--208.81 & 37.982 & Fuel/duration planning cap \\
+Entry & 370.14--392.95 & 14.158 & Speed target, then smooth shutdown \\
+Landing & 426.16--465.083 & 7.818 & First contact \\
+\bottomrule
+\end{tabular}
+\captionof{table}{Observed R1 return-burn intervals and fuel consumption. Boostback reaches its planning cap rather than the 500 m predicted-miss target. Its recorded predicted miss at burn end is about 3.97 km; later phases provide additional correction.}
+\label{tab:burn-results}
+\end{minipage}\par\medskip
+
+The ascent dynamic-pressure maximum is $27.62\,\mathrm{kPa}$ at $71.9\,\mathrm{s}$, compared with the approximate $75\,\mathrm{s}$ preflight marker. The full-flight maximum is instead $66.16\,\mathrm{kPa}$ near landing ignition at $426.3\,\mathrm{s}$; the two maxima must not be confused. Between entry shutdown and landing ignition, gravity accelerates the unpowered descending booster again, explaining the late rise in its speed. Landing then brakes it to the contact state.
+
+\par\medskip\noindent\begin{minipage}{\linewidth}
+\centering
+\includegraphics[width=\linewidth]{images/results_trajectories.pdf}
+\captionof{figure}{R1 separated paths: launch-frame horizontal projection and altitude against spherical downrange. The marked horizontal points are launch and the assumed return target. The booster returns while the upper-stage/Dragon child continues downrange from the same separation event.}
+\label{fig:results-trajectories}
+\end{minipage}\par\medskip
+
+Table~\ref{tab:landing-results} evaluates the project limits at contact. Contact occurs at $465.0827\,\mathrm{s}$ with $8.931\,\mathrm{t}$ of stage-1 propellant remaining. The ground condition applies to the lowest leg tip, so the CG remains above zero altitude. The upper child continues to $600\,\mathrm{s}$, reaching $199.694\,\mathrm{km}$ and $7.097\,\mathrm{km\,s^{-1}}$, with $5.472\,\mathrm{t}$ of propellant. This is a successful project scenario, not proof of SpaceX guidance reconstruction or validated orbital insertion.
+
+\par\medskip\noindent\begin{minipage}{\linewidth}
+\centering\small
+\begin{tabular}{@{}lrr@{}}
+\toprule
+Acceptance metric & R1 result & Project limit \\
+\midrule
+Vertical speed [$\mathrm{m\,s^{-1}}$] & 0.4975 & 2 \\
+Horizontal speed [$\mathrm{m\,s^{-1}}$] & 0.9016 & 1 \\
+Tilt [deg] & 0.5349 & 5 \\
+Angular-rate magnitude [$\mathrm{deg\,s^{-1}}$] & 0.01289 & 1 \\
+Horizontal target error [m] & 3.306 & 10 \\
+\bottomrule
+\end{tabular}
+\captionof{table}{R1 mission-level contact metrics. Speeds and target error use the structural-base state; ground contact is tested at the lowest leg tip. Ground contact and deployed legs are also required and satisfied. These are assumed project limits; horizontal speed has the smallest fractional margin.}
+\label{tab:landing-results}
+\end{minipage}\par\medskip
+
+\subsection{Comparison with the ascent reference}
+\label{sec:ascent-results}
+Figure~\ref{fig:results-reference} compares 140 retained video-derived samples over $0$--$139.973\,\mathrm{s}$ \cite{crs10webcast,crs10telemetry}. Altitude RMSE is $1.577\,\mathrm{km}$ and speed RMSE $18.46\,\mathrm{m\,s^{-1}}$. At the last sample, simulated altitude is $54.628\,\mathrm{km}$ versus $59.400\,\mathrm{km}$, a $-8.03\%$ difference; speed is $1574.19$ versus $1609.44\,\mathrm{m\,s^{-1}}$, a $-2.19\%$ difference.
+
+\par\medskip\noindent\begin{minipage}{\linewidth}
+\centering
+\includegraphics[width=\linewidth]{images/results_ascent_reference.pdf}
+\captionof{figure}{R1 ascent against the E-class digitized broadcast readouts. This is the same record used to calibrate the ascent operating point/pitch timescale. Model CG altitude and ground-relative speed are compared with readouts whose detailed datum/frame conventions are not independently established.}
+\label{fig:results-reference}
+\end{minipage}\par\medskip
+
+The comparison supports quantitative calibration within the retained ascent interval. It does not independently validate the tuned parameters, establish internal mass properties, or validate the return/upper-stage commands. Readout rounding, digitization and speed-frame uncertainty also limit interpretation of the residuals as pure physical-model error. The fairing-to-Dragon aerodynamic transfer and mixed-source vehicle data remain model uncertainties.
+
+\subsection{Navigation accuracy and statistical diagnostics}
+\label{sec:nav-results}
+The gyro-driven navigation result is evaluated at the fixed IMU station, not at the moving CG. Equation~\eqref{eq:error-metrics} defines the three-dimensional position RMS and shortest quaternion-error angle used below:
+\begin{equation}
+ \mathrm{RMS}_p=\sqrt{\frac1N\sum_{k=1}^{N}\lVert\hat{\vect p}_k-\vect p_{\mathrm{true},k}\rVert^2},\qquad
+ e_q=2\arccos\!\left(\left|\hat{\vect q}^{\mathsf T}\vect q_{\mathrm{true}}\right|\right).
+\label{eq:error-metrics}
+\end{equation}
+The quaternion inner product is clamped numerically to $[0,1]$. Velocity RMS uses the corresponding velocity error. Figure~\ref{fig:results-navigation} shows accuracy and uncertainty diagnostics together.
+
+\par\medskip\noindent\begin{minipage}{\linewidth}
+\centering
+\includegraphics[width=\linewidth]{images/results_navigation.pdf}
+\captionof{figure}{R1 navigation. The MEKF improves the accumulated attitude error relative to the paired unaided gyro quaternion, but this does not imply calibrated covariance or improved instantaneous rate accuracy. Bottom right: Earth-frame position error divided by reported per-axis standard deviation; the shaded interval is $\pm3$.}
+\label{fig:results-navigation}
+\end{minipage}\par\medskip
+
+Position RMS is $0.881\,\mathrm{m}$ and velocity RMS $0.1354\,\mathrm{m\,s^{-1}}$. Attitude RMS is $0.456^\circ$, peak $1.568^\circ$ near $35.9\,\mathrm{s}$, and final error $0.01214^\circ$. The paired gyro-only baseline grows overall to $1.892^\circ$. These are simulation-truth errors under the declared initial alignment and sensor settings. An earlier supplied-attitude diagnostic is not used to claim a controlled gain in position accuracy because its sensor implementation/realization differs.
+
+The final estimated $z$-gyro bias is $1.0138\times10^{-4}\,\mathrm{rad\,s^{-1}}$, about $1.38\%$ above the configured constant term. This comparison excludes the separately generated random-walk realization. Across 4651 synchronized output/IMU epochs, calibrated angular-rate RMS error is $0.01898^\circ\,\mathrm{s^{-1}}$, versus $0.01152^\circ\,\mathrm{s^{-1}}$ for the raw gyro. Attitude-drift improvement therefore does not establish improved instantaneous angular-rate estimation or successful identification of every calibration parameter.
+
+LiDAR supplies 496 valid updates. All 381 valid star-tracker exposures are rejected by the NIS gate, so R1 has no accepted star-tracker aiding. The mean GNSS NIS is 7.58 for six innovation components; that mean alone does not demonstrate statistical consistency. The measured time fractions within reported position $\pm3\sigma$ are 50.0\%, 34.4\% and 75.2\% by axis. These correlated single-run diagnostics show that the uncertainty envelopes often understate observed error; they are not Monte Carlo coverage probabilities, and full-covariance NEES is unavailable from the logged diagonals.
+
+Plausible contributors include correlated GNSS errors without an estimated bias block, unestimated accelerometer scale error, nonlinear maneuvers and the calibration-state linearization. The available record does not isolate one cause of all rejected star fixes. Covariance modeling and initial acquisition/gating need further study before claiming consistent uncertainty or effective absolute-attitude aiding.
+
+\subsection{Numerical sensitivity and demonstrated scope}
+A saved variant, \path{results/two-stage-final-check}, uses $0.05\,\mathrm{s}$ steps and 20 Hz IMU with matching compared core-physics input hashes. It also lands, at $465.1900\,\mathrm{s}$, with target error $6.171\,\mathrm{m}$ and tilt $1.806^\circ$, versus R1's $3.306\,\mathrm{m}$ and $0.535^\circ$. The plan differs in IMU rate and the integration step is also changed. This is a joint step/clock diagnostic, not an isolated RK4 convergence-order study; contact metrics remain numerically sensitive even when both cases pass.
+
+A separate static allocation check quantifies the dry-CG uncertainty of Section~\ref{sec:vehicle}. With an assumed $10\,\mathrm{t}$ of propellant remaining, the booster mass is $32.2\,\mathrm{t}$ and nominal CG station $16.211\,\mathrm{m}$. Moving the unallocated $6450\,\mathrm{kg}$ centroid over the declared $4.0$--$40.8\,\mathrm{m}$ interval shifts the combined CG by up to $\pm3.686\,\mathrm{m}$. For an explicitly assumed $1\,\mathrm{kN}$ transverse force at a fixed structural station, this changes its CG moment by up to $\pm3.686\,\mathrm{kN\,m}$. These are conditional allocation effects, not flight-error confidence bounds.
+
+R1 demonstrates finite continuous ascent, conservative separation, two-child propagation, project-designed booster contact, and gyro-driven navigation with quantified errors. It does not establish return robustness to wind/coefficient uncertainty, nonzero calibration errors or navigation-fed control. Physical TVC dynamics, restart transients and independent return-flight validation remain outside the demonstrated evidence. These limits define what later GNC design may safely infer from the present simulator.

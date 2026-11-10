@@ -169,23 +169,26 @@ Structural-base and CG states are related by Equation~\eqref{eq:base-cg}, with b
 \end{equation}
 The same transformation applies to a fixed sensor station after replacing the base-to-CG displacement appropriately. \path{to_state} and \path{apply_state} use matching flow/rate inputs. Their initial stationary-base condition can therefore have a nonzero geometric-CG velocity from depletion, without implying motion of the sensor mount.
 
-\subsubsection{Moment inputs and actuator representation}
-The moment $\vect M_C^B$ includes aerodynamic moments and an A-class ideal control couple. The active \path{propulsion.py} relation keeps thrust along Body $+x$ and rejects nonzero gimbal commands; the stored gimbal limit is not an implemented TVC actuator. For \path{ascent.py}, Equation~\eqref{eq:ideal-moment} maps desired Body angular acceleration $\vect\alpha_{\mathrm{cmd}}$ to its added control moment:
-\begin{equation}
- \vect M_{\mathrm{ideal}}=\mat J_C\vect\alpha_{\mathrm{cmd}},\qquad
- \mat J_C^{-1}\vect M_{\mathrm{ideal}}=\vect\alpha_{\mathrm{cmd}}.
-\label{eq:ideal-moment}
-\end{equation}
-The cancellation in this control contribution is deliberate model inversion, not disappearance of physical inertia or evidence that aerodynamic stability removes the need for TVC. Inertia still determines the requested torque and the response to other loads. The ascent couple is unlimited. \path{recovery.py} adds gyroscopic feedforward and aerodynamic-moment compensation before fin allocation and moment saturation; changing-inertia and exhaust-flow terms remain in the dynamics.
-
-Thus the scenario demonstrates vehicle propagation with declared moment authority, rather than validated nozzle deflection, gimbal dynamics, or actuator stability margins. A physical TVC model would instead link commanded deflection, actuator limits and dynamics, thrust direction, and the CG moment arm. Flight-command and allocation details belong in the mission-execution chapter; this distinction defines what the moment input represents.
+Control moments are supplied inputs to these equations. Their idealized authority and physical actuator limitations are defined in Section~\ref{sec:mission-exec}.
 
 \subsection{Initial state and flight-phase definition}
 The structural base starts at the launch location of Section~\ref{sec:architecture}, with zero velocity relative to rotating Earth and zero Body-relative angular rate. The launch quaternion sets Body $+x$ upward; inventories are the full values in Table~\ref{tab:vehicle}. Commands, configuration transitions, and continuous integration then generate all subsequent states.
 
 Table~\ref{tab:phases} defines the mission sequence without substituting simulated event times for input conditions. The official schedule labels its entries approximate. Adopting a published time as a simulation command is an A-class choice even when the published schedule itself is authoritative \cite{nasacrs10press}.
 
-\begin{table}[!htbp]
+
+
+First contact uses four assumed leg tips $1.0\,\mathrm{m}$ below the base at $3.5\,\mathrm{m}$ radius. A successful contact additionally requires deployed legs, vertical speed at most $2\,\mathrm{m\,s^{-1}}$, horizontal speed at most $1\,\mathrm{m\,s^{-1}}$, tilt at most $5^\circ$, angular-rate magnitude at most $1\,\mathrm{deg\,s^{-1}}$, and target error at most $10\,\mathrm{m}$. These are A-class project limits, not certified Falcon 9 requirements. The target is an assumed point $14\,\mathrm{km}$ south and $6\,\mathrm{km}$ east of launch on the ground sphere, rather than surveyed LZ-1 coordinates.
+
+For normalized ramp time $\xi=(t-t_s)/\Delta t$, Equation~\eqref{eq:shutdown} supplies a smooth shutdown amplitude and its time derivative on $0\leq\xi\leq1$:
+\begin{equation}
+ \gamma=1-10\xi^3+15\xi^4-6\xi^5,\qquad
+ \dot\gamma=-\frac{30\xi^2(1-\xi)^2}{\Delta t},\qquad \Delta t=1\,\mathrm{s}.
+\label{eq:shutdown}
+\end{equation}
+The envelope is constant outside the ramp, with zero endpoint slope and curvature. Scaling thrust and flow together while supplying the analytical flow derivative avoids an unmodeled discontinuous-flow impulse. The duration is a numerical assumption, not a measured engine transient. Return planning budgets, steering laws, and actuator allocation are kept in mission execution rather than embedded in the vehicle equations.
+
+\par\medskip\noindent\begin{minipage}{\linewidth}
 \centering\small
 \begin{tabularx}{\linewidth}{@{}p{0.27\linewidth}X@{}}
 \toprule
@@ -205,19 +208,9 @@ First contact & Lowest assumed deployed leg tip reaches the ground sphere; evalu
 Upper-stage cutoff & $545\,\mathrm{s}$; prescribed upper-child shutdown. \\
 \bottomrule
 \end{tabularx}
-\caption{Physical phase definitions and command references. Entry/landing conditions and return planning criteria are project assumptions. Their actual execution times and numerical results belong to the simulation-results analysis.}
+\captionof{table}{Physical phase definitions and command references. Entry/landing conditions and return planning criteria are project assumptions. Their actual execution times and numerical results belong to the simulation-results analysis.}
 \label{tab:phases}
-\end{table}
-
-First contact uses four assumed leg tips $1.0\,\mathrm{m}$ below the base at $3.5\,\mathrm{m}$ radius. A successful contact additionally requires deployed legs, vertical speed at most $2\,\mathrm{m\,s^{-1}}$, horizontal speed at most $1\,\mathrm{m\,s^{-1}}$, tilt at most $5^\circ$, angular-rate magnitude at most $1\,\mathrm{deg\,s^{-1}}$, and target error at most $10\,\mathrm{m}$. These are A-class project limits, not certified Falcon 9 requirements. The target is an assumed point $14\,\mathrm{km}$ south and $6\,\mathrm{km}$ east of launch on the ground sphere, rather than surveyed LZ-1 coordinates.
-
-For normalized ramp time $\xi=(t-t_s)/\Delta t$, Equation~\eqref{eq:shutdown} supplies a smooth shutdown amplitude and its time derivative on $0\leq\xi\leq1$:
-\begin{equation}
- \gamma=1-10\xi^3+15\xi^4-6\xi^5,\qquad
- \dot\gamma=-\frac{30\xi^2(1-\xi)^2}{\Delta t},\qquad \Delta t=1\,\mathrm{s}.
-\label{eq:shutdown}
-\end{equation}
-The envelope is constant outside the ramp, with zero endpoint slope and curvature. Scaling thrust and flow together while supplying the analytical flow derivative avoids an unmodeled discontinuous-flow impulse. The duration is a numerical assumption, not a measured engine transient. Return planning budgets, steering laws, and actuator allocation are kept in mission execution rather than embedded in the vehicle equations.
+\end{minipage}\par\medskip
 
 \subsection{Separation and inherited child states}
 The separation map assumes zero impulse and no discarded mass. Both children inherit the parent's attitude and angular rate. For a cut offset $\vect\ell^B$ from the parent structural base, the lower base retains the parent's base state and the upper base follows Equation~\eqref{eq:separation-map}:

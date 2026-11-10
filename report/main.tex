@@ -1,4 +1,4 @@
-\documentclass[english,font=libertine,onecolumn]{tumarticle}
+\documentclass[english,font=times,onecolumn]{tumarticle}
 
 \usepackage{acro}
 \usepackage{booktabs}
@@ -34,6 +34,8 @@
 
 \begin{document}
 \maketitle
+\setcounter{tocdepth}{1}
+\hypersetup{bookmarksdepth=3}
 \tableofcontents
 
 % +++++ Main part
@@ -49,7 +51,7 @@
 \include{content/sensor_models}       % Ch 6
 \include{content/navigation}          % Ch 7
 \include{content/mission_execution}   % Ch 8
-%\include{content/results}            % Ch 9 - to be written
+\include{content/results}            % Ch 9
 %\include{content/assessment}         % Ch 10 - to be written
 %\include{content/conclusions}        % Ch 11 - to be written
 % further chapters are inserted here in document order

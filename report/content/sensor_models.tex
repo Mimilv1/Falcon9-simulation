@@ -4,13 +4,12 @@
 Four sensor front-ends generate measurements from the truth trajectory:
 an \ac{IMU}, a \ac{GNSS} receiver, a \ac{LIDAR} altimeter, and a star
 tracker (\texttt{sensors.py}). Sampling occurs only at accepted
-integration times whose $0.01\,\mathrm{s}$ step is an integer multiple of
-every sensor period, so all rates in Table~\ref{tab:sensors} are hit
+integration times. The nominal sensor periods are integer multiples of the $0.01\,\mathrm{s}$ maximum step, so all rates in Table~\ref{tab:sensors} are hit
 exactly; no random numbers are drawn during integration trial
 evaluations, and a fixed seed reproduces a run sample for sample. The
 navigation-consumer side of these streams is the filter of
 Section~\ref{sec:navigation}; this section covers measurement generation
-only. All specs are placeholder research assumptions (classes A/C), not
+only. All specs are placeholder research assumptions (class A), not
 certified Falcon~9 hardware.
 
 \begin{table}[htbp]
@@ -21,8 +20,8 @@ Sensor & Rate & Mounting & Error model \\
 \midrule
 IMU & $100\,\mathrm{Hz}$ & station $[38,0,0]$ &
 accel $\sigma = 0.01\,\mathrm{m/s^2}$, bias $[0.05,-0.03,0.02]\,\mathrm{m/s^2}$,
-scale factor $10^{-3}$, bias random walk $10^{-4}$;
-gyro $\sigma = 10^{-4}\,\mathrm{rad/s}$, bias $[0,0,10^{-4}]\,\mathrm{rad/s}$;
+scale factor $10^{-3}$, bias random walk $10^{-4}\,\mathrm{m\,s^{-5/2}}$;
+gyro $\sigma = 10^{-4}\,\mathrm{rad/s}$, bias $[0,0,10^{-4}]\,\mathrm{rad/s}$, bias random walk $10^{-7}\,\mathrm{rad\,s^{-3/2}}$;
 misalignment and temperature models supported \\
 GNSS & $10\,\mathrm{Hz}$ & antenna $[41,0,0]$ &
 pos $\sigma = [1.5, 1.5, 2.5]\,\mathrm{m}$ plus Gauss-Markov
@@ -37,8 +36,7 @@ cross-boresight $\sigma = 5\,\mathrm{arcsec}$, boresight roll
 $\sigma = 40\,\mathrm{arcsec}$; latency $0.1\,\mathrm{s}$ \\
 \bottomrule
 \end{tabular}
-\caption{Sensor front-ends and adopted settings; the stations are Body
-coordinates. Every entry is a placeholder research assumption (class A/C),
+\caption{Sensor front-ends and adopted settings; station coordinates are in metres in Body axes. Every entry is a placeholder research assumption (class A),
 not a certified Falcon~9 sensor.}
 \label{tab:sensors}
 \end{table}
@@ -49,16 +47,16 @@ The \ac{IMU} measures specific force and angular rate at its fixed
 structural station. The ideal specific force includes the station
 kinematics of the dynamics core --- the angular-rate and
 center-of-gravity-migration terms of moving the measurement point off the
-center of gravity --- so the accelerometer senses what a real strapped-down
-unit at that station would sense. Per sample, the measured pair is
+center of gravity --- so the accelerometer resolves the modeled structural-point motion. Equation~\eqref{eq:imu-model} gives the measured pair:
 %
 \begin{equation}
 \label{eq:imu-model}
-\mathbf{f}_{\mathrm{meas}} = \mathbf{A}\,\mathbf{f}_{\mathrm{true}}
-+ \mathbf{b}_a + \mathbf{b}_{a,T} + \mathbf{b}_{a,\mathrm{rw}} + \mathbf{n}_a,
-\qquad
-\boldsymbol{\omega}_{\mathrm{meas}} = \mathbf{G}\,\boldsymbol{\omega}_{\mathrm{true}}
-+ \mathbf{b}_g + \mathbf{n}_g,
+\begin{aligned}
+\mathbf{f}_{\mathrm{meas}} &= \mathbf{A}\,\mathbf{f}_{\mathrm{true}}
++ \mathbf{b}_a + \mathbf{b}_{a,T} + \mathbf{b}_{a,\mathrm{rw}} + \mathbf{n}_a,\\
+\boldsymbol{\omega}_{\mathrm{meas}} &= \mathbf{G}\,\boldsymbol{\omega}_{\mathrm{true}}
++ \mathbf{b}_g + \mathbf{b}_{g,T} + \mathbf{b}_{g,\mathrm{rw}} + \mathbf{n}_g.
+\end{aligned}
 \end{equation}
 %
 with per-axis scale-factor/misalignment matrices
@@ -71,7 +69,7 @@ the biases, scale factor and random walk listed in the table, with
 misalignment, temperature and gyro scale-factor terms at zero (modeled
 but switched off). The gyro measures the Body rate relative to the
 rotating \ac{ECEF} frame, consistent with the quaternion transport
-equation the navigation filter propagates.
+equation the navigation filter propagates. This is an A-class relative-rate convention: a physical inertial gyro would additionally include Earth rate transformed into Body axes. The star-tracker ECI conversion does not supply that missing gyro term.
 
 \subsection{GNSS, LiDAR and star tracker}
 

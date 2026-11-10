@@ -53,5 +53,166 @@
     "attitude_error_rms_deg": 0.4561339030755707,
     "attitude_error_final_deg": 0.012143397619142437,
     "gyro_only_attitude_error_final_deg": 1.8923705367135215
-  }
+  },
+  "integrated_results": {
+    "run": "results/gyro-final-review-20261110",
+    "runtime_source": "1ead44069ab1b585519470eab6bb3db71c92f2e2",
+    "report_base": "b5b7ae8",
+    "seed": 1,
+    "step_s": 0.01,
+    "imu_hz": 100,
+    "output_period_s": 0.1,
+    "position_rms_m": 0.8812092038991342,
+    "velocity_rms_mps": 0.13542702097209175,
+    "attitude_rms_deg": 0.4561339030755707,
+    "attitude_peak_deg": 1.5684482914389652,
+    "attitude_peak_s": 35.899999999999224,
+    "attitude_final_deg": 0.012143397619142437,
+    "gyro_only_final_deg": 1.8923705367135215,
+    "raw_rate_rms_degps": 0.011518970714237155,
+    "calibrated_rate_rms_degps": 0.018984085130864543,
+    "rate_sample_count": 4651,
+    "position_3sigma_time_fraction": [
+      0.5,
+      0.3437231298366294,
+      0.751719690455718
+    ],
+    "ascent_max_q_pa": 27620.553211264803,
+    "ascent_max_q_s": 71.89999999999768,
+    "landing": {
+      "ground_contact": true,
+      "legs_deployed": true,
+      "vertical_speed_mps": 0.4974668854111507,
+      "horizontal_speed_mps": 0.9015922262312985,
+      "tilt_deg": 0.5349440771855631,
+      "angular_rate_degps": 0.012891240278572405,
+      "target_error_m": 3.306140696321408
+    },
+    "reference_comparison": {
+      "count": 140,
+      "interval_s": [
+        0.0,
+        139.973
+      ],
+      "basis": "Video-digitized ascent telemetry, E. Speed reference frame not independently verified. Not first-stage return data.",
+      "final_sample": {
+        "time_s": 139.973,
+        "reference_altitude_m": 59400.0,
+        "simulated_altitude_m": 54627.55381850326,
+        "error_altitude_m": -4772.4461814967435,
+        "reference_speed_mps": 1609.444,
+        "simulated_speed_mps": 1574.1888275043198,
+        "error_speed_mps": -35.2551724956802
+      },
+      "rmse_altitude_m": 1576.7738094086242,
+      "rmse_speed_mps": 18.45943942816549
+    },
+    "burns": [
+      {
+        "phase": "boostback_burn",
+        "start_s": 161.0,
+        "end_s": 208.80999999995174,
+        "consumed_kg": 37982.24766865249,
+        "reason": "fuel or duration cap",
+        "ballistic_miss_m": 3970.9530262778258
+      },
+      {
+        "phase": "entry_burn",
+        "start_s": 370.139999999805,
+        "end_s": 392.94999999978427,
+        "consumed_kg": 14157.535939378213,
+        "reason": "entry speed target",
+        "ballistic_miss_m": 4718.263891037426
+      },
+      {
+        "phase": "landing_burn",
+        "start_s": 426.15999999975406,
+        "end_s": 465.08269863489204,
+        "consumed_kg": 7818.202323974454,
+        "reason": "contact",
+        "contact_passed": true
+      }
+    ],
+    "events": [
+      {
+        "event": "liftoff",
+        "time_s": 0.0
+      },
+      {
+        "event": "shutdown_start",
+        "time_s": 140.0
+      },
+      {
+        "event": "meco",
+        "time_s": 141.0
+      },
+      {
+        "event": "stage_separation",
+        "time_s": 144.0
+      },
+      {
+        "event": "boostback_start",
+        "time_s": 161.0
+      },
+      {
+        "event": "boostback_end",
+        "time_s": 208.80999999995174
+      },
+      {
+        "event": "entry_start",
+        "time_s": 370.139999999805
+      },
+      {
+        "event": "entry_end",
+        "time_s": 392.94999999978427
+      },
+      {
+        "event": "landing_start",
+        "time_s": 426.15999999975406
+      },
+      {
+        "event": "touchdown",
+        "time_s": 465.08269863489204
+      }
+    ],
+    "variant": {
+      "run": "results/two-stage-final-check",
+      "imu_hz": 20,
+      "step_s": 0.05,
+      "end_s": 465.1899828934937,
+      "landing": {
+        "ground_contact": true,
+        "legs_deployed": true,
+        "vertical_speed_mps": 0.5030118177662111,
+        "horizontal_speed_mps": 0.7404107792584305,
+        "tilt_deg": 1.8061994500282532,
+        "angular_rate_degps": 0.11307568299765836,
+        "target_error_m": 6.170503920588978
+      }
+    },
+    "input_hashes_verified": true,
+    "source_hashes": {
+      "summary.json": "9c8f48e169e396f674682024a01377c407331676ea605782390f3056dc448b58",
+      "truth.csv": "49b8cdac785c58eef19e438a172cddf2a84eb1bc6172c367e39121ef4e92fd44",
+      "stage2_truth.csv": "ac510163a9f32ff8743a14f894d879df556d3790ec765f27e1ca71d58b2a252d",
+      "navigation.csv": "7129d92ecc1a65e7360c18d5a4b9851520e5fbf993b8529f1637112fa1429e7f",
+      "measurements.csv": "3943b94a24a631ca31ddc296610625cc9e742be7f34fde4994e29be151a72801",
+      "events.json": "8411b6cfcc5c29e54e4aafc67b4592e735401f6ebfdc172a006e52b77c26a311",
+      "validation.csv": "4897c1bfcf9899e8d0afbef02235b2e884c241d98e430bca01d9c543a2e6666e"
+    },
+    "static_sensitivity": {
+      "remaining_propellant_kg": 10000,
+      "mass_kg": 32200.000000000015,
+      "nominal_cg_m": 16.211060540829695,
+      "conditional_cg_shift_m": 3.6857142857142837,
+      "lateral_force_n": 1000,
+      "moment_shift_nm": 3685.7142857142835
+    }
+  },
+  "result_figures": [
+    "results_flight_profiles.pdf",
+    "results_trajectories.pdf",
+    "results_ascent_reference.pdf",
+    "results_navigation.pdf"
+  ]
 }

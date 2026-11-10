@@ -16,7 +16,7 @@ The atmosphere follows the US Standard Atmosphere 1976 \cite{ussa1976}:
 seven gradient layers between sea level and the mesopause at
 $84.852\,\mathrm{km}$, reproduced layer by layer. Within a layer with base
 temperature $T_b$, base pressure $p_b$ and lapse rate $L$, and in the
-isothermal case, the pressure is
+isothermal case, the pressure is given by Equation~\eqref{eq:atmosphere-pressure}:
 %
 \begin{equation}
 \label{eq:atmosphere-pressure}
@@ -84,9 +84,8 @@ in the navigation filter's prediction Jacobian
 of scope.
 
 The external frame is Earth-centred and launch-aligned (the shared
-conventions are fixed in the architecture chapter of this report); it does
-not rotate for the flight mechanics themselves. Earth rotation enters translation only,
-through the separate frame acceleration
+conventions are fixed in the architecture chapter of this report); it rotates with Earth relative to inertial space. Translation uses
+the separate frame acceleration in Equation~\eqref{eq:frame-acceleration}
 %
 \begin{equation}
 \label{eq:frame-acceleration}
@@ -102,7 +101,7 @@ launch latitude $\varphi$. The nominal mission uses the sidereal rate
 $\Omega = 7.2921150\times10^{-5}\,\mathrm{rad/s}$ at
 $\varphi = 28.6^{\circ}$; setting $\Omega = 0$ disables the terms. The
 frame accelerations, and their analytical gradients, are supplied once
-per integration step next to gravity. The angular equations and the gyro
+per right-hand-side evaluation next to gravity. The angular equations and the gyro
 model retain the project's approximate Earth-rate treatment: no complete
 inertial-rate coupling is claimed.
 
