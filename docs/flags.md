@@ -46,6 +46,16 @@ docs/image.png include?
   configurations and upper-stage propagation are documented; optionally
   switch the continuation onto the declared configuration.
 
+- **FL-4 — `data/crs10_mission.json` `integration.attitude_source` is
+  stale** (opened 2026-11-10, verified against `mission.py`/`kalman.py`).
+  The record states "truth; current C filter does not estimate attitude",
+  but `mission.py` now defaults `use_estimated_attitude` to true and the
+  filter runs the 15/24-state MEKF with `GyroAttitude` and star-tracker
+  aiding; `summary.json` overwrites the key with the runtime value
+  (`mekf_gyro_gnss_lidar` in the current nominal run). The json string must
+  not be quoted in the report; cite `mission.py` and the run record instead
+  (the report Chapter 7 already does). Action: update the json record.
+
 ## Resolved flags
 
 - **FL-0 — `docs/env_issues.md` references and Earth-rotation wording**

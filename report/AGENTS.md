@@ -9,10 +9,12 @@ here are binding; skip them and the result will be rejected at the final check.
 1. **Scope**: technical report documenting the Falcon 9 / CRS-10 simulator in the
    repository root. It documents the system — models, implementation, results —
    not the process of writing the report.
-2. **Length: 14–20 pages in the compiled `main.pdf`, figures included.** The title
-   page counts; so does a table of contents if one is added. Aim for 16–18 to leave
-   margin on both sides. Re-check the page gate (below) after every structural
-   change; never discover the page count at the end.
+2. **Length: 14–20 pages of body in the compiled `main.pdf`, figures included.**
+   The gate covers the title page and table of contents through the end of the
+   Conclusions chapter; the References list and the appendix are outside the
+   gate. Aim for 16–18 body pages to leave margin on both sides. Re-check the
+   page gate (below) after every structural change; never discover the page
+   count at the end.
 3. **Language**: precise, technical English. Present tense, the system is the
    subject (not "we").
 4. **Grounding**: every number, equation, parameter, and result must come from this
@@ -36,8 +38,8 @@ here are binding; skip them and the result will be rejected at the final check.
    the code or data record before the report cites them; when you find a new
    discrepancy, do not propagate it, and append it to `../docs/flags.md`.
 2. **Outline first.** Fix the chapter list and a per-chapter page budget
-   (suggested outline below), sum the budget, and confirm the total lands in
-   14–20 pages. Register all `\input` lines before writing content.
+   (binding outline below), sum the budget, and confirm the total lands in
+   14–20 body pages. Register all `\input` lines before writing content.
 3. **Write one chapter at a time.** Finish a chapter including its equations,
    floats, and citations, then run the build and fix warnings before moving on.
 4. **Generate figures from real data**, not sketches (figure rules below).
@@ -49,10 +51,13 @@ here are binding; skip them and the result will be rejected at the final check.
 ## Layout
 
 - `main.tex` — master document: metadata, package loading, ordered `\input` list.
-- `content/` — one file per chapter, starting with `\section{...}`.
-- `images/` — all figures (PDF preferred). Create it; it does not exist yet.
+- `content/` — one file per chapter of the binding outline, starting with
+  `\section{...}`; the appendix file starts with `\appendix`.
+- `images/` — all figures (PDF preferred).
 - `content/acronyms.tex` — all acronyms via `\DeclareAcronym{KEY}{...}`.
 - `content/sample_content.tex` — syntax reference for tables, figures, headings.
+- `PROPOSED_OUTLINE.md` — the adopted structure proposal this guide's binding
+  outline implements; keep the two consistent when either changes.
 - `tum/`, `tumuser.sty`, `latexmkrc` — class and build support. Never edit these.
 
 ## How to add a chapter
@@ -74,54 +79,131 @@ traceable to one of these (or to the code they describe).
 
 | Report chapter | Sources |
 | --- | --- |
-| Mission, phases, settings, result | `docs/crs10_mission.md`, `data/crs10_mission.json`, `mission.py`, `Events.py` |
-| Vehicle, mass, parameters | `README.md`, `docs/parameter_evidence.md`, `data/vehicle_parameters.json`, `VehicleData.py`, `mass_properties.py`, `mass_flow.py` |
-| Environment (atmosphere, gravity, wind) | `Environment/environment.md`, `Environement.py`, `Environment/test_environment.py` |
-| Aerodynamics | `docs/aero_model.md`, `data/aero_configurations.json`, `data/drag_curve_pezent*.json`, `Aerodynamics.py`, `tests/test_aerodynamics.py` |
-| Propulsion, engine schedule | `docs/parameter_evidence.md`, `propulsion.py`, `engine_schedule.py`, `mass_flow.py` |
-| Dynamics, frames, propagation, loads | `docs/powered_dynamics.md`, `docs/core_api.md`, `dynamics.py`, `frames.py`, `propagation.py`, `load_interface.py` |
-| Staging, ascent control, recovery | `staging.py`, `ascent.py`, `recovery.py`, `tests/test_staging.py`, `tests/test_recovery.py` |
-| Sensors and navigation filter | `sensors.py`, `kalman.py`, `README.md` ("Coordinates" section) |
-| Validation and results | `data/crs10_ascent_reference.*`, `data/ascent_model_audit.json`, `docs/crs10_mission.md`, `tests/` |
+| 1–3 Mission, vehicle, dynamics (incl. separation) | `docs/crs10_mission.md`, `data/crs10_mission.json`, `mission.py`, `Events.py`; `README.md`, `docs/parameter_evidence.md`, `data/vehicle_parameters.json`, `VehicleData.py`, `mass_properties.py`, `mass_flow.py`; `docs/powered_dynamics.md`, `docs/core_api.md`, `dynamics.py`, `frames.py`, `propagation.py`, `load_interface.py`, `staging.py` |
+| 4 Environment (atmosphere, gravity, wind) | `Environment/environment.md`, `Environement.py`, `Environment/test_environment.py` |
+| 5 Aerodynamics | `docs/aero_model.md`, `data/aero_configurations.json`, `data/drag_curve_pezent*.json`, `Aerodynamics.py`, `tests/test_aerodynamics.py` |
+| 6 Sensor models and measurement generation | `sensors.py`, `mission.py` (GyroAttitude), `README.md` ("Coordinates" section) |
+| 7 Navigation and state estimation | `kalman.py`, `README.md` ("Coordinates" section) |
+| 8 Mission execution, control, actuation | `propulsion.py`, `engine_schedule.py`, `mass_flow.py`; `staging.py`, `ascent.py`, `recovery.py`, `mission.py`; `Actuators.py` once implemented; `tests/test_staging.py`, `tests/test_recovery.py` |
+| 9–10 Validation, results, assessment | `data/crs10_ascent_reference.*`, `data/ascent_model_audit.json`, `docs/crs10_mission.md`, `tests/`, run outputs under `results/` |
 
 The coordinate conventions from the root `README.md` (Body +x to the nose;
 ECEF is launch-aligned, not Greenwich) are binding: do not silently rename them.
 
-## Suggested outline and page budget
+## Binding outline and page budget
 
-The report tells three stories in order: how the simulator is built (loop,
-frames, models), what it simulates (vehicle, stages, flight paths), and how
-well it does it (results and validation). Adjust depth to actual content, but
-keep the total in 14–20 pages:
+`PROPOSED_OUTLINE.md` is the adopted report structure; the table below is the
+binding version (files, budgets, responsibilities). The report follows the
+simulator's data flow: define the vehicle and shared conventions, explain the
+physical and measurement models, describe mission execution, then evaluate
+results and their engineering implications.
 
-| # | Chapter | Pages | Core content |
-| --- | --- | --- | --- |
-| 1 | Introduction & scope | 0.75–1 | CRS-10 context, simulator purpose, the K/E/A evidence-class convention used throughout |
-| 2 | Simulator architecture & loop | 1.5 | A/B/C contract table; the mission loop: event machine → step-size selection → RK4 → state sync; the control chain: guidance → actuator layer → applied forces/moments; step-cap priority list (dt 0.01 s, event boundaries, controller knots, output period, sensor sample times, landing clearance); guards (propellant limit, domain rejection, touchdown bisection); reproducibility (seed, input SHA-256 hashes, run outputs). Loop flow diagram |
-| 3 | Vehicle, stages & mission | 1.5–2 | Stage/geometry/dry-mass table with evidence classes; propulsion inventory; propellant budgets; mission phase timeline table; the three flight paths: ascent arc, separated upper stage, booster return arc (trajectory sketch) |
-| 4 | Reference frames & dynamics | 1.5 | Body +x, launch-aligned ECEF, quaternion transport terms; moving-CG linear/angular balances; sensor-station kinematics; RK4 Earth-centred safeguard |
-| 5 | Environment models | 1 | USSA layers + tail, point-mass gravity + gradient, Coriolis/centrifugal frame acceleration, wind profile |
-| 6 | Aerodynamics | 1.5 | Four configurations, axial CA0(M) curve figure, normal/crossflow/damping equations, grid fins, evidence classes |
-| 7 | Propulsion & mass model | 1.5 | Thrust/Isp relations, sea-level conversion, mass flow, O/F, tank depletion, CG/inertia migration figure |
-| 8 | Ascent, staging & upper stage | 1.25 | Attitude/pitch program, event conditions, smooth shutdown, separation conservation audit, stage-2 continuation |
-| 9 | Booster return, control & actuation | 1.5–2 | Boostback predictor, entry/landing logic, PD gains table, moment limits, grid-fin interplay, landing criteria; **actuator layer** (command path from the return controller through actuator dynamics to TVC/grid-fin forces and moments — scope to the final implementation). Write the actuator subsection last |
-| 10 | Sensors & navigation | 1.25–1.5 | IMU/GNSS/LiDAR spec table, 9-state Kalman filter, truth-attitude limitation |
-| 11 | Results & validation | 2–2.5 | Ascent vs video reference, flight profiles (q̄, Mach, AoA), separated trajectories figure, landing metrics table, navigation errors |
-| 12 | Conclusion & limitations | 0.5–0.75 | Evidence-class summary, declared estimates and open items |
+| # | Chapter | File | Pages | Lead |
+| --- | --- | --- | --- | --- |
+| 1 | Introduction and Project Scope | `content/introduction.tex` | 0.75–1 | Kwanwoo |
+| 2 | Simulation Architecture and Shared Conventions | `content/architecture.tex` | 1.5–2 | Kwanwoo |
+| 3 | Vehicle Configuration, Dynamics, and Mission Definition | `content/vehicle_dynamics.tex` | 2.5–3 | Kwanwoo |
+| 4 | Environment Models | `content/environment_models.tex` | 1.25 | Philipp |
+| 5 | Aerodynamics | `content/aerodynamics.tex` | 1.5–1.75 | Philipp |
+| 6 | Sensor Models and Measurement Generation | `content/sensor_models.tex` | 1.25 | Emilien |
+| 7 | Navigation Architecture and State Estimation | `content/navigation.tex` | 1.25–1.5 | Emilien |
+| 8 | Mission Execution and Numerical Implementation | `content/mission_execution.tex` | 2 | Kwanwoo |
+| 9 | Verification, Validation, and Simulation Results | `content/results.tex` | 2–2.5 | Joint (assembled by Kwanwoo) |
+| 10 | Engineering Assessment and Implications for Future GNC | `content/assessment.tex` | 1–1.25 | Joint |
+| 11 | Conclusions | `content/conclusions.tex` | 0.5–0.75 | Joint |
+| — | References (unnumbered) | `content/references.tex` | outside gate | All |
+| A | Appendix: Reproducibility and Supporting Data | `content/appendix.tex` | outside gate | Shared |
 
-Chapters 2 and 3 deliver the "how the simulation works" and "what the
-stages and flight paths are" basics the report must teach before any model
-detail; chapters 4–9 then go deeper per subsystem, and 10–11 show the
-result. Sum of midpoints ≈ 16 pages — over budget chapters get trimmed, not
-padded. One timing rule: the actuator layer is being implemented while this
-report is written. Once it lands, re-verify the affected facts (loop chain
-in chapter 2, grid-fin command path in chapter 6, actuation in chapter 9),
-re-run the test suites, regenerate a nominal full run if the simulation
-behavior changed, and write those subsections last.
+Sum of midpoints ≈ 16 body pages; over-budget chapters get trimmed, not
+padded. Roughly 450 words of body text per page in this layout, i.e.
+5,000–7,000 words overall; floats and equations take the rest. Treat
+`texcount` (below) as the gauge and the compiled body page count as the
+criterion. The appendix carries the parameter/assumption/source register,
+variable definitions and units, run configurations, long code excerpts and
+additional results — anything pulled out of the body goes there, with a cross-reference.
 
-Rule of thumb: roughly 450 words of body text per page in this layout, i.e.
-5,000–7,000 words overall; floats and equations take the rest. Treat `texcount`
-(below) as the gauge and the compiled page count as the criterion.
+Chapter 2 covers the overall data flow (truth vs measurements vs estimates),
+coordinate frames, the quaternion convention, reference points, units, module
+interfaces, the mission loop and reproducibility. Chapter 3 must state the
+vehicle and separation material once, in one place:
+
+1. **Vehicle Configuration and Evidence Classification** — CRS-10 stage/Dragon
+   configuration, geometry and mass budget, K/E/A definitions, provenance.
+2. **Propulsion and Propellant Depletion** — thrust, ambient-pressure
+   correction, specific impulse, mass flow, loaded vs consumed O/F, inventory.
+3. **Mass, Center of Gravity, and Inertia** — dry-component and liquid models,
+   component summation, property derivatives during fuel consumption.
+4. **Equations of Motion and Load Interfaces** — translational and rotational
+   equations, moving-CG/exhaust terms, force/moment conventions.
+5. **Initial Conditions and Flight-Phase Definition** — initial state, mission
+   sequence, transition conditions.
+6. **Stage Separation and Child-State Mapping** — configuration change,
+   inherited states, conservation-check definitions.
+
+Chapter 8 carries the executed commands and numerics:
+
+1. **Ascent Commands** — pitch program, attitude commands, engine commands, shutdown envelope, upper-stage continuation.
+2. **Return Commands** — boostback prediction and steering, entry-burn logic, landing-ignition prediction, fuel budgets, restart conditions.
+3. **Force and Moment Allocation and Actuator Representation** — engine selection, throttle, requested force direction, virtual/physical control moments, grid-fin commands, limits of the implemented actuator representation. Write this subsection last.
+4. **Integration, Events, and Sensor Scheduling** — RK4, accepted-state synchronization, scheduled/state-triggered events, contact refinement, guidance clocks, sensor/output timing.
+5. **Two-Vehicle Execution and Simulation Operation** — independent post-separation propagation, execution options, configuration/seed records, output files, failure handling.
+
+### Placement rules (definitions versus results)
+
+- Chapter 3 defines phase transitions, separation and child-state mapping
+  mathematics. Measured event times, conservation residuals and landing
+  metrics are results and belong in Chapter 9.
+- The aerodynamic response to a given grid-fin deflection stays in Chapter 5;
+  the choice of deflection belongs in Chapter 8. Chapter 3 defines thrust and
+  flow for a supplied throttle; Chapter 8 explains how throttle is selected.
+- Resulting flight profiles (flight-path plot, thrust profile) and the landing
+  acceptance table belong in Chapter 9, referenced forward from the defining
+  chapters.
+- Chapter 10 (Engineering Assessment) is grounded in Chapter 9 numbers:
+  dominant uncertainties, the most dangerous model/navigation errors, their
+  consequences. Forward-looking improvements are labelled as recommendations
+  (class A reasoning), never presented as measured findings; no new ungrounded
+  numbers.
+- Reference-attitude diagnostic results and gyro-driven navigation results
+  must remain distinguishable in Chapter 9 and wherever navigation errors are
+  quoted.
+
+### Migration of existing content (transition state)
+
+`content/` currently holds the old six-chapter layout. Map it as follows;
+restructure mechanically, do not rewrite content while moving it, and never
+let a float, table or label become orphaned:
+
+| Existing file | Destination |
+| --- | --- |
+| `introduction.tex` | Chapter 1; currently lorem ipsum — replace fully. |
+| `vehicle_mission.tex` | Vehicle config, propulsion inventory and phase definitions into Chapter 3 (absorb into `vehicle_dynamics.tex` when finalizing); the return propellant budget moves to Chapter 8; nominal-time phase rows and the flight-path figure move to Chapter 9. |
+| `environment_models.tex` | Chapter 4, unchanged. |
+| `aerodynamics.tex` | Chapter 5, unchanged (grid-fin aerodynamic response stays). |
+| `sensor_models.tex` | Chapter 6 — split out of `sensors_navigation.tex` (done). |
+| `navigation.tex` | Chapter 7 — split out of `sensors_navigation.tex` (done). |
+| `ascent_staging.tex` | Separation and conservation-audit definitions into 3.6; ascent commands, shutdown envelope and upper-stage continuation into 8.1. Delete after merging. |
+| `return_control.tex` | Return algorithms and allocation into 8.2–8.3; thrust-profile figure and landing metrics table into Chapter 9. Pending actuator subsection stays here until 8.3 exists. |
+| `references.tex` | Combined, deduplicated bibliography of all authors. |
+
+Until the destination chapters exist, moving blocks stay in their current
+files and `main.tex` registers the intermediate files with a "to be merged"
+comment. The final structure gate requires the transition resolved: one file
+per chapter, `main.tex` order matching the outline, no intermediate files
+left registered.
+
+### Timing rules
+
+- **Actuator layer** (`docs/flags.md` FL-2): once implemented, re-verify the
+  loop chain (Chapter 2), the grid-fin aerodynamic response (Chapter 5) and
+  actuation (Chapter 8), re-run the test suites, regenerate the nominal run if
+  behavior changed, and write subsection 8.3 last, grounded in the final code.
+- **Gyro-based attitude propagation** is implemented: `kalman.py` has an
+  optional MEKF attitude/gyro-bias block (active with `q0`), `mission.py` runs
+  `GyroAttitude` with the `use_estimated_attitude` setting default true.
+  Prose still claiming the filter uses truth attitude
+  only is stale: verify against `kalman.py`/`mission.py` and update Chapter 7
+  before citing any navigation error figure.
 
 ## Conventions
 
@@ -201,6 +283,11 @@ Rule of thumb: roughly 450 words of body text per page in this layout, i.e.
 - No bibliography engine (bibtex/biblatex) is configured. Use
   `content/references.tex` with a `thebibliography` environment, registered
   last, and cite with `\cite{key}`.
+- References remain an unnumbered section. All authors maintain their own
+  sources and merge them into the single deduplicated `thebibliography` for
+  submission; each author retains the page, table or figure numbers for the
+  material cited and the raw published-input/derived-estimate/assumption
+  distinction.
 - Cite only verifiable sources: the evidence documents above name the origin of
   each parameter (e.g. Falcon 9 user guide, public telemetry); reuse exactly
   those. Never invent authors, titles, DOIs, or page numbers. Repo-internal
@@ -233,7 +320,9 @@ Run from this directory after every chapter and at the end:
 
 ```bash
 latexmk -pdf main.tex          # build (reruns pdflatex/bibtex as needed)
-grep "Output written" main.log # -> "(N pages, ...)": N must be 14-20
+grep -i "references" main.toc  # -> page listed for References; that page number
+                               #    minus 1 is the body page count: must be 14-20
+grep "Output written" main.log # -> total pages incl. references and appendix (info only)
 grep -i "undefined" main.log   # -> must be empty (labels, acronyms)
 grep -rn -i -e lipsum -e lorem content/ | grep -v sample_content
                               # -> must be empty
@@ -269,7 +358,8 @@ injected `LD_LIBRARY_PATH` breaks poppler otherwise.
 - `Actuators.py` is an empty placeholder **at the time of this writing, but
   the actuator layer is planned and will be implemented before the report is
   submitted**. Treat it as a first-class part of the system:
-  - The report structure must cover it (chapters 2, 6, 9 in the outline) —
+  - The report structure must cover it (chapters 2, 5 and 8 in the binding
+    outline; force and moment allocation is subsection 8.3) —
     do not leave it out or mention it only in "future work".
   - Verify the actual implementation state of `Actuators.py` (and its tests)
     before writing the actuator subsections, and write those subsections
@@ -289,7 +379,16 @@ injected `LD_LIBRARY_PATH` breaks poppler otherwise.
 All of the following must hold before the report is considered finished:
 
 - [ ] `main.pdf` compiles with `latexmk -pdf main.tex`, zero errors.
-- [ ] Page count is 14–20 (grep gate above).
+- [ ] Body page count (title/ToC through Conclusions) is 14–20 (gate above);
+      References and appendix sit outside the gate.
+- [ ] Chapter structure matches the binding outline: one file per chapter,
+      `main.tex` input order matches the outline, the migration transition is
+      fully resolved (no intermediate "to be merged" files registered), and
+      result material (measured times, residuals, flight profiles, landing
+      metrics) lives in Chapter 9.
+- [ ] Results chapter distinguishes reference-attitude diagnostics from
+      gyro-driven navigation results, and all Chapter 10 claims trace to
+      Chapter 9 numbers or are labelled recommendations.
 - [ ] No undefined references, no lipsum/lorem remnants, no orphaned floats,
       no manual numbering.
 - [ ] Every numeric claim is traceable to a source in the source map; every

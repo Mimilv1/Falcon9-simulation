@@ -1,0 +1,134 @@
+\section{Navigation Architecture and State Estimation}
+\label{sec:navigation}
+
+The navigation filter, \texttt{kalman.py}, is a multiplicative
+error-state \ac{MEKF}: inertial prediction on the \ac{IMU} stream,
+corrected by the \ac{GNSS}, \ac{LIDAR} and star-tracker measurements of
+Section~\ref{sec:sensors}. The estimated state is referenced to the \ac{IMU}
+station --- its position and velocity in the external frame --- so the
+lever arms of the other sensors are constant Body vectors and no state
+re-referencing occurs when the center of gravity migrates during burn.
+The nominal 24-state configuration is
+$\mathbf{x} = [\mathbf{p}, \mathbf{v}, \mathbf{b}_a,\,
+\mathbf{q}, \mathbf{b}_g,\, \mathbf{s}_f,\, \mathbf{m}]$:
+\ac{IMU}-station position and velocity, accelerometer bias, the attitude
+quaternion from Body to \ac{ECEF} (Hamilton, scalar-first), gyro bias,
+per-axis gyro scale factor and the six off-diagonal gyro misalignment
+terms (Table~\ref{tab:nav-state}).
+
+\begin{table}[htbp]
+\centering
+\begin{tabular}{lll}
+\toprule
+Block & Content & Initial $1\sigma$ \\
+\midrule
+$\mathbf{p}$, $\mathbf{v}$ & \ac{IMU}-station position, velocity [\textrm{m}, \textrm{m/s}] & $2\,\mathrm{m}$, $0.05\,\mathrm{m/s}$ \\
+$\mathbf{b}_a$ & accelerometer bias, Body [$\mathrm{m/s^2}$] & $0.1$ \\
+$\mathbf{q}$ & attitude (multiplicative error $\delta\boldsymbol{\theta}$, Body [rad]) & $0.01\,\mathrm{rad}$ \\
+$\mathbf{b}_g$ & gyro bias, Body [$\mathrm{rad/s}$] & $10^{-3}$ \\
+$\mathbf{s}_f$, $\mathbf{m}$ & gyro scale factor, misalignment & $10^{-3}$ \\
+\bottomrule
+\end{tabular}
+\caption{Estimated-state blocks and initial standard deviations. The
+initial position error is a seeded $[1, -1, 0.5]\,\mathrm{m}$; the attitude
+starts at truth with a $0.01\,\mathrm{rad}$ prior unless declared
+otherwise.}
+\label{tab:nav-state}
+\end{table}
+
+\subsection{Prediction}
+
+Each $100\,\mathrm{Hz}$ \ac{IMU} sample advances the strapdown state. The
+gyro measurement is corrected with the current calibration estimate,
+$\hat{\boldsymbol{\omega}} = \hat{\mathbf{G}}^{-1}
+(\boldsymbol{\omega}_{\mathrm{meas}} - \hat{\mathbf{b}}_g)$, and the
+attitude is propagated by its quaternion transport equation with the
+trapezoidal mean rate over the interval; the mid-interval attitude
+rotates the bias-corrected specific force into the external frame
+alongside the modelled gravity and rotating-frame accelerations of
+Section~\ref{sec:environment}, whose analytical gradients linearize that
+model in the filter. The error dynamics couple the multiplicative attitude
+error into the velocity error through $-\mathbf{R}\,[\hat{\mathbf{f}}]_\times
+\delta\boldsymbol{\theta}$, and the gyro chain drives the attitude error
+through the bias, scale-factor and misalignment blocks --- the calibration
+is observable only through attitude aiding and sufficient angular motion.
+Process noise is built from the sensor \acp{PSD}
+($\sigma_a^2/f_{\mathrm{IMU}}$, $\sigma_g^2/f_{\mathrm{IMU}}$) and the
+declared bias random walks.
+
+\subsection{Measurement updates}
+
+All corrections use the Joseph-form covariance update and record a
+normalized innovation square for monitoring. The \ac{GNSS} update corrects
+position and velocity: its $0.1\,\mathrm{s}$ latency is compensated by
+extrapolating the measurement to the current epoch with the estimated
+acceleration, its lever arm (antenna minus \ac{IMU} station) is removed
+with the angular rate, and the measurement Jacobian carries the full
+attitude, bias and calibration sensitivity of that arm. The \ac{LIDAR}
+update is scalar and nonlinear: the measurement is the analytic
+line--sphere slant range of Section~\ref{sec:sensors}, differentiated
+analytically at the estimated state, with attitude sensitivity through
+both the arm and the boresight direction; invalid geometry skips the
+update. The star-tracker update is an absolute attitude correction: the
+measurement quaternion is converted from \ac{ECI} to \ac{ECEF} by the
+Earth rotation at the exposure epoch, propagated over its latency with
+the last estimated body rate, and differenced multiplicatively from the
+estimated attitude; its noise covariance is rotated into the Body frame by
+the known mounting, and the update is gated by the three-degree-of-freedom
+\ac{NIS} at the $99.9\,\%$ level ($16.27$), with rejects counted rather
+than silently absorbed.
+
+\subsection{Interfaces and diagnostics}
+
+The filter consumes its own attitude estimate by default
+(\texttt{use\_estimated\_attitude}): the prediction rotates the specific
+force with the estimated quaternion, and every GNSS, \ac{LIDAR} and
+star-tracker correction also corrects that attitude. A declared
+diagnostic mode retains the original nine-state filter with the truth
+attitude supplied from outside; its results are kept distinct from the
+gyro-driven results in the results chapter. A second, deliberately
+unaided baseline propagates the attitude from the raw gyro stream alone
+(\texttt{GyroAttitude}): starting from the same initial attitude, it
+carries uncompensated gyro noise and bias, and its logged error isolates
+how much the aiding buys over pure dead reckoning. One filter instance
+runs across staging without a reset --- the estimated state is
+\ac{IMU}-station referenced and the sensor stations are stage-1
+hardware, so the booster return needs no state handover; the separated
+upper stage flies an open-loop truth continuation without a navigation
+instance.
+
+\subsection{Verification and nominal-run behavior}
+
+The filter is verified in stages: numeric finite-difference checks confirm
+the analytic Jacobians of the attitude error with respect to gyro bias,
+scale factor and misalignment; a closed-loop scenario (a vehicle
+exercised on the rotating Earth with star-tracker aiding) recovers
+injected bias, scale-factor and misalignment values; and the cross-module
+and mission-level suites (115 tests, all green) exercise the integrated
+chain end to end. In the nominal full-mission run the filter operates in
+its default gyro-driven configuration: the position error holds
+$0.881\,\mathrm{m}$ \ac{RMS} ($0.918\,\mathrm{m}$ in the truth-attitude
+reference configuration), the aided attitude error stays at
+$0.456^{\circ}$ \ac{RMS} (peak $1.57^{\circ}$, touchdown
+$0.012^{\circ}$) while the unaided gyro baseline drifts monotonically to
+$1.89^{\circ}$, and the $z$-axis gyro bias is recovered to $1.4\,\%$.
+The \ac{GNSS} innovations are statistically consistent (mean \ac{NIS}
+$7.58$ for six degrees of freedom) and \ac{LIDAR} delivers $496$ valid
+updates. All $381$ valid star-tracker exposures are rejected by the
+\ac{NIS} gate: the propagated attitude uncertainty ($1\sigma$ median
+$0.118^{\circ}$) understates the actual maneuver-induced error by more
+than the factor the $99.9\,\%$ gate tolerates, so the nominal attitude is
+gyro-propagated with weak \ac{GNSS} lever-arm aiding only --- the gate
+outcome and its causes are treated as a result in the results chapter of
+this report.
+
+\paragraph*{Assumptions and limitations}
+All noise and bias parameters are the placeholder research assumptions of
+Table~\ref{tab:sensors}; the gyro calibration block estimates a unit whose
+adopted true misalignment and scale factor are zero, so its output is a
+zero-check rather than a calibration demo; \ac{GNSS} latency compensation
+assumes constant acceleration across the $0.1\,\mathrm{s}$ window;
+attitude prior and initialization are declared values, not surveyed
+alignment; and the filter has no protection against unmodeled faults
+beyond the star-tracker \ac{NIS} gate --- every update it accepts is
+trusted once inside the gate.

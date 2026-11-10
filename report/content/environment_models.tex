@@ -43,12 +43,11 @@ $2\,000\,\mathrm{km}$ envelope ceiling; $p(200\,\mathrm{km}) \approx
 $0$--$2\,000\,\mathrm{km}$ is the mission scope; altitudes outside raise a
 domain error instead of a number. Figure~\ref{fig:environment-models}
 shows the model against the published USSA 1976 checkpoint values that the
-test suite pins ($5$--$80\,\mathrm{km}$, altitudes, temperatures,
-pressures and densities compared at $5\times10^{-5}$ relative tolerance).
-The environment suite of $41$ tests additionally checks layer-boundary
-continuity, monotone pressure and density decay, exact tail scale height,
-and hydrostatic balance $\partial p/\partial h = -g_0\,\rho$ inside every
-layer.
+test suite pins ($5$--$80\,\mathrm{km}$, temperatures, pressures and
+densities at $5\times10^{-5}$ relative tolerance); the environment suite
+of $41$ tests additionally checks layer-boundary continuity, monotone
+decay, exact tail scale height, hydrostatic balance and the domain
+rejection behavior.
 
 \begin{figure}[htbp]
 \centering
@@ -80,12 +79,13 @@ once as an acceleration next to thrust over mass. The module also provides
 the $3\times3$ gravity-gradient map
 $\nabla_{\mathbf{r}}\mathbf{a}_g = (\mu/\|\mathbf{r}\|^3)\,
 (3\,\hat{\mathbf{r}}\hat{\mathbf{r}}^{\mathsf{T}} - \mathbf{I})$, used only
-in the navigation filter's prediction Jacobian (the navigation chapter),
-not for torques. Oblateness ($J_2$) is out of scope.
+in the navigation filter's prediction Jacobian
+(Section~\ref{sec:navigation}), not for torques. Oblateness ($J_2$) is out
+of scope.
 
-The external frame is Earth-centred and launch-aligned (detailed in the
-reference-frames chapter of this report); it does not rotate for the
-flight mechanics themselves. Earth rotation enters translation only,
+The external frame is Earth-centred and launch-aligned (the shared
+conventions are fixed in the architecture chapter of this report); it does
+not rotate for the flight mechanics themselves. Earth rotation enters translation only,
 through the separate frame acceleration
 %
 \begin{equation}
@@ -126,9 +126,17 @@ above it, with an optional reference-level shift, and supports a station
 offset from the center of gravity (used, for example, for engine-exit
 altitude). Terrain and contact forces are out of scope; contact is
 evaluated at the mission level through the leg-tip geometry discussed with
-the landing criteria in the return-control chapter of this report.
+the landing criteria in the mission-execution chapter of this report.
 
-The module validates its configuration at construction: non-finite
-gravity, radius, ground offset or wind, non-positive radius, a negative
-rotation rate or a latitude beyond $\pm 90^{\circ}$ all raise an error
-before flight, not mid-integration.
+\paragraph*{Assumptions and limitations}
+The environment is dry air only, with a strictly layered USSA profile;
+gravity is spherical with no oblateness; the wind is a declared
+stylization without gusts, time dependence or direction shear; the ground
+is a bare sphere without terrain; and the frame-acceleration treatment is
+exact for translation while the attitude chain carries only the
+approximate Earth-rate treatment noted above. These scope choices
+(class A) apply uniformly to ascent and return; no environment parameter
+was fitted to flight data. The module validates its configuration at
+construction --- non-finite gravity, radius, ground offset or wind,
+non-positive radius, a negative rotation rate or a latitude beyond
+$\pm 90^{\circ}$ all raise an error before flight, not mid-integration.
