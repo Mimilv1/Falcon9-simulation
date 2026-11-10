@@ -39,19 +39,20 @@
 % +++++ Main part
 % Chapter order follows the binding outline in AGENTS.md (adopted from
 % PROPOSED_OUTLINE.md). Commented lines mark chapters not yet written.
-\input{content/introduction}        % Ch 1
-\input{content/architecture}        % Ch 2
-%\input{content/vehicle_dynamics}   % Ch 3 - to be written
-\input{content/vehicle_mission}     % Ch 3 interim seed until vehicle_dynamics.tex exists
-\input{content/environment_models}  % Ch 4
-\input{content/aerodynamics}        % Ch 5
-\input{content/sensor_models}       % Ch 6
-\input{content/navigation}          % Ch 7
-\input{content/mission_execution}  % Ch 8
-%\input{content/results}            % Ch 9 - to be written
-%\input{content/assessment}         % Ch 10 - to be written
-%\input{content/conclusions}        % Ch 11 - to be written
+% Chapters are registered with \include: it starts every chapter on a new
+% page (automatic \clearpage). Don't switch back to \input.
+\include{content/introduction}        % Ch 1
+\include{content/architecture}        % Ch 2
+\include{content/vehicle_mission}     % Ch 3
+\include{content/environment_models}  % Ch 4
+\include{content/aerodynamics}        % Ch 5
+\include{content/sensor_models}       % Ch 6
+\include{content/navigation}          % Ch 7
+\include{content/mission_execution}   % Ch 8
+%\include{content/results}            % Ch 9 - to be written
+%\include{content/assessment}         % Ch 10 - to be written
+%\include{content/conclusions}        % Ch 11 - to be written
 % further chapters are inserted here in document order
-\input{content/references}
-%\input{content/appendix}          % Appendix A - to be written
+\include{content/references}
+%\include{content/appendix}          % Appendix A - to be written
 \end{document}

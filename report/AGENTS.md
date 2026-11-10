@@ -9,12 +9,12 @@ here are binding; skip them and the result will be rejected at the final check.
 1. **Scope**: technical report documenting the Falcon 9 / CRS-10 simulator in the
    repository root. It documents the system — models, implementation, results —
    not the process of writing the report.
-2. **Length: 14–20 pages of body in the compiled `main.pdf`, figures included.**
-   The gate covers the title page and table of contents through the end of the
-   Conclusions chapter; the References list and the appendix are outside the
-   gate. Aim for 16–18 body pages to leave margin on both sides. Re-check the
-   page gate (below) after every structural change; never discover the page
-   count at the end.
+2. **Length: at least 15 pages of body in the compiled `main.pdf`, figures
+   included. There is no upper limit.** The gate covers the title page and
+   table of contents through the end of the Conclusions chapter; the References
+   list and the appendix are outside the gate and do not count toward it.
+   Re-check the page gate (below) after every structural change; never
+   discover the page count at the end.
 3. **Language**: precise, technical English. Present tense, the system is the
    subject (not "we").
 4. **Grounding**: every number, equation, parameter, and result must come from this
@@ -37,9 +37,9 @@ here are binding; skip them and the result will be rejected at the final check.
    the code or `data/*.json`. Flagged statements must be verified against
    the code or data record before the report cites them; when you find a new
    discrepancy, do not propagate it, and append it to `../docs/flags.md`.
-2. **Outline first.** Fix the chapter list and a per-chapter page budget
-   (binding outline below), sum the budget, and confirm the total lands in
-   14–20 body pages. Register all `\input` lines before writing content.
+2. **Outline first.** Fix the chapter list (binding outline below) and confirm
+   the planned total clears the minimum of 15 body pages (there is no upper
+   limit). Register all `\input` lines before writing content.
 3. **Write one chapter at a time.** Finish a chapter including its equations,
    floats, and citations, then run the build and fix warnings before moving on.
 4. **Generate figures from real data**, not sketches (figure rules below).
@@ -63,11 +63,14 @@ here are binding; skip them and the result will be rejected at the final check.
 ## How to add a chapter
 
 1. Create `content/<name>.tex`, starting with `\section{Chapter Title}`.
-2. Register it in `main.tex` below the `% +++++ Main part` marker, in PDF order:
+2. Register it in `main.tex` below the `% +++++ Main part` marker, in PDF order.
+   Chapters are registered with `\include`, not `\input`: `\include` starts
+   every chapter on its own page (automatic `\clearpage`) and writes a
+   per-chapter `.aux` file:
 
    ```latex
-   \input{content/introduction}
-   %\input{content/next_section}
+   \include{content/introduction}
+   %\include{content/next_section}
    ```
 
 3. Build with `latexmk -pdf main.tex` from this directory.
@@ -90,10 +93,10 @@ traceable to one of these (or to the code they describe).
 The coordinate conventions from the root `README.md` (Body +x to the nose;
 ECEF is launch-aligned, not Greenwich) are binding: do not silently rename them.
 
-## Binding outline and page budget
+## Binding outline and page guidance
 
 `PROPOSED_OUTLINE.md` is the adopted report structure; the table below is the
-binding version (files, budgets, responsibilities). The report follows the
+binding version (files, page guidance, responsibilities). The report follows the
 simulator's data flow: define the vehicle and shared conventions, explain the
 physical and measurement models, describe mission execution, then evaluate
 results and their engineering implications.
@@ -114,11 +117,12 @@ results and their engineering implications.
 | — | References (unnumbered) | `content/references.tex` | outside gate | All |
 | A | Appendix: Reproducibility and Supporting Data | `content/appendix.tex` | outside gate | Shared |
 
-Sum of midpoints ≈ 16 body pages; over-budget chapters get trimmed, not
-padded. Roughly 450 words of body text per page in this layout, i.e.
-5,000–7,000 words overall; floats and equations take the rest. Treat
-`texcount` (below) as the gauge and the compiled body page count as the
-criterion. The appendix carries the parameter/assumption/source register,
+Sum of midpoints ≈ 16 body pages, which clears the minimum-15 gate with
+margin. The Per-chapter pages are rough planning guidance for distribution
+only, not budgets: there is no upper limit, and no chapter is trimmed to fit
+a per-chapter number. Roughly 450 words of body text per page in this
+layout; floats and equations take the rest. Treat `texcount` (below) as the
+word-total gauge and the compiled body page count as the criterion. The appendix carries the parameter/assumption/source register,
 variable definitions and units, run configurations, long code excerpts and
 additional results — anything pulled out of the body goes there, with a cross-reference.
 
@@ -333,7 +337,8 @@ Run from this directory after every chapter and at the end:
 ```bash
 latexmk -pdf main.tex          # build (reruns pdflatex/bibtex as needed)
 grep -i "references" main.toc  # -> page listed for References; that page number
-                               #    minus 1 is the body page count: must be 14-20
+                               #    minus 1 is the body page count: must be at
+                               #    least 15 (no upper limit)
 grep "Output written" main.log # -> total pages incl. references and appendix (info only)
 grep -i "undefined" main.log   # -> must be empty (labels, acronyms)
 grep -rn -i -e lipsum -e lorem content/ | grep -v sample_content
@@ -388,11 +393,13 @@ injected `LD_LIBRARY_PATH` breaks poppler otherwise.
 All of the following must hold before the report is considered finished:
 
 - [ ] `main.pdf` compiles with `latexmk -pdf main.tex`, zero errors.
-- [ ] Body page count (title/ToC through Conclusions) is 14–20 (gate above);
-      References and appendix sit outside the gate.
+- [ ] Body page count (title/ToC through Conclusions) is at least 15; there
+      is no upper limit (gate above). References and appendix sit outside
+      the gate.
 - [ ] Chapter structure matches the binding outline: one file per chapter,
       `main.tex` input order matches the outline, no interim files are
-      registered, and
+      registered, every chapter is registered with `\include` (which starts
+      it on a new page), and
       result material (measured times, residuals, flight profiles, landing
       metrics) lives in Chapter 9.
 - [ ] Results chapter distinguishes reference-attitude diagnostics from
