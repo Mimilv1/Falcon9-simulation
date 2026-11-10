@@ -432,7 +432,7 @@
       "class": "K",
       "unit": "kg",
       "source_ids": [
-        "S10"
+        "S13"
       ],
       "method": "1530 kg pressurized with packaging + 960 kg unpressurized = 2490 kg; subset of loaded payload_mass.",
       "source": "SpaceX CRS-10 Mission Overview, NASA"
@@ -451,7 +451,7 @@
     "integration": "Body-only powered integration with explicit balanced exhaust flow, CG migration and angular-momentum outflow; smooth flow required. See docs/powered_dynamics.md.",
     "inventory": "Fixed initial loading and flow ratio allow total-mass state reconstruction. No venting, variable mixture, refilling or restart-specific ratio schedules.",
     "engine_operating_set": "Stage1 historical effective Tvac824901 N from756kN SL +0.68m2*101325Pa; Isp311s and min throttle0.60 remain mixed-source estimates. Stage2 retained935kN/348s. Not mission-certified engine limits.",
-    "earth_model": "Current Body components; fixed initial Body basis only for attitude bookkeeping. No active geographic transformation API.",
+    "earth_model": "Current Body components; launch-aligned rotating Earth-fixed translation with an explicit relative-rate attitude approximation.",
     "exhaust_closure": "Fixed port stations, axial CG migration, balanced axial exhaust first moments; relative-flow internal angular momentum/swirl and moving nozzle boundaries omitted."
   },
   "numeric_source": "Falcon9Parameters in vehicle_parameters.py; Vehicle factory references these values",
@@ -534,12 +534,18 @@
       "url": "https://www.nasa.gov/wp-content/uploads/2015/06/694074main_spacexcrs-1presskit.pdf",
       "locator": "Printed p.26 / PDF p.27, Dragon Spacecraft, Dimensions",
       "scope": "Dragon 4.4 m tall and trunk 2.8 m tall, both 3.66 m diameter. Earlier Dragon 1 dimensions transferred to CRS-10, not measured CRS-10 geometry."
+    },
+    "S13": {
+      "title": "NASA SpaceX CRS-10 Mission Overview, 2017",
+      "url": "https://www.nasa.gov/wp-content/uploads/2018/07/spacex_crs-10_mission_overview_0.pdf",
+      "locator": "Cargo inventory",
+      "scope": "2490 kg cargo is a subset of the loaded Dragon assembly."
     }
   },
   "coordinate_convention": {
     "shared_vectors": "Current Body components; Body +x points toward nose",
     "body_transverse_axes": "Right handed; ring angle zero is +y, +90 degrees is +z; no geographic heading assigned",
-    "fixed_reference_frame": "ECEF: Earth centre at (0,0,0); launch site at (0,0,earth_radius) on the +z axis; Earth rotation not modeled in v0 (axes treated as non-rotating/inertial)",
+    "fixed_reference_frame": "Launch-aligned Earth-fixed frame; Earth centre at (0,0,0), launch at (0,0,R). Central gravity and separate Coriolis/centrifugal accelerations are implemented; relative-rate attitude approximation is explicit.",
     "quaternion": "Hamilton [w,x,y,z], current Body -> ECEF",
     "initial_quaternion_wxyz": [
       0.7071067811865476,
@@ -550,8 +556,8 @@
     "position": "Vector from the Earth centre (ECEF origin) to current CG, expressed in CURRENT Body, not CG relative to itself",
     "gravity": "Current Body vector from B; rotate its direction as attitude changes",
     "inertia_order": "Ixx axial; Iyy/Izz transverse",
-    "geographic_transformations": "ECEF adopted project-wide; Earth rotation and ENU helpers deferred"
+    "geographic_transformations": "The internal ECEF axes are launch-aligned, not Greenwich ECEF."
   },
   "mission": "CRS-10",
-  "mission_scope": "Full stack until stage separation; track only the first-stage booster afterward. No trajectory or event schedule is embedded."
+  "mission_scope": "Attached stack through separation; track both the booster and stage-2/Dragon afterward."
 }

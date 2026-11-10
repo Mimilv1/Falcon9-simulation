@@ -1,30 +1,6 @@
-"""Navigation filter: error-state EKF with optional multiplicative attitude (MEKF).
+"""Error-state navigation with attitude and sensor-error estimation."""
 
-Nominal state
-    x[0:3]  position, ECEF [m]            (IMU station)
-    x[3:6]  velocity, ECEF [m/s]
-    x[6:9]  accelerometer bias, body [m/s^2]
-    q       attitude quaternion body -> ECEF (Hamilton, [w, x, y, z])  [MEKF only]
-    bg      gyro bias, body [rad/s]                                      [MEKF only]
-    sf      gyro scale factor, per axis [-]                              [gyro calibration]
-    mis     gyro misalignment, 6 off-diagonal terms [rad]                [gyro calibration]
-
-Gyro model:  w_meas = (I + diag(sf) + M(mis)) w_true + bg + noise
-             w_hat  = G^-1 (w_meas - bg),   G = I + diag(sf) + M
-
-Error state (true = nominal + error, attitude error is multiplicative):
-    dx = [dp(3), dv(3), dba(3), dtheta(3), dbg(3), dsf(3), dmis(6)]
-    q_true = q (x) exp(dtheta)       (body-frame error rotation)
-    bg_true = bg + dbg
-
-The attitude block is active only when an initial quaternion `q0` is given.
-The gyro calibration block (sf, mis) additionally needs
-`estimate_gyro_calibration=True`; it is observable only through attitude
-aiding (star tracker, GNSS lever arm) and sufficient angular motion.
-Without `q0` the filter is the original 9-state filter and the attitude must
-be supplied by the caller (`rot` arguments), exactly as before.
-"""
-
+from bisect import bisect_left, bisect_right
 import numpy as np
 
 from frames import (
@@ -71,6 +47,18 @@ def _misalignment_jacobian(omega):
     return jac
 
 
+def _right_jacobian(vector):
+    angle = np.linalg.norm(vector)
+    cross = skew(vector)
+    if angle < 1e-5:
+        return np.eye(3) - 0.5 * cross + cross @ cross / 6
+    return (
+        np.eye(3)
+        - (1 - np.cos(angle)) / angle**2 * cross
+        + (angle - np.sin(angle)) / angle**3 * cross @ cross
+    )
+
+
 class NavigationKF:
     def __init__(
         self,
@@ -95,6 +83,11 @@ class NavigationKF:
         gyro_mis_sigma0=1e-3,
         gyro_sf_rw=0.0,
         gyro_mis_rw=0.0,
+        estimate_accel_scale=False,
+        accel_sf_sigma0=1e-3,
+        accel_sf_rw=0.0,
+        gnss_bias_sigma_m=None,
+        gnss_bias_tau_s=300.0,
     ):
         self.x = np.r_[
             np.asarray(p0, float),
@@ -141,6 +134,30 @@ class NavigationKF:
             self.n = N_NAV
             self.q = None
             self.bg = np.zeros(3)
+        extend_sigma = sigma0.shape == (self.n,)
+        self.accel_sf_enabled = bool(estimate_accel_scale)
+        self.gnss_bias_enabled = gnss_bias_sigma_m is not None
+        self.accel_sf = np.zeros(3)
+        self.gnss_bias = np.zeros(3)
+        self.accel_sf_slice = slice(self.n, self.n + 3)
+        if self.accel_sf_enabled:
+            self.n += 3
+            if extend_sigma:
+                sigma0 = np.r_[sigma0, np.full(3, accel_sf_sigma0)]
+        self.gnss_bias_slice = slice(self.n, self.n + 3)
+        self.gnss_bias_sigma = (
+            np.zeros(3)
+            if gnss_bias_sigma_m is None
+            else np.broadcast_to(np.asarray(gnss_bias_sigma_m, float), (3,)).copy()
+        )
+        self.gnss_bias_tau_s = float(gnss_bias_tau_s)
+        self.accel_sf_rw = float(accel_sf_rw)
+        if self.gnss_bias_tau_s <= 0 or np.any(self.gnss_bias_sigma < 0):
+            raise ValueError("Require positive correlation time and nonnegative sigma.")
+        if self.gnss_bias_enabled:
+            self.n += 3
+            if extend_sigma:
+                sigma0 = np.r_[sigma0, self.gnss_bias_sigma]
         if sigma0.shape != (self.n,):
             raise ValueError(f"sigma0 must have {self.n} entries.")
         self.P = np.diag(sigma0**2)
@@ -153,12 +170,63 @@ class NavigationKF:
         self.gyro_sf_rw = float(gyro_sf_rw)
         self.gyro_mis_rw = float(gyro_mis_rw)
         self._omega_prev = None
+        self._gyro_prev = None
+        self._force_prev = None
+        self._time_s = 0.0
+        self._gyro_times = []
+        self._gyro_values = []
         self.last_st_nis = np.nan
         self.startracker_rejected = 0
+        self.startracker_accepted = 0
+        self.startracker_diagnostics = []
         self.last_accel = np.zeros(3)
         self.last_nis = np.nan
         self.last_lidar_nis = np.nan
         self.log = []
+
+    def prime_imu(self, force, gyro):
+        self._force_prev = np.asarray(force, float).copy()
+        self._gyro_prev = np.asarray(gyro, float).copy()
+        self._omega_prev = self.calibrated_omega(gyro)
+        self._gyro_times = [self._time_s]
+        self._gyro_values = [self._gyro_prev.copy()]
+
+    def _gyro_increment(self, start, end):
+        if end <= start:
+            return np.array([1., 0, 0, 0]), {}, np.zeros((3, 3))
+        if not self._gyro_times:
+            return (
+                quaternion_from_rotation_vector(self._omega_prev * (end - start)),
+                {}, self.gyro_psd * (end - start) * np.eye(3),
+            )
+        first = max(0, bisect_right(self._gyro_times, start) - 1)
+        last = min(len(self._gyro_times), bisect_left(self._gyro_times, end) + 1)
+        times = np.asarray(self._gyro_times[first:last])
+        values = np.asarray(self._gyro_values[first:last])
+        knots = np.r_[start, times[(times > start) & (times < end)], end]
+        raw = np.column_stack([np.interp(knots, times, values[:, i]) for i in range(3)])
+        delta = np.array([1., 0, 0, 0])
+        maps = {BG_SL.start: np.zeros((3, 3))}
+        if self.calibration_enabled:
+            maps[SF_SL.start] = np.zeros((3, 3))
+            maps[MIS_SL.start] = np.zeros((3, 6))
+        noise = np.zeros((3, 3))
+        inverse = np.linalg.inv(self.gyro_matrix)
+        for i, dt in enumerate(np.diff(knots)):
+            omega = self.calibrated_omega((raw[i] + raw[i + 1]) / 2)
+            phi = omega * dt
+            dq = quaternion_from_rotation_vector(phi)
+            rotation = body_to_ecef_matrix(dq)
+            jac = _right_jacobian(phi) @ inverse
+            derivatives = {BG_SL.start: np.eye(3)}
+            if self.calibration_enabled:
+                derivatives[SF_SL.start] = np.diag(omega)
+                derivatives[MIS_SL.start] = _misalignment_jacobian(omega)
+            for index, derivative in derivatives.items():
+                maps[index] = rotation.T @ maps[index] + jac @ derivative * dt
+            noise = rotation.T @ noise @ rotation + self.gyro_psd * jac @ jac.T * dt
+            delta = normalize_quaternion(quaternion_product(delta, dq))
+        return delta, maps, noise
 
     @classmethod
     def from_imu_spec(cls, imu_spec, p0, v0, sigma0, **kwargs):
@@ -222,80 +290,107 @@ class NavigationKF:
 
     # ------------------------------------------------------------------ predict
     def predict(self, f_meas, rot, dt, gyro_meas=None):
-        """Propagate with one IMU sample.
-
-        f_meas     accelerometer specific force, body [m/s^2]
-        rot        body -> ECEF rotation supplied by the caller; ignored when the
-                   attitude is estimated (the filter uses its own quaternion)
-        gyro_meas  gyro rate, body [rad/s]; required when the attitude is estimated
-        """
+        if not np.isfinite(dt) or dt <= 0:
+            raise ValueError("Prediction interval must be positive and finite.")
         p, v, ba = self.x[P_SL].copy(), self.x[V_SL].copy(), self.x[B_SL].copy()
         model_a, d_dp, d_dv = self._model_acceleration(p, v)
-
+        force = np.asarray(f_meas, float)
+        force_mean = force if self._force_prev is None else (force + self._force_prev) / 2
+        half_rotation = np.eye(3)
         if self.attitude_enabled:
             if gyro_meas is None:
-                raise ValueError("gyro_meas is required when the attitude is estimated.")
-            omega = self.calibrated_omega(gyro_meas)
-            omega_avg = omega if self._omega_prev is None else 0.5 * (self._omega_prev + omega)
-            # Mid-interval attitude used for the specific-force rotation
-            q_mid = normalize_quaternion(
-                quaternion_product(
-                    self.q, quaternion_from_rotation_vector(0.5 * omega_avg * dt)
-                )
-            )
-            rot = body_to_ecef_matrix(q_mid)
-
-        f_corrected = f_meas - ba
+                raise ValueError("gyro_meas is required when attitude is estimated.")
+            gyro = np.asarray(gyro_meas, float)
+            previous = gyro if self._gyro_prev is None else self._gyro_prev
+            omega_avg = self.calibrated_omega((gyro + previous) / 2)
+            phi = omega_avg * dt
+            half_rotation = body_to_ecef_matrix(quaternion_from_rotation_vector(phi / 2))
+            rot = self.rotation @ half_rotation
+        gain = 1 + self.accel_sf
+        if np.any(np.abs(gain) < 1e-8):
+            raise ValueError("Singular accelerometer calibration.")
+        f_corrected = (force_mean - ba) / gain
         a = rot @ f_corrected + model_a
         self.x[P_SL] = p + v * dt + 0.5 * a * dt**2
         self.x[V_SL] = v + a * dt
         self.last_accel = a
-
         eye = np.eye(3)
         F = np.eye(self.n)
         F[P_SL, P_SL] = eye + 0.5 * d_dp * dt**2
         F[P_SL, V_SL] = eye * dt + 0.5 * d_dv * dt**2
         F[V_SL, P_SL] = d_dp * dt
         F[V_SL, V_SL] = eye + d_dv * dt
-        F[P_SL, B_SL] = -0.5 * rot * dt**2
-        F[V_SL, B_SL] = -rot * dt
-        S = self.accel_psd
+        accel_bias_map = rot @ np.diag(1 / gain)
+        F[P_SL, B_SL] = -0.5 * accel_bias_map * dt**2
+        F[V_SL, B_SL] = -accel_bias_map * dt
         Q = np.zeros((self.n, self.n))
-        Q[P_SL, P_SL] = S * dt**3 / 3 * eye
-        Q[P_SL, V_SL] = Q[V_SL, P_SL] = S * dt**2 / 2 * eye
-        Q[V_SL, V_SL] = S * dt * eye
+        noise = self.accel_psd * accel_bias_map @ accel_bias_map.T
+        Q[P_SL, P_SL] = noise * dt**3 / 3
+        Q[P_SL, V_SL] = Q[V_SL, P_SL] = noise * dt**2 / 2
+        Q[V_SL, V_SL] = noise * dt
         Q[B_SL, B_SL] = self.accel_bias_rw**2 * dt * eye
-
+        if self.accel_sf_enabled:
+            sf_map = rot @ np.diag(f_corrected / gain)
+            F[V_SL, self.accel_sf_slice] = -sf_map * dt
+            F[P_SL, self.accel_sf_slice] = -0.5 * sf_map * dt**2
+            Q[self.accel_sf_slice, self.accel_sf_slice] = self.accel_sf_rw**2 * dt * eye
+        if self.gnss_bias_enabled:
+            decay = np.exp(-dt / self.gnss_bias_tau_s)
+            self.gnss_bias *= decay
+            F[self.gnss_bias_slice, self.gnss_bias_slice] = decay * eye
+            Q[self.gnss_bias_slice, self.gnss_bias_slice] = np.diag(
+                self.gnss_bias_sigma**2 * (1 - decay**2)
+            )
         if self.attitude_enabled:
-            # Attitude error enters the acceleration as -R [f]x dtheta
             r_fx = rot @ skew(f_corrected)
-            F[V_SL, TH_SL] = -r_fx * dt
-            F[P_SL, TH_SL] = -0.5 * r_fx * dt**2
-            # dtheta_dot = -[omega]x dtheta - dbg - gyro noise
-            dq = quaternion_from_rotation_vector(omega_avg * dt)
+            F[V_SL, TH_SL] = -r_fx @ half_rotation.T * dt
+            F[P_SL, TH_SL] = -0.5 * r_fx @ half_rotation.T * dt**2
+            dq = quaternion_from_rotation_vector(phi)
             F[TH_SL, TH_SL] = body_to_ecef_matrix(dq).T
-            # w_hat - w_true = G^-1 (dbg + diag(w) dsf + J(w) dmis)
             g_inv = np.linalg.inv(self.gyro_matrix)
-            F[TH_SL, BG_SL] = -g_inv * dt
-            Q[TH_SL, TH_SL] = self.gyro_psd * dt * eye
+            full_map = _right_jacobian(phi) @ g_inv
+            half_map = _right_jacobian(phi / 2) @ g_inv
+            blocks = [(BG_SL, eye)]
+            if self.calibration_enabled:
+                blocks += [(SF_SL, np.diag(omega_avg)),
+                           (MIS_SL, _misalignment_jacobian(omega_avg))]
+            for block, rate_map in blocks:
+                F[TH_SL, block] = -full_map @ rate_map * dt
+                F[V_SL, block] = 0.5 * r_fx @ half_map @ rate_map * dt**2
+                F[P_SL, block] = 0.25 * r_fx @ half_map @ rate_map * dt**3
+            Q[TH_SL, TH_SL] = self.gyro_psd * full_map @ full_map.T * dt
             Q[BG_SL, BG_SL] = self.gyro_bias_rw**2 * dt * eye
             if self.calibration_enabled:
-                F[TH_SL, SF_SL] = -g_inv @ np.diag(omega_avg) * dt
-                F[TH_SL, MIS_SL] = -g_inv @ _misalignment_jacobian(omega_avg) * dt
                 Q[SF_SL, SF_SL] = self.gyro_sf_rw**2 * dt * eye
                 Q[MIS_SL, MIS_SL] = self.gyro_mis_rw**2 * dt * np.eye(6)
-            # Nominal attitude propagation over the full interval
             self.q = normalize_quaternion(quaternion_product(self.q, dq))
-            self._omega_prev = omega
-
+            self._gyro_prev = gyro.copy()
+            self._omega_prev = self.calibrated_omega(gyro)
+            if not self._gyro_times:
+                self._gyro_times.append(self._time_s)
+                self._gyro_values.append(previous.copy())
+            self._gyro_times.append(self._time_s + dt)
+            self._gyro_values.append(gyro.copy())
+        self._force_prev = force.copy()
+        self._time_s += dt
+        self.last_transition = F
+        self.last_process_covariance = Q
         self.P = F @ self.P @ F.T + Q
+        self.P = (self.P + self.P.T) / 2
 
     # ------------------------------------------------------------------ correct
     def _correct(self, H, y, R):
         S = H @ self.P @ H.T + R
+        self.last_measurement_jacobian = H.copy()
+        self.last_innovation = y.copy()
+        self.last_innovation_covariance = S.copy()
         K = np.linalg.solve(S, H @ self.P).T
         dx = K @ y
         self.x = self.x + dx[:N_NAV]
+        if self.accel_sf_enabled:
+            self.accel_sf += dx[self.accel_sf_slice]
+        if self.gnss_bias_enabled:
+            self.gnss_bias += dx[self.gnss_bias_slice]
         I_KH = np.eye(self.n) - K @ H
         P = I_KH @ self.P @ I_KH.T + K @ R @ K.T
         if self.attitude_enabled:
@@ -311,6 +406,8 @@ class NavigationKF:
             G = np.eye(self.n)
             G[TH_SL, TH_SL] = np.eye(3) - skew(0.5 * dtheta)
             P = G @ P @ G.T
+            if self._gyro_prev is not None:
+                self._omega_prev = self.calibrated_omega(self._gyro_prev)
         self.P = 0.5 * (P + P.T)
         return float(y @ np.linalg.solve(S, y))
 
@@ -346,10 +443,16 @@ class NavigationKF:
             if self.calibration_enabled:
                 H[3:6, SF_SL] = lever @ np.diag(omega)
                 H[3:6, MIS_SL] = lever @ _misalignment_jacobian(omega)
-        R = np.diag(
-            np.r_[np.asarray(sigma_pos, float) ** 2, np.asarray(sigma_vel, float) ** 2]
-        )
-        y = z - np.r_[self.x[P_SL], self.x[V_SL]]
+        velocity_cov = np.diag(np.asarray(sigma_vel, float) ** 2)
+        R = np.zeros((6, 6))
+        R[:3, :3] = np.diag(np.asarray(sigma_pos, float) ** 2) + tau**2 * velocity_cov
+        R[:3, 3:] = R[3:, :3] = tau * velocity_cov
+        R[3:, 3:] = velocity_cov
+        prediction = np.r_[self.x[P_SL], self.x[V_SL]]
+        if self.gnss_bias_enabled:
+            prediction[:3] += self.gnss_bias
+            H[:3, self.gnss_bias_slice] = np.eye(3)
+        y = z - prediction
         self.last_nis = self._correct(H, y, R)
         return y
 
@@ -424,23 +527,33 @@ class NavigationKF:
             quaternion_conjugate(normalize_quaternion(q_body_from_sensor)),
         )
         tau = float(latency_s)
+        delta = np.array([1., 0, 0, 0])
+        maps = {}
+        noise = np.zeros((3, 3))
         if tau > 0.0 and self._omega_prev is not None:
-            q_body_meas = quaternion_product(
-                q_body_meas, quaternion_from_rotation_vector(self._omega_prev * tau)
-            )
+            delta, maps, noise = self._gyro_increment(t_meas, t_meas + tau)
+            q_body_meas = quaternion_product(q_body_meas, delta)
         y = quaternion_to_rotation_vector(
             quaternion_product(quaternion_conjugate(self.q), q_body_meas)
         )
-        r_bs = body_to_ecef_matrix(q_body_from_sensor)
+        r_bs = body_to_ecef_matrix(delta).T @ body_to_ecef_matrix(q_body_from_sensor)
         R = r_bs @ np.diag(np.asarray(sigma_sensor_rad, float) ** 2) @ r_bs.T
-        R = R + self.gyro_psd * tau * np.eye(3)  # angle random walk over the latency
+        R = R + noise
         H = np.zeros((3, self.n))
         H[:, TH_SL] = np.eye(3)
-        if gate_nis is not None:
-            S = H @ self.P @ H.T + R
-            if float(y @ np.linalg.solve(S, y)) > gate_nis:
-                self.startracker_rejected += 1
-                return None
+        for index, mapping in maps.items():
+            H[:, index:index + mapping.shape[1]] = mapping
+        S = H @ self.P @ H.T + R
+        nis = float(y @ np.linalg.solve(S, y))
+        accepted = gate_nis is None or nis <= gate_nis
+        self.last_st_nis = nis
+        self.startracker_diagnostics.append(
+            (float(t_meas + tau), nis, bool(accepted), float(np.linalg.norm(y)))
+        )
+        if not accepted:
+            self.startracker_rejected += 1
+            return None
+        self.startracker_accepted += 1
         self.last_st_nis = self._correct(H, y, R)
         return y
 

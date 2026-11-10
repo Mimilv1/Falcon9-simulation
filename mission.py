@@ -213,6 +213,14 @@ class NavigationRun:
                 ),
                 gyro_sf_rw=settings.get("gyro_scale_factor_rw", 0.0),
                 gyro_mis_rw=settings.get("gyro_misalignment_rw", 0.0),
+                estimate_accel_scale=settings.get("estimate_accel_scale", True),
+                accel_sf_sigma0=settings.get("initial_accel_scale_factor_sigma", 1e-3),
+                gnss_bias_sigma_m=(
+                    self.gnss.spec.pos_gm_sigma_m
+                    if settings.get("estimate_gnss_bias", True)
+                    else None
+                ),
+                gnss_bias_tau_s=self.gnss.spec.gm_tau_s,
             )
         self.filter = NavigationKF.from_imu_spec(
             self.imu.spec,
@@ -244,6 +252,12 @@ class NavigationRun:
         self.startracker_updates = 0
         self.startracker_nis = []
         self.nis = []
+        self.covariance_times = []
+        self.covariance_matrices = []
+
+    def record_covariance(self, time_s):
+        self.covariance_times.append(float(time_s))
+        self.covariance_matrices.append(self.filter.P.copy())
 
     @property
     def sensors(self):
@@ -268,6 +282,8 @@ class NavigationRun:
                     time_s - self.last_time,
                     gyro_meas=imu.gyro_meas_radps,
                 )
+            else:
+                self.filter.prime_imu(imu.accel_meas_mps2, imu.gyro_meas_radps)
             self.last_time, self.last_omega = time_s, imu.gyro_meas_radps
         gnss = self.gnss.update(time_s, state, properties)
         if gnss is not None and gnss.valid:
@@ -278,7 +294,9 @@ class NavigationRun:
                 rotation,
                 self.last_omega,
                 arm,
-                gnss.pos_sigma_m,
+                self.gnss.spec.pos_sigma_m
+                if self.filter.gnss_bias_enabled
+                else gnss.pos_sigma_m,
                 gnss.vel_sigma_mps,
                 self.gnss.spec.latency_s,
             )
@@ -335,6 +353,8 @@ class NavigationRun:
             **vector_row("attitude_sigma_body_rad", attitude_sigma),
             **vector_row("gyro_bias_est_body_radps", self.filter.bg),
             **vector_row("gyro_scale_factor_est", self.filter.gyro_sf),
+            **vector_row("accel_scale_factor_est", self.filter.accel_sf),
+            **vector_row("gnss_bias_est_ecef_m", self.filter.gnss_bias),
             **vector_row(
                 "gyro_misalignment_est_rad",
                 self.filter.gyro_mis,
@@ -347,6 +367,11 @@ class NavigationRun:
             **vector_row("position_ecef_m", x[:3]),
             **vector_row("velocity_ecef_mps", x[3:6]),
             **vector_row("accel_bias_body_mps2", x[6:9]),
+            "gnss_nis": self.filter.last_nis,
+            "lidar_nis": self.filter.last_lidar_nis,
+            "startracker_nis": self.filter.last_st_nis,
+            "startracker_accepted": self.filter.startracker_accepted,
+            "startracker_rejected": self.filter.startracker_rejected,
             **vector_row("position_error_ecef_m", x[:3] - p),
             **vector_row("velocity_error_ecef_mps", x[3:6] - v),
             **{
@@ -367,6 +392,8 @@ def measurement_rows(samples):
                 "valid": True,
                 **vector_row("accel_body_mps2", imu.accel_meas_mps2),
                 **vector_row("gyro_body_radps", imu.gyro_meas_radps),
+                **vector_row("accel_true_body_mps2", imu.accel_true_mps2),
+                **vector_row("gyro_true_body_radps", imu.gyro_true_radps),
             }
         )
     if gnss is not None:
@@ -537,6 +564,8 @@ def run_mission(
         for prefix in (
             "accel_body_mps2",
             "gyro_body_radps",
+            "accel_true_body_mps2",
+            "gyro_true_body_radps",
             "position_ecef_m",
             "velocity_ecef_mps",
         ):
@@ -662,6 +691,7 @@ def run_mission(
                     row = nav.row(time_s, state, evaluation.properties)
                     nw.writerow(row)
                     nav_rows.append(row)
+                    nav.record_covariance(time_s)
                 next_output += settings["output_period_s"]
             if time_s >= until_s - 1e-9 or sequence.phase in {
                 "landed",
@@ -772,6 +802,7 @@ def run_mission(
                 row = nav.row(time_s, state, evaluation.properties)
                 nw.writerow(row)
                 nav_rows.append(row)
+                nav.record_covariance(time_s)
     if (
         recovery
         and status == "requested_interval_complete"
@@ -859,12 +890,12 @@ def run_mission(
             np.sqrt(np.mean(np.sum(errors**2, axis=1)))
         )
         summary["attitude_source"] = (
-            "mekf_gyro_gnss_lidar" if nav.use_estimated_attitude else "truth"
+            "mekf_gyro_gnss_lidar_startracker" if nav.use_estimated_attitude else "truth"
         )
         summary["limitations"][4] = (
             "Navigation attitude and gyro bias are estimated by a MEKF from noisy gyros "
-            "with GNSS/lidar aiding (roll about the thrust axis is weakly observable); "
-            "sensor specifications remain placeholders."
+            "with GNSS/lidar and gated star-tracker aiding; observability depends on "
+            "visibility and excitation. Sensor specifications are research assumptions."
             if nav.use_estimated_attitude
             else "Navigation uses truth attitude; sensor specifications remain placeholders."
         )
@@ -878,6 +909,9 @@ def run_mission(
         summary["gyro_bias_estimate_final_radps"] = [
             nav_rows[-1][f"gyro_bias_est_body_radps_{a}"] for a in "xyz"
         ]
+        summary["navigation_error_state_count"] = nav.filter.n
+        summary["accel_scale_factor_estimate_final"] = nav.filter.accel_sf.copy()
+        summary["gnss_bias_estimate_final_m"] = nav.filter.gnss_bias.copy()
         if nav.filter.calibration_enabled:
             pairs = ("xy", "xz", "yx", "yz", "zx", "zy")
             summary["gyro_scale_factor_estimate_final"] = [
@@ -918,6 +952,16 @@ def run_mission(
     except (OSError, subprocess.CalledProcessError):
         summary["git_commit"] = None
     save_json(output / "events.json", sequence.log)
+    if nav:
+        np.savez_compressed(
+            output / "navigation_covariance.npz",
+            time_s=np.asarray(nav.covariance_times),
+            covariance=np.asarray(nav.covariance_matrices),
+        )
+        with (output / "startracker_innovations.csv").open("w", newline="") as stream:
+            writer = csv.writer(stream)
+            writer.writerow(["time_s", "nis", "accepted", "residual_angle_rad"])
+            writer.writerows(nav.filter.startracker_diagnostics)
     save_json(output / "summary.json", summary)
     return json_value(summary)
 

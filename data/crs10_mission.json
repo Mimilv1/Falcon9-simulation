@@ -1,6 +1,6 @@
 {
   "mission": "CRS-10",
-  "scope": "Full stack through stage separation; first-stage booster only afterward.",
+  "scope": "Attached stack through separation; continuous booster recovery and independent stage-2/Dragon continuation.",
   "clock": "Elapsed seconds from liftoff. Official preflight approximate times are adopted as A-class simulation commands, not measured actual times or onboard thresholds.",
   "sources": {
     "M1": {
@@ -237,7 +237,7 @@
     "seed": 1,
     "class": "A",
     "basis": "Accepted steps aligned to fixed 100 Hz IMU, 10 Hz GNSS/LiDAR, output and event boundaries. No random sampling during RK4 trial evaluations.",
-    "attitude_source": "truth; current C filter does not estimate attitude",
+    "attitude_source": "gyro-driven MEKF with GNSS, LiDAR and gated star-tracker measurements",
     "initial_position_error_m": [
       1.0,
       -1.0,
@@ -254,7 +254,7 @@
       0.1,
       0.1
     ],
-    "sensor_settings_basis": "Existing C-class defaults, including placeholder noise; not certified Falcon 9 sensors.",
+    "sensor_settings_basis": "A-class research specifications; GNSS colored error and accelerometer scale uncertainty are represented in navigation.",
     "imu_station_body_m": [
       38,
       0,
@@ -284,7 +284,10 @@
         0,
         0.0001
       ]
-    }
+    },
+    "estimate_accel_scale": true,
+    "initial_accel_scale_factor_sigma": 0.001,
+    "estimate_gnss_bias": true
   },
   "unresolved_before_full_flight": [
     "Physical TVC/RCS actuator model and surveyed landing-site geometry.",
