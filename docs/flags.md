@@ -87,6 +87,46 @@ docs/image.png include?
   and uses the implemented rotating-frame, two-child and MEKF paths.
   Metadata cleanup remains separate from the unchanged R1 runtime inputs.
 
+- **FL-10 — PDF code quotation marks** (open, final audit 2026-11-10):
+  Both pypdf and pdfplumber extract U+201D smart quotation marks from the
+  page-34 unittest pattern and the page-35 Python ValueError string, even
+  though the LaTeX verbatim source uses ASCII quotes. The copied Python
+  line does not compile. Correct the mono-font quote mapping and verify
+  the PDF text layer after rebuilding; the executable Python source is
+  unaffected.
+
+- **FL-11 — Exact report-figure reproduction package** (open, final audit
+  2026-11-10): The nominal R1/R2 raw records are Git-ignored, and no
+  report-figure-generation Python script is tracked. Main.py can regenerate
+  a simulation and its standard plots, but a fresh clone cannot directly
+  replot the archived records or regenerate all manuscript panels and
+  derived diagnostics. The appendix discloses the ignored raw data; a
+  small shared result archive and figure-export script would close this
+  submission reproducibility gap.
+
+- **FL-12 — Return attitude-gain units in the appendix** (open, final
+  audit 2026-11-10): Table 19 labels return/landing `attitude_kp` values
+  1 and 1.5 as s^-2. RecoveryController instead forms a desired angular
+  rate from `kp * direction_error`, then angular acceleration from
+  `kd * (desired_rate - omega)`. Both configuration gains therefore have
+  units s^-1. The ascent/upper-stage direct-PD kp units s^-2 are correct
+  and must not be changed globally.
+
+- **FL-13 — Adaptive guidance-clock lower bound** (open, final audit
+  2026-11-10): Section 8.4 and Table 19 state 0.02--0.2 s. The actual
+  RecoveryController formula clamps at 0.01--0.2 s. This is the allowed
+  command-clock range, not a measured minimum interval in R1.
+
+- **FL-14 — Command limits versus measured angular rate** (open, final
+  audit 2026-11-10): Table 10's pointing-limit wording does not distinguish
+  per-axis desired-rate clipping (+/-0.22 rad/s) from actual angular-rate
+  magnitude; the acceleration bound 0.12 rad/s^2 is likewise on the
+  command. R1 reaches 0.31109986 rad/s (17.8247 deg/s) in rate magnitude
+  at 223.7 s during return_coast, consistent with simultaneous nonzero
+  transverse rate commands. The table should not imply a guaranteed
+  plant-state bound. Add a physical angular-rate history to expose this
+  distinction; no change of runtime limits is required by this finding.
+
 ## Resolved flags
 
 - **FL-0 — `docs/env_issues.md` references and Earth-rotation wording**
