@@ -214,5 +214,64 @@
     "results_trajectories.pdf",
     "results_ascent_reference.pdf",
     "results_navigation.pdf"
-  ]
+  ],
+  "final_appendix": {
+    "nominal_run": "results/gyro-final-review-20261110",
+    "runtime_hashes_verified": 31,
+    "figure": "images/appendix_properties_availability.pdf",
+    "figure_sha256": "0f4b006524ab724abc9726b30b7a09ab7fae635435c0914e5d134c994ccb44a5",
+    "source_files": {
+      "truth.csv": "49b8cdac785c58eef19e438a172cddf2a84eb1bc6172c367e39121ef4e92fd44",
+      "measurements.csv": "3943b94a24a631ca31ddc296610625cc9e742be7f34fde4994e29be151a72801",
+      "summary.json": "9c8f48e169e396f674682024a01377c407331676ea605782390f3056dc448b58",
+      "events.json": "8411b6cfcc5c29e54e4aafc67b4592e735401f6ebfdc172a006e52b77c26a311"
+    },
+    "code_excerpts": [
+      {
+        "file": "load_interface.py",
+        "first_line": 27,
+        "last_line": 41,
+        "sha256": "9d3208e43c59558d80df76c7ded36f0ac697ab1d338b628bb900fd26042b7c9e"
+      },
+      {
+        "file": "dynamics.py",
+        "first_line": 163,
+        "last_line": 176,
+        "sha256": "fe20fa5a28707148629b8a4efb96eb7d8ac4f4bf96b2a0a582aea8b3ddde3f04"
+      },
+      {
+        "file": "VehicleData.py",
+        "first_line": 168,
+        "last_line": 184,
+        "sha256": "e8e15934b42bcc360b48e684cb04f717bd10bc653165ec837e3f2323ff6dd394"
+      }
+    ],
+    "sensor_counts": {
+      "gnss": {
+        "emitted": 4651,
+        "valid": 4651
+      },
+      "lidar": {
+        "emitted": 4651,
+        "valid": 496
+      },
+      "startracker": {
+        "emitted": 1861,
+        "valid": 381
+      }
+    },
+    "input_register_sources": [
+      "vehicle_parameters.py",
+      "data/vehicle_parameters.json",
+      "data/aero_configurations.json",
+      "data/drag_curve_pezent_extended.json",
+      "Environement.py",
+      "sensors.py",
+      "kalman.py",
+      "mission.py",
+      "recovery.py",
+      "upper_stage.py",
+      "data/crs10_mission.json"
+    ]
+  }
 }

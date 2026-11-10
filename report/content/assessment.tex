@@ -1,0 +1,32 @@
+\section{Engineering Assessment and Implications for Future GNC}
+\label{sec:assessment}
+
+\subsection{What the demonstrated results support}
+The conservation audit and ascent calibration support controlled model/estimator investigations, rather than mission-wide physical validation. The successful contact in Table~\ref{tab:landing-results} uses physical-state feedback and ideal moments; navigation is evaluated separately. Its assumed initial alignment and zero accepted star fixes further bound the aiding claim. These distinctions define the simulator's role as the Project~2 foundation for later guidance and control \cite[slides 2--4]{project2}.
+
+\subsection{Most dangerous modeling and navigation errors}
+For the assignment's final question \cite[slide 8]{project2}, the most dangerous errors are incorrect thrust or measurement directions caused by frame or attitude mistakes, and demands beyond physical actuator authority. This assessment concerns consequences; no failure probabilities are estimated. Table~\ref{tab:gnc-risks} connects the risk pathways to the evidence.
+
+\par\medskip\noindent\begin{minipage}{\linewidth}
+\centering\small
+\begin{tabularx}{\linewidth}{@{}p{0.20\linewidth}p{0.37\linewidth}X@{}}
+\toprule
+Error pathway & Evidence or present scope & Consequence for future GNC \\
+\midrule
+Attitude, rate or frame mismatch & Body-to-$E$ convention is shared; inertial-gyro Earth rate is approximated. The calibrated rate RMS exceeds the raw rate RMS in R1. & Thrust, specific force and lever-arm corrections can point in the wrong direction; attitude accuracy alone does not certify rate feedback. \\
+Unavailable control authority & Section~\ref{sec:mission-exec} uses an unlimited ascent couple and bounded ideal return moments, without nozzle/servo dynamics. & Guidance may request impossible turns; control gains can conceal lag, saturation and loss of authority. \\
+CG, inertia, flow or thrust error & The conditional $10\,\mathrm{t}$-propellant allocation check shifts CG by up to $3.686\,\mathrm{m}$; the engine and internal geometry are mixed-source estimates. & Force arms, angular acceleration, stopping distance and usable fuel change together, potentially invalidating ignition and reserve predictions. \\
+Misleading uncertainty or rejected aiding & All 381 valid star fixes are rejected; reported position envelopes frequently understate error. & Altitude or vertical-speed bias can mis-time braking; overconfidence or failed aiding acquisition can hide that risk despite small nominal RMS error. \\
+Aero, wind, event or timing mismatch & Return coefficients are assumed, R1 is calm, and the joint step/IMU-rate variant changes contact metrics. & Lateral miss, loads and burn timing can exceed nominal margins even when the saved nominal run passes. \\
+\bottomrule
+\end{tabularx}
+\captionof{table}{Consequence-based GNC risk assessment grounded in Sections~\ref{sec:vehicle}--\ref{sec:results}. Proposed consequences are engineering reasoning; no probabilities or unperformed robustness results are assigned.}
+\label{tab:gnc-risks}
+\end{minipage}\par\medskip
+
+\subsection{Recommended progression to guidance and control design}
+The first recommendation is to validate the estimator before connecting it to control. Tolerance-based finite-difference checks should cover the propagation, sensor and injection/reset Jacobians. Star-tracker frame, epoch, residual and gate behavior should be isolated in controlled fixtures. Correlated GNSS error and unestimated accelerometer scale error should then be reconciled with the filter uncertainty model. Full covariance, innovation and aiding-acceptance histories are needed for multi-seed consistency studies; a low mean error is insufficient.
+
+The second recommendation is to replace ideal moment authority with a physical allocation and actuator model before tuning vehicle control. The model should resolve available engine/gimbal and fin authority, response rate and saturation, and retain the independently calculated CG/inertia rather than treating inversion of inertia as evidence of stability. The $0.902\,\mathrm{m\,s^{-1}}$ nominal horizontal contact speed against the $1\,\mathrm{m\,s^{-1}}$ project limit leaves little demonstrated margin for these omitted effects.
+
+Finally, a step-size study should hold sensor/guidance clocks fixed, while sensor-rate studies should hold physical integration settings fixed. Mass allocation, thrust, return coefficients and nonzero wind should be varied before multi-seed navigation-fed trials. Independent flight evidence should be reserved for validation after calibration. These recommended studies are not completed evidence; Appendix~\ref{sec:appendix} identifies their controlled inputs.

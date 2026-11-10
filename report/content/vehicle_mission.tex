@@ -3,7 +3,7 @@
 \label{sec:vehicle-dynamics}
 
 \subsection{Configuration and evidence-qualified parameters}
-The attached vehicle comprises stage 1, stage 2, and a loaded Dragon/trunk assembly. After separation, the lower vehicle contains stage 1 and the upper vehicle contains stage 2 and Dragon. The parameter register distinguishes K (authoritative published information), E (literature/data-derived estimate), and A (explicit modeling assumption). E/A denotes a sourced estimate whose use also requires an assumption. Source authority and applicability to the selected 2017 flight are separate considerations.
+The attached vehicle comprises stage 1, stage 2, and a loaded Dragon/trunk assembly. After separation, the lower vehicle contains stage 1 and the upper vehicle contains stage 2 and Dragon. The parameter register distinguishes K (authoritative published information), E (literature/data-derived estimate), and A (explicit modeling assumption). E/A denotes a sourced estimate whose use also requires an assumption. Source authority and applicability to the selected 2017 flight are separate considerations. Appendix~\ref{sec:appendix-evidence} consolidates the parameter/source register; this chapter develops the governing model.
 
 Table~\ref{tab:vehicle} consolidates the configuration used by \path{vehicle_parameters.py} and \path{VehicleData.py}. The $62.4\,\mathrm{m}$ equivalent height is the sum of adopted stage/Dragon lengths; it is not presented as a measured CRS-10 overall dimension. Stage boundaries and the contiguous attachment datums remain conditional. The $8430\,\mathrm{kg}$ loaded Dragon mass is retained as a provisional external estimate; the NASA cargo inventory is included within it. No separate satellite fairing is added.
 

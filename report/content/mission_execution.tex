@@ -37,7 +37,7 @@ Ideal-couple authority & $2\,\mathrm{MN\,m}$ during burns; $200\,\mathrm{kN\,m}$
 \label{tab:return-settings}
 \end{table}
 
-Boostback points against the reduced-order predicted impact miss. The predictor advances central gravity, frame acceleration, approximate drag and a prospective entry burn in $0.5\,\mathrm{s}$ steps; it is refreshed once per second. The pointing vector is proportional to $-\hat{\vect e}_{\mathrm{miss}}/(8t_f)+0.8\vect u$, where $t_f$ is predicted flight time and $\vect u$ local up. The first satisfied miss, fuel or duration condition starts shutdown; a 500 kg margin anticipates ramp consumption.
+Boostback points against the reduced-order predicted impact miss. The predictor advances central gravity, frame acceleration, approximate drag and a prospective entry burn in $0.5\,\mathrm{s}$ steps; it is refreshed once per second. Steering opposes the predicted horizontal miss with a time-to-impact gain and an upward bias, then normalizes the result to a direction. The first satisfied miss, fuel or duration condition starts shutdown; a 500 kg margin anticipates ramp consumption.
 
 Entry starts on descending altitude and ends on speed or fuel cap. A constrained force solver selects pointing from desired vertical/lateral acceleration and aerodynamic reaction. Landing starts when the $0.1\,\mathrm{s}$ stopping predictor leaves no more than the declared clearance allowance.
 
@@ -76,4 +76,4 @@ python main.py --case full --no-show
 \end{quote}
 The full case requests 600 s; booster output ends at contact and the upper child continues. \texttt{--output} selects a fresh directory; \texttt{--plot-only} reopens saved results without integration.
 
-Outputs are truth for both vehicles, measurements, navigation, events/timeline, ascent comparison data and \path{summary.json}. The summary retains settings, seed, status and input hashes. Section~\ref{sec:results} identifies the records behind its figures and tables.
+Outputs are truth for both vehicles, measurements, navigation, events/timeline, ascent comparison data and \path{summary.json}. The summary retains settings, seed, status and input hashes. Section~\ref{sec:results} identifies the records behind its figures and tables; Appendix~\ref{sec:appendix-reproduction} gives explicit run settings, file contracts and audit fingerprints.

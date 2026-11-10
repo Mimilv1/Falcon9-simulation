@@ -4,6 +4,7 @@
 \usepackage{booktabs}
 \usepackage{graphicx}
 \usepackage{tabularx}
+\usepackage{longtable}
 \usepackage{array}
 \usepackage{placeins}
 \usepackage{url}
@@ -39,10 +40,6 @@
 \tableofcontents
 
 % +++++ Main part
-% Chapter order follows the binding outline in AGENTS.md (adopted from
-% PROPOSED_OUTLINE.md). Commented lines mark chapters not yet written.
-% Chapters are registered with \include: it starts every chapter on a new
-% page (automatic \clearpage). Don't switch back to \input.
 \include{content/introduction}        % Ch 1
 \include{content/architecture}        % Ch 2
 \include{content/vehicle_mission}     % Ch 3
@@ -52,9 +49,8 @@
 \include{content/navigation}          % Ch 7
 \include{content/mission_execution}   % Ch 8
 \include{content/results}            % Ch 9
-%\include{content/assessment}         % Ch 10 - to be written
-%\include{content/conclusions}        % Ch 11 - to be written
-% further chapters are inserted here in document order
+\include{content/assessment}         % Ch 10
+\include{content/conclusions}        % Ch 11
 \include{content/references}
-%\include{content/appendix}          % Appendix A - to be written
+\include{content/appendix}          % Appendix A
 \end{document}

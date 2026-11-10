@@ -61,6 +61,9 @@ docs/image.png include?
   Position-error time fractions within reported three-sigma envelopes are
   about 0.500/0.344/0.752. Chapters 7 and 9 now distinguish accuracy from
   consistency; runtime covariance/gating still requires investigation.
+  The GNSS measurement covariance includes white-noise plus stationary
+  Gauss-Markov marginal variances, but does not represent temporal
+  correlation; the final Chapter 7 now states that distinction explicitly.
 
 - **FL-7 — Jacobian certification** (open, 2026-11-10):
   `tests/test_gyrostartracker.py` prints finite-difference diagnostics without
@@ -74,6 +77,15 @@ docs/image.png include?
   heading explanation does not describe the active pointing direction.
   Chapter 8 documents the implemented eastward command without changing
   the runtime or reinterpreting the trajectory as an identified ISS plane.
+
+- **FL-9 — Vehicle metadata source and scope strings** (open,
+  2026-11-10): `data/vehicle_parameters.json` retains obsolete body-only,
+  non-rotating and booster-only scope descriptions. Its cargo row points
+  `source_ids` to S10 (the historical engine guide) instead of the named
+  NASA CRS-10 overview. These strings do not override runtime behavior.
+  The final report appendix resolves the cargo citation to the overview
+  and uses the implemented rotating-frame, two-child and MEKF paths.
+  Metadata cleanup remains separate from the unchanged R1 runtime inputs.
 
 ## Resolved flags
 
