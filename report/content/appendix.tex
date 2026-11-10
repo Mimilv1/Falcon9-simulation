@@ -5,7 +5,7 @@ This appendix is the reference register for the active nominal scenario, not a s
 
 \subsection{Evidence and vehicle-input register}
 \label{sec:appendix-evidence}
-Table~\ref{tab:app-sources} resolves the source chain used by the register. The numeric vehicle definitions are in \path{vehicle_parameters.py}; \path{data/vehicle_parameters.json} supplies metadata rather than an independent set of numeric overrides. The report resolves the cargo reference to the CRS-10 overview even though that metadata record reuses an inconsistent source ID. Older descriptive strings about Earth rotation, booster-only scope and supplied truth attitude are not authoritative for the executed full case: \path{Environement.py}, \path{mission.py}, \path{upper_stage.py} and the saved run determine active behavior.
+Table~\ref{tab:app-sources} resolves the source chain used by the register. The numeric vehicle definitions are in \path{vehicle_parameters.py}; \path{data/vehicle_parameters.json} supplies metadata rather than an independent set of numeric overrides. Cargo metadata resolves to the official CRS-10 overview. The executed rotating-frame, two-child and gyro-driven navigation paths are identified in the configuration and saved run; numeric inputs and explicit implementation choices take precedence over older prose descriptions.
 
 \begingroup\small\setlength{\tabcolsep}{4pt}\renewcommand{\arraystretch}{1.1}
 \begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.23\linewidth}>{\raggedright\arraybackslash}p{0.21\linewidth}>{\raggedright\arraybackslash}p{0.15\linewidth}>{\raggedright\arraybackslash}p{0.35\linewidth}@{}}
@@ -207,7 +207,7 @@ Initial structural base & $\vect r_O^B=[6371000,0,0]^{\mathsf T}\,\mathrm{m}$; $
 Initial attitude / engines & $\vect q_{BE}=[\sqrt{1/2},0,-\sqrt{1/2},0]^{\mathsf T}$; nine engines at throttle 1 & Hamilton scalar-first; Body +x up. \\
 Ascent pitch / PD gains & Start $8\,\mathrm{s}$; $\tau=100\,\mathrm{s}$; tilt cap $80^\circ$; $k_p=2\,\mathrm{s^{-2}}$, $k_d=2.5\,\mathrm{s^{-1}}$ & Unlimited ideal ascent couple. Stored heading $45^\circ$ is ignored by the active eastward target construction. \\
 Shutdown / separation & Ramp $140$--$141\,\mathrm{s}$; separation $144\,\mathrm{s}$; zero flow/flow derivative and engines off & Published approximate anchors \cite{nasacrs10press}; one-second quintic envelope and no-impulse map assumed. \\
-Return timing / engines & Guidance $0.2\,\mathrm{s}$; ramps $1\,\mathrm{s}$; boostback/entry indices $(0,1,5)$; landing $(0)$ & Guidance adapts to 0.02--0.2 s in landing. \\
+Return timing / engines & Guidance $0.2\,\mathrm{s}$; ramps $1\,\mathrm{s}$; boostback/entry indices $(0,1,5)$; landing $(0)$ & Allowed landing guidance interval is 0.01--0.2 s. \\
 Fuel allocations / protected reserve & Boostback $38000$; entry $16000$; landing $10000$; reserve $2000\,\mathrm{kg}$ & Unused boostback/entry allocation can transfer; limiting-tank residual protected separately. \\
 Boostback start / end design & $161\,\mathrm{s}$; throttle 1; window 10--60 s; predicted miss target $500\,\mathrm{m}$ & Fuel/duration cap can terminate before miss target. 500 kg anticipatory shutdown margin. \\
 Boostback predictor / steering & Prediction $0.5\,\mathrm{s}$ steps, refreshed every $1\,\mathrm{s}$; time gain $8\,\mathrm{s}$; up bias $0.8\,\mathrm{m\,s^{-2}}$ & SI numerical heuristic; $\vect e_{\mathrm{miss}}$ is predicted horizontal miss, $t_f$ predicted time to impact; denominator floor $1\,\mathrm{s^2}$; normalized direction. \\
@@ -216,9 +216,9 @@ Restart readiness & Separated, engines off, zero flow, fuel available; pointing 
 Landing ignition prediction & $0.1\,\mathrm{s}$ stopping-predictor step; factor 1.05; clearance allowance $1500\,\mathrm{m}$ & Reduced prediction, not observed CRS-10 ignition state. \\
 Landing target & North $-14000\,\mathrm{m}$; east $6000\,\mathrm{m}$; projected onto the ground sphere & Rounded assumed target, not surveyed LZ-1 coordinates. \\
 Contact geometry & Four leg tips, $1\,\mathrm{m}$ below base, radius $3.5\,\mathrm{m}$ & Lowest tip determines first sphere crossing; no contact-force model. \\
-Return moment / rate limits & Powered $2\,\mathrm{MN\,m}$; coast $200\,\mathrm{kN\,m}$; $0.12\,\mathrm{rad\,s^{-2}}$, $0.22\,\mathrm{rad\,s^{-1}}$ & Ideal residual couple; not physical actuator dynamics. \\
-Return attitude gains & $k_p=1\,\mathrm{s^{-2}}$; $k_d=2\,\mathrm{s^{-1}}$ & Generic return PD settings. \\
-Landing attitude gains / tilt & $k_p=1.5\,\mathrm{s^{-2}}$; $k_d=6\,\mathrm{s^{-1}}$; tilt $20^\circ$, terminal $4^\circ$ & Terminal hold below 20 m; height-dependent taper uses $0.02^\circ$/m. \\
+Return couple / command limits & Powered $2\,\mathrm{MN\,m}$; coast $200\,\mathrm{kN\,m}$; $0.12\,\mathrm{rad\,s^{-2}}$, $0.22\,\mathrm{rad\,s^{-1}}$ & Residual ideal-couple limits; acceleration cap is a command norm, rate clip is per desired-rate axis. Not measured-state bounds. \\
+Return attitude gains & $k_p=1\,\mathrm{s^{-1}}$; $k_d=2\,\mathrm{s^{-1}}$ & Cascaded direction-to-rate and rate-to-acceleration gains. \\
+Landing attitude gains / tilt & $k_p=1.5\,\mathrm{s^{-1}}$; $k_d=6\,\mathrm{s^{-1}}$; tilt $20^\circ$, terminal $4^\circ$ & Terminal hold below 20 m; height-dependent taper uses $0.02^\circ$/m. \\
 Landing velocity / lateral gains & $v_t=-0.5\,\mathrm{m\,s^{-1}}$; $k_p=0.0576\,\mathrm{s^{-2}}$; $k_d=0.48\,\mathrm{s^{-1}}$ & Vertical clearance feedback and lateral target feedback. \\
 Landing criteria & $|v_{\mathrm{vert}}|\le2$, $v_{\mathrm{horiz}}\le1\,\mathrm{m\,s^{-1}}$; tilt $\le5^\circ$; rate $\le1^\circ\,\mathrm{s^{-1}}$; miss $\le10\,\mathrm{m}$ & Contact and deployed legs required; evaluated before contact-state reset (none is applied). \\
 Upper ignition / cutoff / ramp & $152/545/1\,\mathrm{s}$; throttle 0.95 & Timing anchors \cite{nasacrs10press}; operating commands assumed. \\
@@ -248,7 +248,7 @@ Gyro bias walk / scale & $10^{-7}\,\mathrm{rad\,s^{-3/2}}$ / zero true scale fac
 Cross-axis / temperature terms & Accelerometer/gyro misalignment zero; all temperature coefficients zero; $20^\circ\mathrm{C}$ constant & Supported error terms switched off; no thermal experiment. \\
 GNSS station / rate / latency & $[41,0,0]^{\mathsf T}\,\mathrm{m}$ / $10\,\mathrm{Hz}$ / $0.1\,\mathrm{s}$ & Delayed antenna position/velocity with lever arms. \\
 GNSS white position / velocity & $[1.5,1.5,2.5]^{\mathsf T}\,\mathrm{m}$ / $[0.1,0.1,0.1]^{\mathsf T}\,\mathrm{m\,s^{-1}}$ & Per-axis standard deviations. \\
-GNSS Gauss--Markov component & $[0.6,0.6,1.0]^{\mathsf T}\,\mathrm{m}$; correlation time $300\,\mathrm{s}$ & Stationary standard deviation; no corresponding filter bias state. \\
+GNSS Gauss--Markov component & $[0.6,0.6,1.0]^{\mathsf T}\,\mathrm{m}$; correlation time $300\,\mathrm{s}$ & Stationary standard deviation; matching bias states and exact discrete Gauss--Markov process in the filter. \\
 GNSS acquisition / faults & First fix $0\,\mathrm{s}$; dropout 0; outage list empty & Nominally all emitted GNSS measurements valid. \\
 LiDAR station / axis / rate & $[0.5,0,0]^{\mathsf T}\,\mathrm{m}$ / $[-1,0,0]^{\mathsf T}$ / $10\,\mathrm{Hz}$ & Analytic ray--sphere intersection; same Earth sphere. \\
 LiDAR range / noise / faults & $1$--$1800\,\mathrm{m}$; $\sigma_R=0.05\,\mathrm{m}+10^{-4}R$; bias/scale/dropout 0 & Geometry rejects out-of-envelope or nonintersecting samples. \\
@@ -256,10 +256,10 @@ Star boresight / reference axis & $[0.5,\sqrt3/2,0]^{\mathsf T}$ / $[1,0,0]^{\ma
 Star rate / latency / noise & $4\,\mathrm{Hz}$ / $0.1\,\mathrm{s}$ / $5/40\,\mathrm{arcsec}$ & Cross-boresight / boresight-roll standard deviation. \\
 Star visibility constraints & Rate $\le2^\circ\,\mathrm{s^{-1}}$; altitude $\ge60000\,\mathrm{m}$; Earth-limb exclusion $20^\circ$ & Physical validity does not guarantee filter acceptance. \\
 Star other settings / gate & Mount error 0; first fix 0; dropout 0; outages empty; NIS gate 16.27 & Sun exclusion $40^\circ$ is inactive because no Sun direction is configured. \\
-Filter state / initialization & 25 nominal scalars; 24 covariance coordinates; $\delta\vect p_0=[1,-1,0.5]^{\mathsf T}\,\mathrm{m}$ & Position perturbation; zero velocity/mean attitude perturbations; bias/calibration means zero. \\
+Filter state / initialization & 31 nominal scalars; 30 covariance coordinates; $\delta\vect p_0=[1,-1,0.5]^{\mathsf T}\,\mathrm{m}$ & Position perturbation; zero velocity/mean attitude perturbations; bias/calibration means zero. \\
 Initial standard deviations & Position $2\,\mathrm{m}$; velocity $0.05\,\mathrm{m\,s^{-1}}$; accel bias $0.1\,\mathrm{m\,s^{-2}}$ & Per axis; diagonal initial covariance. \\
-Other initial standard deviations & Attitude $0.01\,\mathrm{rad}$; gyro bias $10^{-3}\,\mathrm{rad\,s^{-1}}$; scale $10^{-3}$; misalignment $10^{-3}\,\mathrm{rad}$ & Three scale and six off-diagonal small-angle calibration terms. \\
-Filter process settings & $S_a=(0.01)^2/100$; $S_g=(10^{-4})^2/100$; scale/misalignment walk 0 & Implementation PSD convention; bias-walk densities match the IMU. Estimated attitude and gyro calibration enabled. \\
+Other initial standard deviations & Attitude $0.01\,\mathrm{rad}$; gyro bias $10^{-3}\,\mathrm{rad\,s^{-1}}$; scale $10^{-3}$; misalignment $10^{-3}\,\mathrm{rad}$ & Three gyro scale and six off-diagonal terms; accel scale prior $10^{-3}$ per axis; GNSS bias prior equals stationary deviations. \\
+Filter process settings & $S_a=(0.01)^2/100$; $S_g=(10^{-4})^2/100$; scale/misalignment walk 0 & Implementation PSD convention; bias-walk densities match the IMU. Estimated attitude, gyro calibration, accelerometer scale and colored GNSS bias enabled. \\
 Random streams & R1 seed $1$; IMU/GNSS/LiDAR/star seeds $1/2/3/4$ & Independent seeded generators; no trial-step random draws. \\
 \end{longtable}\endgroup
 
@@ -293,6 +293,7 @@ $\vect F,\vect M_C,\vect g,\vect a_{\mathrm{rot}}$ & N, N m, $\mathrm{m\,s^{-2}}
 $\rho,p,T_{\mathrm{air}},a,\bar q,M,\alpha$ & $\mathrm{kg\,m^{-3}}$, Pa, K, $\mathrm{m\,s^{-1}}$, Pa, --, rad & Air density, pressure, temperature, sound speed, dynamic pressure, Mach and total flow angle. \\
 $C_{A0},C_{N\alpha},C_{Dc},c_m,c_l$ & --, $\mathrm{rad^{-1}}$, --, --, -- & Axial curve, normal slope, crossflow coefficient and pitch/yaw/roll damping coefficients. \\
 $\vect f,\vect b_a,\vect b_g,\vect s_f,\vect m$ & $\mathrm{m\,s^{-2}}$, $\mathrm{m\,s^{-2}}$, $\mathrm{rad\,s^{-1}}$, --, rad & Specific force, accel/gyro biases, gyro scale and off-diagonal small-angle terms. \\
+$\vect s_a,\vect b_G$ & --, m & Accelerometer scale factors and colored GNSS position bias in $E$. \\
 $\delta\vect x,\mat P,\mat F_k,\mat Q_k$ & block-dependent & Error state, its covariance, discrete transition and process covariance. \\
 $\vect\nu,\mat H,\mat R,\mat S,\mat K$ & measurement-dependent & Innovation, measurement Jacobian/covariance, innovation covariance and Kalman gain. This $\mat S$ differs from the parallel-axis function by context. \\
 $e_q,\sigma,\mathrm{NIS}$ & rad or deg, state-dependent, -- & Shortest attitude-error angle, reported standard deviation and normalized innovation squared. \\
@@ -300,28 +301,38 @@ $e_q,\sigma,\mathrm{NIS}$ & rad or deg, state-dependent, -- & Shortest attitude-
 
 \subsection{Reproduction, audit records and source excerpts}
 \label{sec:appendix-reproduction}
-The source repository is \url{https://github.com/Mimilv1/Falcon9-simulation}. The nominal record R1 is \path{results/gyro-final-review-20261110}; R2 is \path{results/two-stage-final-check}. R1 records Git identifier \texttt{c027d414ec8d}; the corresponding upstream runtime revision is \texttt{1ead44069ab1}. All 31 recorded runtime/data SHA-256 hashes match the reviewed source. Full identifiers and fingerprints are retained in the provenance ledger. The review environment uses Python 3.12.14, with NumPy 2.3.5 and Matplotlib 3.10.7 pinned in \path{requirements.txt}. Cross-platform floating-point/library differences can alter the last digits; the seed alone is not a complete environment specification.
+The source repository is \url{https://github.com/Mimilv1/Falcon9-simulation}.
 
-From the repository root, a new R1-setting run is generated with:
+R1 is \path{results/final-submission-20261110-nav30}, generated at runtime revision \texttt{2d89a886a761}; all 31 runtime/data fingerprints match the reviewed source. The archive also retains the paired earlier filter baseline and R2, the joint step/IMU-clock variant. The environment is Python 3.12.14, NumPy 2.3.5 and Matplotlib 3.10.7; package versions are pinned in \path{requirements.txt}. Seed equality alone does not specify floating-point/library behavior across platforms.
+
+The tracked \path{report/reproduction_data.zip} contains nominal truth, both trajectories, raw measurements, estimates, full covariance, innovations, events and summaries, plus the compared baseline/variant records. Its SHA-256 and each member fingerprint are in \path{report/figure_sources.json}. Extraction checks paths and hashes and refuses to overwrite differing files. From a fresh checkout, the following commands unpack the records, regenerate the report's result/model panels and numeric macros, then rerun the independent fixtures:
 \begin{quote}\small
 \begin{verbatim}
 python -m pip install -r requirements.txt
-python main.py --case full --no-show --seed 1 --dt 0.01 --imu-rate 100
-\end{verbatim}
-\end{quote}
-The command creates a timestamped results directory. An explicit \texttt{--output} path must be new. \texttt{--case ascent} requests only 160 s; \texttt{--case full} requests 600 s and includes return plus upper-stage continuation. The booster can stop earlier at contact. A saved R1 can be replotted without integration, when its local records are present:
-\begin{quote}\small
-\begin{verbatim}
-python main.py --plot-only results/gyro-final-review-20261110 --no-show
-\end{verbatim}
-\end{quote}
-The raw run directories are generated, Git-ignored artifacts rather than guaranteed contents of a fresh clone. All report figures are retained in \path{report/images}; \path{report/figure_sources.json} preserves their source hashes, extraction ranges and derived metrics. To verify the model tests independently, run:
-\begin{quote}\small
-\begin{verbatim}
+python report/reproduce.py --unpack --validate
 python -m unittest discover -s tests -q
 python -m unittest discover -s Environment -p "test*.py" -q
 \end{verbatim}
 \end{quote}
+The extracted directory is \path{results/submission-reproduction}. Published photograph/press-kit crops and the unchanged environment/aerodynamic illustrations remain supplied assets with attribution; the script regenerates all reported flight/navigation panels, the architecture, mass sweep and mass-code excerpt. Figure fingerprints allow comparison with the supplied versions in the pinned environment. Original runtime byte hashes are preserved; separately recorded LF-normalized source hashes distinguish Git line-ending conversion from content changes. Archive records retain exact byte checks. An actual source change invalidates the nominal check rather than silently authenticating a new run as R1.
+
+A new physical integration with R1 settings is requested using:
+\begin{quote}\small
+\begin{verbatim}
+python main.py --case full --no-show --seed 1 --dt 0.01 --imu-rate 100
+\end{verbatim}
+\end{quote}
+The default creates a new timestamped directory; an explicit \texttt{--output} path must not exist. The full case requests 600 s, with booster output ending at contact and the upper child continuing. The ascent-only case requests 160 s. Standard simulator plots can be reopened after unpacking:
+\begin{quote}\small
+\begin{verbatim}
+python main.py --plot-only results/submission-reproduction/nominal --no-show
+\end{verbatim}
+\end{quote}
+Independent evidence is recorded in \path{report/navigation_validation.json}. The accelerometer fixture uses 180 s at 20 Hz, seed 11, three-axis varying force, injected scale $[0.005,-0.003,0.002]$ and bias $[0.01,-0.02,0.005]^{\mathsf T}\,\mathrm{m\,s^{-2}}$. Its scale prior is 0.02; aiding at 2 Hz uses $0.01\,\mathrm{m}$/$0.005\,\mathrm{m\,s^{-1}}$ white noise, no latency or colored bias, to isolate calibration.
+
+The gyro fixture uses 450 s at 50 Hz, seed 12, fixed 150 km position and analytic attitude $\vect q_0\otimes q_x(0.3\sin0.031t)\otimes q_y(0.4\sin0.047t)\otimes q_z(0.35\sin0.063t)$; $q_i$ is a rotation about axis $i$ and the coefficients use radians/seconds. Injected gyro scale is $[0.002,-0.0015,0.001]$, bias $[0.0005,-0.0003,0.0002]^{\mathsf T}\,\mathrm{rad\,s^{-1}}$, and cross-axis terms in $xy,xz,yx,yz,zx,zy$ order are $[0.001,-0.0008,0.0006,0.0012,-0.001,0.0005]$. Initial attitude error is $[0.003,-0.002,0.004]^{\mathsf T}\,\mathrm{rad}$; gyro scale/cross-axis priors are 0.003. Its star boresight is Body $+x$; the nominal flight retains the 60-degree mounting. Rate RMS uses the final 100 s. This fixture tests calibration under deliberate excitation, not the CRS-10 mounting/trajectory.
+
+The position-consistency fixture uses 20 independent prior/noise draws, 120 s at 20 Hz, fixed attitude and constant velocity $[1,-0.2,0.1]^{\mathsf T}\,\mathrm{m\,s^{-1}}$. Initial position/velocity/bias deviations are $2\,\mathrm{m}$, $0.1\,\mathrm{m\,s^{-1}}$ and $0.03\,\mathrm{m\,s^{-2}}$. GNSS is 2 Hz with 30 s correlation and zero latency; other GNSS noise levels retain sensor defaults. These accelerated correlation/sampling settings are fixture choices, distinct from nominal 10 Hz/300 s. Exactly one final position error per trial enters ANEES. The analytic-spin RK4 test uses $[0,0,0.4]^{\mathsf T}\,\mathrm{rad\,s^{-1}}$ for 10 s and no sensor/guidance clocks. Full settings, error norms, tolerances and traces remain executable and archived.
 
 Table~\ref{tab:app-output} describes the saved records; Table~\ref{tab:app-hashes} gives the R1 fingerprints used to regenerate the figures. Hash equality authenticates the compared files, not the validity of their physical assumptions. The report is compiled from \path{report/main.tex} with its supplied class support; each chapter uses \texttt{\textbackslash include}.
 
@@ -339,8 +350,10 @@ Record & Contents \\
 \bottomrule\endlastfoot
 \path{truth.csv} & Accepted stack/booster output epochs: CG state, loads, mass/CG/inertia, atmospheric and trajectory values. \\
 \path{stage2_truth.csv} & Upper-child state from the inherited separation state through the requested end. \\
-\path{measurements.csv} & Emitted sensor samples, validity flags, measurement values and star-tracker blinding reason. \\
-\path{navigation.csv} & Estimated IMU-station state, attitude/calibration errors and per-state standard deviations; no full covariance matrix. \\
+\path{measurements.csv} & Sensor values, validity, effective exposure epochs/latencies and star blinding reasons; IMU truth channels are evaluation-only. \\
+\path{navigation.csv} & IMU-station estimates, attitude/calibration errors, 30 standard deviations, innovation and aiding-acceptance diagnostics. \\
+\path{navigation_covariance.npz} & Every saved navigation epoch and full $30\times30$ error covariance. \\
+\path{startracker_innovations.csv} & Every valid star exposure: NIS, acceptance flag and residual angle. \\
 \path{events.json}\newline\path{stage2_events.json} & Accepted events, separation audit and contact criteria; upper-child events. \\
 \path{event_timeline.csv} & Combined mission-clock event sequence for both vehicles. \\
 \path{validation.csv} & Retained/interpolated ascent comparison values and residuals. \\
@@ -359,11 +372,11 @@ Record & SHA-256 \\
 \midrule\endhead
 \midrule\multicolumn{2}{r}{\small\textit{Continued on next page}}\\\endfoot
 \bottomrule\endlastfoot
-\path{summary.json} & \texttt{9c8f48e169e396f674682024a01377c407331676ea605782390f3056dc448b58} \\
+\path{summary.json} & \texttt{c7282111f5dbf4ae5bd8a7103857d51c6d8a12eb8f35ecc403d35715f5ed304c} \\
 \path{truth.csv} & \texttt{49b8cdac785c58eef19e438a172cddf2a84eb1bc6172c367e39121ef4e92fd44} \\
 \path{stage2_truth.csv} & \texttt{ac510163a9f32ff8743a14f894d879df556d3790ec765f27e1ca71d58b2a252d} \\
-\path{navigation.csv} & \texttt{7129d92ecc1a65e7360c18d5a4b9851520e5fbf993b8529f1637112fa1429e7f} \\
-\path{measurements.csv} & \texttt{3943b94a24a631ca31ddc296610625cc9e742be7f34fde4994e29be151a72801} \\
+\path{navigation.csv} & \texttt{451b6e124cb40bb773c01a76e07029e1e82c556b5d6a46bc757e2f9179cb90ba} \\
+\path{measurements.csv} & \texttt{4493598f290ccae7b36d1bb98eeb4809d732f20090ae00a525ce124222b1983c} \\
 \path{events.json} & \texttt{8411b6cfcc5c29e54e4aafc67b4592e735401f6ebfdc172a006e52b77c26a311} \\
 \path{validation.csv} & \texttt{4897c1bfcf9899e8d0afbef02235b2e884c241d98e430bca01d9c543a2e6666e} \\
 \end{longtable}\endgroup
@@ -443,13 +456,13 @@ Figure~\ref{fig:app-properties-availability} supplements the main results with c
 \par\smallskip\noindent\begin{minipage}{\linewidth}
 \centering
 \includegraphics[width=.95\linewidth]{images/appendix_properties_availability.pdf}
-\captionof{figure}{R1 properties and sensor validity. The dashed line marks separation at 144 s: the CG/inertia jump changes the tracked configuration, while structural-point states remain continuous. Green samples are valid and gray invalid. IMU validity is continuous and omitted from the panel. All 381 valid star exposures are rejected.}
+\captionof{figure}{R1 properties and sensor validity. The dashed line marks separation at 144 s: the CG/inertia jump changes the tracked configuration, while structural-point states remain continuous. Green samples are valid and gray invalid. IMU validity is continuous and omitted from the panel. All 381 valid star exposures are accepted by the unchanged NIS gate.}
 \label{fig:app-properties-availability}
 \end{minipage}\par\smallskip
 
 \noindent\begin{minipage}[t]{.45\linewidth}
 \centering\small
-\captionof{table}{R1 sensor counts. Used IMU samples propagate the filter; other used samples correct it.}\label{tab:app-sensor-counts}
+\captionof{table}{R1 sensor counts. The first IMU sample primes history; 46508 subsequent samples propagate the filter. Other used samples correct it.}\label{tab:app-sensor-counts}
 \setlength{\tabcolsep}{3pt}
 \begin{tabular}{@{}lrrr@{}}
 \toprule
@@ -458,7 +471,7 @@ Sensor & Emitted & Valid & Used \\
 IMU & 46509 & 46509 & 46509 \\
 GNSS & 4651 & 4651 & 4651 \\
 LiDAR & 4651 & 496 & 496 \\
-Star & 1861 & 381 & 0 \\
+Star & 1861 & 381 & 381 \\
 \bottomrule
 \end{tabular}
 \end{minipage}\hfill

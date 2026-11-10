@@ -23,6 +23,12 @@ class FixedModel:
 
 
 class CoreMathChecks(unittest.TestCase):
+    def test_rk4_convergence_with_fixed_sensor_independent_rotation(self):
+        from report.validate_navigation import integrator_case
+        result = integrator_case()
+        for order in result['observed_orders']:
+            self.assertTrue(3.8 <= order <= 4.2)
+
     def test_parallel_axis_mass_combination(self):
         p = combine_components(
             [

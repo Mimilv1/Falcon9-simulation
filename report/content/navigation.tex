@@ -1,80 +1,77 @@
 \section{Navigation Architecture and State Estimation}
 \label{sec:navigation}
 
-The MEKF in \path{kalman.py} estimates motion at the fixed IMU station from the streams defined in Section~\ref{sec:sensors}. It uses its own attitude during prediction and correction. Vehicle control continues to use physical-state feedback; the estimator is evaluated independently in Section~\ref{sec:results}.
+The multiplicative error-state Kalman filter (MEKF) in \path{kalman.py} estimates motion at the fixed IMU station from the measurements of Section~\ref{sec:sensors}. Its quaternion is propagated from measured gyro rates and corrected by observations; true attitude is used for initialization, sensor generation and evaluation, rather than as a continuous navigation input. Vehicle commands use physical-state feedback, so navigation accuracy and landing success are evaluated separately.
 
-\subsection{Nominal state, error state, and initialization}
-The nominal state stores $\hat{\vect x}=[\hat{\vect p},\hat{\vect v},\hat{\vect b}_a,\hat{\vect q},\hat{\vect b}_g,\hat{\vect s}_f,\hat{\vect m}]$: position and velocity in $E$, Body accelerometer bias, the Body-to-$E$ quaternion, gyro bias, three scale factors, and six off-diagonal calibration terms. This is 25 stored scalars, including the four-component unit quaternion. The covariance instead represents the 24-component error state in Equation~\eqref{eq:nav-error-state}:
+\subsection{State, calibration and initialization}
+The nominal state stores position and velocity in frame $E$, Body accelerometer bias, the Body-to-$E$ quaternion, gyro bias, three gyro scale factors, six gyro cross-axis terms, three accelerometer scale factors and three GNSS position-bias terms. It contains 31 scalars, including a four-component unit quaternion. The covariance has 30 independent coordinates, given by Equation~\eqref{eq:nav-error-state}:
 \begin{equation}
- \delta\vect x=[\delta\vect p^{\mathsf T},\delta\vect v^{\mathsf T},
- \delta\vect b_a^{\mathsf T},\delta\vect\theta^{\mathsf T},
- \delta\vect b_g^{\mathsf T},\delta\vect s_f^{\mathsf T},\delta\vect m^{\mathsf T}]^{\mathsf T},
- \qquad \vect q_{\mathrm{true}}=\hat{\vect q}\otimes\operatorname{Exp}(\delta\vect\theta).
+\begin{aligned}
+ \delta\vect x={}&[\delta\vect p^{\mathsf T},\delta\vect v^{\mathsf T},\delta\vect b_a^{\mathsf T},
+ \delta\vect\theta^{\mathsf T},\delta\vect b_g^{\mathsf T},\delta\vect s_f^{\mathsf T},
+ \delta\vect m^{\mathsf T},\delta\vect s_a^{\mathsf T},\delta\vect b_G^{\mathsf T}]^{\mathsf T},\\
+ &\vect q_{\mathrm{true}}=\hat{\vect q}\otimes\operatorname{Exp}(\delta\vect\theta).
+\end{aligned}
 \label{eq:nav-error-state}
 \end{equation}
-Here $\operatorname{Exp}$ maps a three-component rotation vector to a unit quaternion and $\mathcal N(\vect q)=\vect q/\lVert\vect q\rVert$ normalizes it. The attitude error is expressed in Body axes. Table~\ref{tab:nav-state} defines the initial uncertainty. Position starts with the fixed perturbation $[1,-1,0.5]^{\mathsf T}\,\mathrm{m}$; velocity and mean attitude start at the launch state. This known initial alignment is an A-class prior, not a measured alignment solution.
+Here $\operatorname{Exp}$ converts a rotation vector into a unit quaternion, and $\delta\vect\theta$ is a Body-axis error \cite{sola2017}. Gyro calibration uses $\hat{\mat G}=\mat I+\operatorname{diag}(\hat{\vect s}_f)+\mat M(\hat{\vect m})$, where $\mat M$ holds the six off-diagonal terms; accelerometer calibration uses $\hat{\mat D}_a=\mat I+\operatorname{diag}(\hat{\vect s}_a)$. The colored GNSS error $\vect b_G$ is expressed in $E$.
+
+Table~\ref{tab:nav-state} defines the A-class initialization. Position starts with the fixed perturbation $[1,-1,0.5]^{\mathsf T}\,\mathrm{m}$; velocity and mean attitude start at the launch state. All estimated bias and calibration means are zero. This is an assumed initial alignment, not a measured alignment solution.
 
 \begin{table}[!htbp]
 \centering\small
 \begin{tabularx}{\linewidth}{@{}lclX@{}}
 \toprule
-Error block & Size & Units & Initial standard deviation \\
+Error block & Size & Units & Initial standard deviation per coordinate \\
 \midrule
-Position / velocity & $3+3$ & m / $\mathrm{m\,s^{-1}}$ & $2$ / $0.05$ per axis \\
-Accelerometer bias & 3 & $\mathrm{m\,s^{-2}}$ & $0.1$ per axis \\
-Attitude error & 3 & rad & $0.01$ per axis \\
-Gyro bias & 3 & $\mathrm{rad\,s^{-1}}$ & $10^{-3}$ per axis \\
-Gyro scale factor & 3 & dimensionless & $10^{-3}$ per axis \\
-Gyro misalignment & 6 & rad (small-angle terms) & $10^{-3}$ per term \\
+Position / velocity & $3+3$ & m / $\mathrm{m\,s^{-1}}$ & $2$ / $0.05$ \\
+Accelerometer bias & 3 & $\mathrm{m\,s^{-2}}$ & $0.1$ \\
+Attitude / gyro bias & $3+3$ & rad / $\mathrm{rad\,s^{-1}}$ & $0.01$ / $10^{-3}$ \\
+Gyro scale / cross-axis terms & $3+6$ & -- / rad & $10^{-3}$ / $10^{-3}$ \\
+Accelerometer scale & 3 & dimensionless & $10^{-3}$ \\
+GNSS colored position bias & 3 & m & $[0.6,0.6,1.0]^{\mathsf T}$ (stationary prior) \\
 \bottomrule
 \end{tabularx}
-\caption{Default 24-dimensional error covariance. The nominal quaternion has four stored components but three independent attitude-error coordinates. All initialization settings are A-class assumptions.}
+\caption{Nominal 30-dimensional error covariance. The quaternion has four stored components but three independent error coordinates. Initial cross-covariances are zero.}
 \label{tab:nav-state}
 \end{table}
 
-\subsection{IMU prediction and covariance propagation}
-The gyro calibration matrix is $\hat{\mat G}=\mat I+\operatorname{diag}(\hat{\vect s}_f)+\mat M(\hat{\vect m})$, where $\mat M$ has the six estimated off-diagonal terms. Equation~\eqref{eq:nav-propagation} gives the nominal prediction. Superscripts $-$ and $+$ denote predicted and corrected estimates, respectively; $\overline{\vect\omega}$ is the mean of consecutive calibrated rates and $\mat C_{1/2}$ uses the mid-interval quaternion:
+\subsection{IMU and covariance prediction}
+Consecutive raw specific-force and gyro samples are averaged over each interval and recalibrated using the current parameter estimates. With $\mathcal N(\vect q)=\vect q/\lVert\vect q\rVert$, Equation~\eqref{eq:nav-propagation} defines prediction; $\mat C_{1/2}$ uses the half-interval quaternion:
 \begin{equation}
 \begin{aligned}
- \hat{\vect\omega}&=\hat{\mat G}^{-1}(\vect\omega_{\mathrm{meas}}-\hat{\vect b}_g),&
- \hat{\vect q}_{k+1}^-&=\mathcal N\!\left[\hat{\vect q}_k^+\otimes\operatorname{Exp}(\overline{\vect\omega}\Delta t)\right],\\
- \hat{\vect a}_k&=\mat C_{1/2}(\vect f_{\mathrm{meas}}-\hat{\vect b}_a)+\vect g(\hat{\vect p}_k)+\vect a_{\mathrm{fr}}(\hat{\vect p}_k,\hat{\vect v}_k),\\
- \hat{\vect p}_{k+1}^-&=\hat{\vect p}_k^++\hat{\vect v}_k^+\Delta t+\tfrac12\hat{\vect a}_k\Delta t^2,&
- \hat{\vect v}_{k+1}^-&=\hat{\vect v}_k^++\hat{\vect a}_k\Delta t.
+ \overline{\vect\omega}&=\hat{\mat G}^{-1}(\overline{\vect\omega}_{\mathrm{meas}}-\hat{\vect b}_g),&
+ \overline{\vect f}_c&=\hat{\mat D}_a^{-1}(\overline{\vect f}_{\mathrm{meas}}-\hat{\vect b}_a),\\
+ \hat{\vect q}_{k+1}^{-}&=\mathcal N[\hat{\vect q}_{k}^{+}\otimes\operatorname{Exp}(\overline{\vect\omega}\Delta t)],&
+ \hat{\vect a}_{k}&=\mat C_{1/2}\overline{\vect f}_c+\vect g(\hat{\vect p}_k)+\vect a_{\mathrm{fr}}(\hat{\vect p}_k,\hat{\vect v}_k),\\
+ \hat{\vect p}_{k+1}^{-}&=\hat{\vect p}_k^{+}+\hat{\vect v}_k^{+}\Delta t+\tfrac12\hat{\vect a}_k\Delta t^2,&
+ \hat{\vect v}_{k+1}^{-}&=\hat{\vect v}_k^{+}+\hat{\vect a}_k\Delta t.
 \end{aligned}
 \label{eq:nav-propagation}
 \end{equation}
-The environment supplies the gravity and rotating-frame gradients used in the discrete transition matrix $\mat F_k$. Attitude error couples into velocity through $-\mat C_{1/2}[\vect f_{\mathrm{meas}}-\hat{\vect b}_a]_\times\delta\vect\theta\Delta t$; gyro bias, scale factors and misalignment couple through the calibrated rate. The symbol $[\cdot]_\times$ denotes the cross-product matrix. Equation~\eqref{eq:nav-cov-predict} propagates uncertainty:
-\begin{equation}
- \mat P_{k+1}^-=\mat F_k\mat P_k^+\mat F_k^{\mathsf T}+\mat Q_k.
-\label{eq:nav-cov-predict}
-\end{equation}
-The process covariance uses the sample-noise PSDs $\sigma_a^2/f_{\mathrm{IMU}}$ and $\sigma_g^2/f_{\mathrm{IMU}}$, plus bias random-walk variance proportional to $\Delta t$. For example, the white-acceleration position, position--velocity and velocity blocks scale as $S_a\Delta t^3/3$, $S_a\Delta t^2/2$ and $S_a\Delta t$, respectively. Bias and calibration means remain constant during prediction; enabled random walks grow their covariance.
+The first IMU sample initializes the averaging/history buffers without advancing time. The covariance transition includes gravity/frame gradients, force-attitude coupling, and gyro bias/calibration effects on both full-interval attitude and midpoint force rotation. For rotation vector $\vect\phi$, the right Jacobian is $\mat J_r=\mat I-(1-\cos\phi)[\vect\phi]_\times/\phi^2+(\phi-\sin\phi)[\vect\phi]_\times^2/\phi^3$, where $\phi=\lVert\vect\phi\rVert$ and a series handles small $\phi$ \cite{sola2017}. This derivative avoids replacing a finite rotation's sensitivity with the identity.
+
+The discrete prediction is $\mat P^-_{k+1}=\mat F_k\mat P_k^+\mat F_k^{\mathsf T}+\mat Q_k$. White sample-noise PSDs are $S_a=\sigma_a^2/f_{\mathrm{IMU}}$ and $S_g=\sigma_g^2/f_{\mathrm{IMU}}$; acceleration-noise blocks scale as $S_a\Delta t^3/3$, $S_a\Delta t^2/2$ and $S_a\Delta t$ for position, position--velocity and velocity, with calibrated force rotation applied. Bias random walks grow covariance proportionally to $\Delta t$; calibration means are constant and nominal calibration random walks are zero.
+
+The GNSS colored-bias model matches the generator's first-order Gauss--Markov process: $\hat{\vect b}_{G,k+1}^-=\varphi\hat{\vect b}_{G,k}^+$, $\varphi=\exp(-\Delta t/\tau)$, and $\mat Q_G=\operatorname{diag}(\sigma_G^2)(1-\varphi^2)$. Thus correlated error is represented by a state, while GNSS measurement covariance contains the remaining white component. The stationary bias covariance is not counted again as independent white noise at each fix.
 
 \subsection{Measurement correction and attitude injection}
-GNSS observes antenna position and velocity. Its lever arm relative to the IMU is removed using the estimated rotation and calibrated angular rate; delayed measurements are extrapolated over their age using the estimated acceleration. LiDAR uses the analytic ray--sphere range, with position and attitude derivatives through both sensor arm and boresight. Invalid geometry skips correction.
+GNSS lever arms are removed using estimated attitude and calibrated rate. Delayed position/velocity observations are advanced using the current estimated acceleration. Their covariance retains the added position variance $\ell^2\mat R_v$ and position--velocity cross term $\ell\mat R_v$, for measurement age $\ell$. This short-delay, constant-acceleration approximation is not a full out-of-sequence state update. LiDAR uses the analytic ray--sphere model, differentiated through position, attitude, boresight and sensor arm; invalid geometry skips correction.
 
-The star-tracker quaternion is converted from ECI to $E$ at its exposure epoch and advanced over its latency using the last estimated rate. Its residual is the shortest rotation vector between the predicted and measured attitude. For each sensor, Equation~\eqref{eq:nav-update} defines innovation $\vect\nu$, measurement Jacobian $\mat H$, innovation covariance $\mat S$, gain $\mat K$ and error correction:
+The star quaternion is converted from ECI to $E$ at its actual exposure epoch. Stored gyro samples are integrated from exposure to reception, using current estimated calibration, to advance the attitude observation. Its Jacobian includes bias/calibration sensitivity across that interval and its noise includes the propagated gyro uncertainty. At startup, latency is limited to the truth history actually available; each saved sample records its epoch and effective age.
+
+For innovation $\vect\nu=\vect z-h(\hat{\vect x}^-)$, the filter forms $\mat S=\mat H\mat P^-\mat H^{\mathsf T}+\mat R$ and $\mat K=\mat P^-\mat H^{\mathsf T}\mat S^{-1}$. Equation~\eqref{eq:nav-injection} gives the Joseph covariance update and multiplicative injection:
 \begin{equation}
 \begin{aligned}
- \vect\nu&=\vect z-h(\hat{\vect x}^-),&
- \mat S&=\mat H\mat P^-\mat H^{\mathsf T}+\mat R,\\
- \mat K&=\mat P^-\mat H^{\mathsf T}\mat S^{-1},&
- \delta\hat{\vect x}&=\mat K\vect\nu,\\
- \widetilde{\mat P}&=(\mat I-\mat K\mat H)\mat P^-(\mat I-\mat K\mat H)^{\mathsf T}+\mat K\mat R\mat K^{\mathsf T}.
-\end{aligned}
-\label{eq:nav-update}
-\end{equation}
-Additive blocks receive their corresponding error increments. Attitude uses multiplicative injection and covariance reset, Equation~\eqref{eq:nav-injection}:
-\begin{equation}
- \hat{\vect q}^{+}=\mathcal N[\hat{\vect q}^{-}\otimes\operatorname{Exp}(\delta\hat{\vect\theta})],\qquad
- \mat P^{+}=\mat T_r\widetilde{\mat P}\mat T_r^{\mathsf T},\quad
+ \delta\hat{\vect x}&=\mat K\vect\nu,&
+ \widetilde{\mat P}&=(\mat I-\mat K\mat H)\mat P^-(\mat I-\mat K\mat H)^{\mathsf T}+\mat K\mat R\mat K^{\mathsf T},\\
+ \hat{\vect q}^{+}&=\mathcal N[\hat{\vect q}^{-}\otimes\operatorname{Exp}(\delta\hat{\vect\theta})],&
+ \mat P^{+}&=\mat T_r\widetilde{\mat P}\mat T_r^{\mathsf T},\quad
  (\mat T_r)_{\theta\theta}=\mat I-\tfrac12[\delta\hat{\vect\theta}]_\times.
+\end{aligned}
 \label{eq:nav-injection}
 \end{equation}
-Other diagonal reset blocks are identity; the implementation then symmetrizes $\mat P^+$. The star-tracker gate accepts only innovations with $\mathrm{NIS}=\vect\nu^{\mathsf T}\mat S^{-1}\vect\nu\leq16.27$, the selected three-degree-of-freedom $99.9\%$ threshold. GNSS and LiDAR NIS values are diagnostic; they do not have equivalent rejection gates.
+Other blocks receive additive corrections and identity reset blocks. The reset is a first-order small-angle approximation; the result is symmetrized. Star fixes pass only when $\mathrm{NIS}=\vect\nu^{\mathsf T}\mat S^{-1}\vect\nu\le16.27$, the selected three-degree-of-freedom $99.9\%$ threshold \cite{nistchisquare}. GNSS and LiDAR NIS values are diagnostics without equivalent rejection gates.
 
-\subsection{Interfaces and interpretation limits}
-One filter and the same stage-1 sensor stations continue through separation. The upper child has no navigation instance. An optional nine-state supplied-attitude mode provides a diagnostic, while an unaided \texttt{GyroAttitude} quaternion provides a dead-reckoning baseline; their results are distinguished in Section~\ref{sec:results}.
-
-Sensor noise values and initial alignment are assumptions. Nominal true gyro scale factors and misalignments are zero, so estimating these terms does not establish successful nonzero-error calibration. The GNSS generator includes correlated Gauss--Markov position errors. The filter uses the sum of white-noise and stationary Gauss--Markov variances as measurement noise, but treats successive fixes as independent and has no corresponding bias state. Accelerometer scale error is likewise not an estimated block. These mismatches can affect consistency and require assessment alongside point-estimate accuracy. Section~\ref{sec:nav-results} reports both errors and uncertainty diagnostics, including accepted star-tracker updates.
+\subsection{Interfaces and verification limits}
+One stage-1 filter continues through separation; the upper child has no navigation instance. Optional reduced-state/supplied-attitude modes and an unaided gyro quaternion support diagnostics. The nominal gyro scale/cross-axis truth is zero, so separate nonzero-error fixtures are necessary to test those states. Section~\ref{sec:nav-results} reports the final full-flight errors, independent calibration tests, aiding acceptance and covariance evidence. These verify the stated sensor assumptions and fixtures; they do not establish hardware performance or navigation-fed control robustness.

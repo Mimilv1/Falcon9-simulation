@@ -1,6 +1,6 @@
 # Falcon9-simulation
 
-CRS-10 vehicle simulator with IMU, GNSS, LiDAR and a navigation filter.
+CRS-10 vehicle simulator with IMU, GNSS, LiDAR, star tracker and gyro-driven navigation.
 
 ## Run
 
@@ -33,6 +33,9 @@ The terminal prints the output directory under `results/`.
 | `truth.csv` | Simulated vehicle state and loads |
 | `measurements.csv` | Sensor samples |
 | `navigation.csv` | Estimated states and errors at the IMU station |
+| `navigation_covariance.npz` | Full error covariance at each saved navigation epoch |
+| `startracker_innovations.csv` | Valid star exposures, NIS and acceptance flags |
+| `stage2_truth.csv` | Separated stage-2/Dragon continuation to 600 s |
 | `events.json` | Phase transitions, separation audit and landing metrics |
 | `summary.json` | Outcome, configuration, sources and input hashes |
 | `validation.csv` | Comparison with the ascent reference |
@@ -82,10 +85,15 @@ supplied separately and added once each.
 - [Aerodynamics and evidence](docs/aero_model.md)
 - [Moving-mass dynamics](docs/powered_dynamics.md)
 
-The navigation filter receives truth attitude. The return controller uses
+The nominal 30-coordinate error-state filter propagates measured gyro rates
+and estimates its own attitude, biases and calibration terms. True attitude
+provides initial alignment, sensor generation and error evaluation. The return controller uses
 truth-state feedback and ideal attitude moments. Sensor specifications,
 landing geometry and several vehicle/aerodynamic values are research-model
 assumptions, as identified in the linked documents.
+
+The compiled report, archived result data and commands for reproducing the
+submitted figures and independent navigation tests are in [report/](report/README.md).
 
 ## Tests
 

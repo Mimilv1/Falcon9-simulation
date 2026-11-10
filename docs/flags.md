@@ -1,147 +1,48 @@
-# Documentation flags
+# Documentation audit status
 
-Status board for places where the prose documentation lags the code or
-`data/`, and for pending changes that will make it lag. Anyone (human or
-agent) who cites a documented statement that is flagged here must verify it
-against the code and data first; the code and the JSON records are the
-truth, the prose describes it.
+Reviewed 10 November 2026 against the final nominal run, runtime revision
+`2d89a886a761407695eb26405aca78a9af6663a6`, and report reproduction ledger.
+Code and active configuration define behavior; old prose is not an override.
 
-When you find a new doc/data discrepancy: verify the code or data side
-yourself, do not propagate the stale statement, and append a flag here.
+## Implemented limits documented in the report
 
-## Open flags
+- **FL-2 — Ideal actuation:** `Actuators.py` is empty and nonzero engine
+  gimbal commands are rejected. Ascent uses an unlimited ideal couple;
+  return uses bounded ideal residual moments and static fin allocation.
+  The report does not claim physical TVC/servo performance or navigation-fed
+  landing control. Physical actuator dynamics remain a later GNC extension.
+- **FL-3 — Upper-stage aerodynamics:** `second_stack` is a declared/tested
+  configuration, while `upper_stage.py` actively uses its separate constant
+  CD = 0.3 provider. Report Chapters 5/8 and `aero_model.md` state this choice.
+- **FL-8 — Heading field:** the current ascent target uses projected launch
+  east, rather than the stored 45-degree heading field. Chapter 8 states the
+  implemented direction and does not claim reconstruction of the ISS plane.
 
-docs/image.png include?
+## Resolved checks
 
-- **FL-1 — Configuration count in `docs/aero_model.md`** (opened
-  2026-11-09). The doc states "four declared vehicle configurations" and
-  lists fin/leg intermediate states under "Open items".
-  `data/aero_configurations.json` now contains **five** configurations:
-  `booster_return` was added (fins deployed, legs stowed; active during
-  entry burn and aerodynamic descent). Its axial curve equals
-  `booster_landing`'s; the difference is the deployed-leg crossflow
-  segment. Action: update `aero_model.md` (config table, "Open items"
-  section, configuration paragraphs).
+| ID | Finding | Final disposition |
+| --- | --- | --- |
+| FL-0 | Environment prose and dead references | Central gravity, separate rotating-frame terms and altitude-limited wind are documented. |
+| FL-1 | Aero configuration count and deployment states | `aero_model.md` now lists all five configurations, active fin commands and upper-stage provider selection. |
+| FL-4 | Stale supplied-truth-attitude metadata | Mission configuration identifies the gyro-driven MEKF; active model includes 30 error coordinates. |
+| FL-5 | Frame, notation and result placement | Body +x, launch-aligned Earth-centred frame and fixed-IMU comparison are shared; results remain in Chapter 9. |
+| FL-6 | Rejected aiding and covariance mismatch | Accel-scale and GNSS colored-bias states, midpoint/SO(3) derivatives and epoch/history corrections are active. Final R1 accepts 381/381 valid star fixes at the unchanged 16.27 gate. Full covariance and innovations are saved. A separate 20-trial position ANEES check passes; full-flight ensemble consistency is not claimed. |
+| FL-7 | Print-only navigation diagnostics | Fourteen assertion-based navigation tests and ten stored independent validation checks now cover selected derivatives, nonzero calibration, delay/startup, gating, covariance and RK4 order. The legacy print-only script is not counted as certification. |
+| FL-9 | Metadata scope and cargo source | Cargo points to the official overview; active rotating-frame/two-child/estimated-attitude scope strings are corrected. |
+| FL-10 | Smart quotes in copied PDF code | Monospaced quote mapping is disabled. Extracted command uses ASCII quotes; the extracted ValueError line compiles. |
+| FL-11 | Missing raw-data/plot reproduction path | Tracked `report/reproduction_data.zip`, `reproduce.py`, `validate_navigation.py` and member hashes provide a checked fresh-extraction path. All ten regenerated figure PDFs match their saved SHA-256 hashes. |
+| FL-12 | Return gain units | Return/landing direction-to-rate and rate-to-acceleration gains both use s^-1. Direct ascent/upper PD kp remains s^-2. |
+| FL-13 | Landing guidance interval | Main text and appendix give the allowed 0.01–0.2 s interval. |
+| FL-14 | Command clipping described as state bounds | Desired rates are clipped per axis; acceleration cap is on the command norm. Actual rate history and its 17.825 deg/s coast maximum are shown. |
 
-- **FL-2 — Actuator layer documentation** (opened 2026-11-09).
-  `Actuators.py` is an empty placeholder today; the actuator layer is
-  planned and will be implemented before the report is submitted. When it
-  lands: `docs/aero_model.md` ("Open items: actuator layer") and
-  `docs/core_api.md` ("not implemented" statements) become stale and must
-  be reconciled with the implementation; the mission-loop description and
-  all test counts must be re-verified; the nominal full simulation and the
-  report figures behave on it (`results/`-derived figures may need
-  regeneration). The report (architecture, aerodynamics and
-  return/actuation chapters) is written to cover it and must be updated to
-  the final implementation.
+## Evidence boundary
 
-- **FL-3 — `second_stack` aerodynamic configuration is declared but not
-  wired into the active stage-2 continuation** (opened 2026-11-09,
-  verified by code search: only `tests/test_aerodynamics.py` references
-  `second_stack`). The upper-stage run (`upper_stage.py`) uses its own
-  simple axial-drag estimate (declared $C_D = 0.3$ on the
-  $10.52\,\mathrm{m^2}$ stage cross-section), not the
-  `Aerodynamics`/`second_stack` model. `docs/aero_model.md` does not
-  mention this. Action: state the selection explicitly where aero
-  configurations and upper-stage propagation are documented; optionally
-  switch the continuation onto the declared configuration.
-
-- **FL-4 — `data/crs10_mission.json` `integration.attitude_source` is
-  stale** (opened 2026-11-10, verified against `mission.py`/`kalman.py`).
-  The record states "truth; current C filter does not estimate attitude",
-  but `mission.py` now defaults `use_estimated_attitude` to true and the
-  filter runs the 15/24-state MEKF with `GyroAttitude` and star-tracker
-  aiding; `summary.json` overwrites the key with the runtime value
-  (`mekf_gyro_gnss_lidar` in the current nominal run). The json string must
-  not be quoted in the report; cite `mission.py` and the run record instead
-  (the report Chapter 7 already does). Action: update the json record.
-
-- **FL-6 — Navigation covariance and gate performance** (open,
-  2026-11-10): The seed-1 full run rejects all 381 valid star fixes.
-  Position-error time fractions within reported three-sigma envelopes are
-  about 0.500/0.344/0.752. Chapters 7 and 9 now distinguish accuracy from
-  consistency; runtime covariance/gating still requires investigation.
-  The GNSS measurement covariance includes white-noise plus stationary
-  Gauss-Markov marginal variances, but does not represent temporal
-  correlation; the final Chapter 7 now states that distinction explicitly.
-
-- **FL-7 — Jacobian certification** (open, 2026-11-10):
-  `tests/test_gyrostartracker.py` prints finite-difference diagnostics without
-  tolerance assertions. Chapter 9 now states that limitation explicitly.
-  Quantified tolerance/step-size acceptance is still needed for a stronger
-  verification claim.
-
-- **FL-8 — Ascent heading field** (open, 2026-11-10):
-  `ControlledAscent` stores `heading_ecef` from the configured angle but
-  constructs the target using projected `EAST_ECEF`. The JSON's 45-degree
-  heading explanation does not describe the active pointing direction.
-  Chapter 8 documents the implemented eastward command without changing
-  the runtime or reinterpreting the trajectory as an identified ISS plane.
-
-- **FL-9 — Vehicle metadata source and scope strings** (open,
-  2026-11-10): `data/vehicle_parameters.json` retains obsolete body-only,
-  non-rotating and booster-only scope descriptions. Its cargo row points
-  `source_ids` to S10 (the historical engine guide) instead of the named
-  NASA CRS-10 overview. These strings do not override runtime behavior.
-  The final report appendix resolves the cargo citation to the overview
-  and uses the implemented rotating-frame, two-child and MEKF paths.
-  Metadata cleanup remains separate from the unchanged R1 runtime inputs.
-
-- **FL-10 — PDF code quotation marks** (open, final audit 2026-11-10):
-  Both pypdf and pdfplumber extract U+201D smart quotation marks from the
-  page-34 unittest pattern and the page-35 Python ValueError string, even
-  though the LaTeX verbatim source uses ASCII quotes. The copied Python
-  line does not compile. Correct the mono-font quote mapping and verify
-  the PDF text layer after rebuilding; the executable Python source is
-  unaffected.
-
-- **FL-11 — Exact report-figure reproduction package** (open, final audit
-  2026-11-10): The nominal R1/R2 raw records are Git-ignored, and no
-  report-figure-generation Python script is tracked. Main.py can regenerate
-  a simulation and its standard plots, but a fresh clone cannot directly
-  replot the archived records or regenerate all manuscript panels and
-  derived diagnostics. The appendix discloses the ignored raw data; a
-  small shared result archive and figure-export script would close this
-  submission reproducibility gap.
-
-- **FL-12 — Return attitude-gain units in the appendix** (open, final
-  audit 2026-11-10): Table 19 labels return/landing `attitude_kp` values
-  1 and 1.5 as s^-2. RecoveryController instead forms a desired angular
-  rate from `kp * direction_error`, then angular acceleration from
-  `kd * (desired_rate - omega)`. Both configuration gains therefore have
-  units s^-1. The ascent/upper-stage direct-PD kp units s^-2 are correct
-  and must not be changed globally.
-
-- **FL-13 — Adaptive guidance-clock lower bound** (open, final audit
-  2026-11-10): Section 8.4 and Table 19 state 0.02--0.2 s. The actual
-  RecoveryController formula clamps at 0.01--0.2 s. This is the allowed
-  command-clock range, not a measured minimum interval in R1.
-
-- **FL-14 — Command limits versus measured angular rate** (open, final
-  audit 2026-11-10): Table 10's pointing-limit wording does not distinguish
-  per-axis desired-rate clipping (+/-0.22 rad/s) from actual angular-rate
-  magnitude; the acceleration bound 0.12 rad/s^2 is likewise on the
-  command. R1 reaches 0.31109986 rad/s (17.8247 deg/s) in rate magnitude
-  at 223.7 s during return_coast, consistent with simultaneous nonzero
-  transverse rate commands. The table should not imply a guaranteed
-  plant-state bound. Add a physical angular-rate history to expose this
-  distinction; no change of runtime limits is required by this finding.
-
-## Resolved flags
-
-- **FL-0 — `docs/env_issues.md` references and Earth-rotation wording**
-  (resolved 2026-11-09). `Environment/environment.md` previously claimed
-  Earth rotation was not modeled and cited a nonexistent
-  `docs/env_issues.md`; `docs/parameter_evidence.md` also cited it. Fixed
-  in the same session: rotation is documented as supplied Coriolis and
-  centrifugal accelerations, the wind profile is documented, and dead
-  references were removed. Kept for history; no action needed.
-
-- **FL-5 — Report frame and notation review** (resolved in the local
-  Chapters 1-9 report, 2026-11-10): Corrected rotating-frame wording,
-  lateral-flow norm, per-axis damping, active versus declared upper-stage
-  drag, sensor period relation, A classification, gyro random-walk terms,
-  nominal/error-state dimensions and strict monotonic-drift wording.
-  Navigation performance moved to Chapter 9; statistical consistency is
-  no longer asserted from mean NIS alone. Runtime limitations remain open
-  under FL-6/7/8.
+Final nominal navigation has position/velocity/attitude RMS of
+0.670763 m / 0.0337753 m/s / 0.207582 deg. Calibrated instantaneous gyro
+rate RMS is 0.0125122 deg/s versus raw 0.0115190 deg/s for zero nominal
+scale/cross-axis truth. The separate deliberately excited nonzero-error
+fixture improves rate RMS from 0.0375088 to 0.0100380 deg/s. These are
+separate claims, not a guarantee that calibration improves every sample.
+Ascent reference data are also used for calibration. Calm nominal landing,
+ideal actuation and independent position ANEES do not establish physical
+return validation, wind robustness or full-flight covariance certification.

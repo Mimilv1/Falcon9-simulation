@@ -88,11 +88,12 @@ with a separately assembled fixed-reference 6×6 coupled balance; geometric CG
 finite differences; roll angular momentum leaving with a finite exit; accepted
 base/CG state mapping; fixed-sensor kinematics; and limiting-tank stopping.
 These are component and mathematical checks, not flight-data validation.
-The temporary B component models are retained. Mission initial states, event
-conditions and the full flight runner remain to be agreed and integrated.
-Measured transients, separate-stage aerodynamics, fluid settling/slosh,
-variable O/F, navigation, guidance/control and geographic outputs remain outside
-the current A core.
+`mission.py` connects this core to the CRS-10 force models, accepted events,
+two-child propagation and sensor/navigation evaluation. The core itself remains
+independent of those mission choices. Measured engine transients, fluid
+settling/slosh, variable O/F and physical actuator dynamics remain outside
+the implemented model. The report distinguishes project commands from
+validated vehicle behavior.
 
 
 ## Earth-centred integration safeguard

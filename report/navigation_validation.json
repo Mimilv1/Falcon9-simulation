@@ -6518,6 +6518,32 @@
       }
     ]
   },
+  "integrator": {
+    "steps_s": [
+      0.4,
+      0.2,
+      0.1
+    ],
+    "duration_s": 10.0,
+    "omega_radps": [
+      0.0,
+      0.0,
+      0.4
+    ],
+    "attitude_errors_rad": [
+      5.109290323046578e-07,
+      3.198324449726897e-08,
+      1.9997381528469305e-09
+    ],
+    "error_ratios": [
+      15.974896866647963,
+      15.993716203161885
+    ],
+    "observed_orders": [
+      3.997734712103086,
+      3.9994332885498323
+    ]
+  },
   "checks": {
     "accelerometer_scale": true,
     "accelerometer_bias": true,
@@ -6527,6 +6553,7 @@
     "gyro_misalignment": true,
     "angular_rate": true,
     "position_anees": true,
-    "gnss_nis": true
+    "gnss_nis": true,
+    "rk4_order": true
   }
 }

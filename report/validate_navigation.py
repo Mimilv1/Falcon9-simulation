@@ -173,10 +173,34 @@ def covariance_case(seeds=20, duration=120., dt=.05):
     }
 
 
+def integrator_case():
+    from dynamics import State, Loads, rk4_step
+    from mass_properties import combine_components, fixed_cylinder
+    class Model:
+        mass_model_name = 'fixed_rotation_fixture'
+        def mass_properties(self, configuration, propellant, consumption):
+            return combine_components([fixed_cylinder('fixture', 1000., 0., 0., 10., 1.)])
+    model = Model()
+    omega = np.array([0., 0., .4])
+    exact = quaternion_from_rotation_vector(omega*10)
+    errors = []
+    for step in [.4, .2, .1]:
+        state = State([1000., 0., 0.], [0., 0., 0.], [1., 0., 0., 0.], omega, [0., 0.])
+        for i in range(round(10/step)):
+            state = rk4_step(i*step, state, step, model, None,
+                            lambda t,s: Loads(np.zeros(3), np.zeros(3), np.zeros(3), [0., 0.]))
+        errors.append(angle_error(state.quaternion_body_to_ecef_wxyz, exact))
+    ratios = np.array(errors[:-1])/np.array(errors[1:])
+    return {'steps_s':[.4, .2, .1], 'duration_s':10., 'omega_radps':omega.tolist(),
+            'attitude_errors_rad':errors, 'error_ratios':ratios.tolist(),
+            'observed_orders':np.log2(ratios).tolist()}
+
+
 def run_all():
     results = {'accelerometer_scale':accel_scale_case(), 'gyro_calibration':attitude_case(),
                'covariance_consistency':covariance_case()}
     a, g, c = results.values()
+    results['integrator'] = integrator_case()
     results['checks'] = {
         'accelerometer_scale':a['scale_error_norm'] < a['scale_tolerance'],
         'accelerometer_bias':a['bias_error_norm_mps2'] < a['bias_tolerance_mps2'],
@@ -187,6 +211,7 @@ def run_all():
         'angular_rate':g['calibrated_rate_rms_degps'] < g['raw_rate_rms_degps'],
         'position_anees':c['position_anees_95_bounds'][0] <= c['position_anees'] <= c['position_anees_95_bounds'][1],
         'gnss_nis':5.5 <= c['gnss_nis_mean'] <= 6.5,
+        'rk4_order':all(3.8 <= x <= 4.2 for x in results['integrator']['observed_orders']),
     }
     return results
 
@@ -197,7 +222,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     result = run_all()
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(result, indent=2)+'\n')
+    args.output.write_text(json.dumps(result, indent=2)+'\n', encoding='utf-8', newline='\n')
     print(json.dumps({k:v for k,v in result.items() if k != 'gyro_calibration'},indent=2))
     print(json.dumps({k:v for k,v in result['gyro_calibration'].items() if k!='trace'},indent=2))
     if not all(result['checks'].values()):

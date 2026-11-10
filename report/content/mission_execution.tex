@@ -29,7 +29,7 @@ Boostback & Throttle 1; 10--60 s planning window; predicted-miss target 500 m \\
 Entry & Descending through 45 km; throttle 0.8; shutdown target $500\,\mathrm{m\,s^{-1}}$ \\
 Landing ignition & Reduced stopping predictor, factor 1.05 and 1.5 km clearance allowance \\
 Landing targets & Contact vertical velocity $-0.5\,\mathrm{m\,s^{-1}}$; lateral gains $0.0576\,\mathrm{s^{-2}}$ and $0.48\,\mathrm{s^{-1}}$ \\
-Pointing limits & Tilt $20^\circ$, terminal $4^\circ$ below 20 m; rate $0.22\,\mathrm{rad\,s^{-1}}$; acceleration $0.12\,\mathrm{rad\,s^{-2}}$ \\
+Direction/rate commands & Force-solver tilt $20^\circ$, terminal $4^\circ$ below 20 m; desired rate clipped per axis at $\pm0.22\,\mathrm{rad\,s^{-1}}$; angular-acceleration command norm capped at $0.12\,\mathrm{rad\,s^{-2}}$ \\
 Ideal-couple authority & $2\,\mathrm{MN\,m}$ during burns; $200\,\mathrm{kN\,m}$ in coast \\
 \bottomrule
 \end{tabularx}
@@ -45,6 +45,8 @@ Landing feedback operates on the lowest leg tip. If $h_\ell$ and $\dot h_\ell$ a
 
 \subsection{Force/moment allocation and actuator representation}
 The force solver respects the tilt envelope. Throttle ramps are numerical envelopes, not additional validated steady operating points. Fins receive static deflections through Section~\ref{sec:aero}; travel-rate dynamics are absent.
+
+Return attitude control is cascaded: a direction error produces a desired angular rate with gain $k_p$, then $k_d(\vect\omega_{\mathrm{des}}-\vect\omega)$ produces angular acceleration. Both gains have units $\mathrm{s^{-1}}$: $k_p=1$, $k_d=2$ normally, and $k_p=1.5$, $k_d=6$ during landing. This differs from the direct ascent PD law in Equation~\eqref{eq:ascent-command}. Simultaneous transverse rate commands can produce a larger actual rate magnitude than a per-axis clip. Neither that clip nor the acceleration-command cap guarantees a bound on the vehicle's measured state.
 
 Equation~\eqref{eq:ideal-moment} distinguishes the ideal attitude input from physical TVC:
 \begin{equation}
@@ -62,7 +64,7 @@ The accepted-state loop follows this order:
 \item Select a step bounded by $0.01\,\mathrm{s}$, scheduled events, control/ramp knots, output time and the next sensor clock. Near contact, clearance and speed impose a tighter bound.
 \item Apply RK4 to the physical state with trial-state loads and mass properties, then synchronize the accepted vehicle object.
 \end{enumerate}
-RHS evaluations are pure with respect to clocks and random sampling. Guidance normally updates every $0.2\,\mathrm{s}$; landing adapts that interval between 0.02 and $0.2\,\mathrm{s}$. Sensors retain their independent clocks from Table~\ref{tab:sensors}, and output is normally every $0.1\,\mathrm{s}$. The internal translation representation follows Section~\ref{sec:vehicle}.
+RHS evaluations are pure with respect to clocks and random sampling. Guidance normally updates every $0.2\,\mathrm{s}$; the landing clock permits intervals between 0.01 and $0.2\,\mathrm{s}$. Sensors retain their independent clocks from Table~\ref{tab:sensors}, and output is normally every $0.1\,\mathrm{s}$. The internal translation representation follows Section~\ref{sec:vehicle}.
 
 When a trial crosses the ground sphere at a leg tip, bisection refines the contact epoch with up to 35 iterations and a $10^{-9}\,\mathrm{s}$ interval criterion. Acceptance uses the pre-contact state; position, speed or attitude are not reset to create success. Propellant-limit, model-domain and unmet-event failures produce explicit run status. A full run requires both an acceptable contact and completion of the intended return sequence.
 

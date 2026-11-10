@@ -1,5 +1,5 @@
 {
-  "source_revision": "1ead44069ab1b585519470eab6bb3db71c92f2e2",
+  "source_revision": "2d89a886a761407695eb26405aca78a9af6663a6",
   "external_assets": [
     {
       "file": "crs10_pad_nasa.jpg",
@@ -24,7 +24,7 @@
     },
     {
       "file": "simulation_architecture.pdf",
-      "basis": "Implemented module interfaces and default 24-component MEKF error state with a gated star-tracker interface; the reviewed seed-1 run accepts zero star fixes."
+      "basis": "Implemented interfaces and nominal 30-component MEKF error state."
     }
   ],
   "code_excerpt": {
@@ -38,47 +38,39 @@
     "vehicle_parameters.py": "f47a7565293872c1d4dfcb467c17adc8f0e6b1e41ebe9664ec14fed96f516ddf",
     "vehicle_mass_model.py": "d34b3e75793735062b11cb2629fc34e9ade648d340a1d3bddefa6d80c01e8eb3",
     "mass_properties.py": "28c8f5fc72a0e253cfd23403f48c46d0c5a4b628d441a945bec3bc71832e6843",
-    "data\\vehicle_parameters.json": "0985bfbc204aae31826671bb984db2d6d5eaf6f31d419a21946628e7b0a80599"
-  },
-  "navigation_review": {
-    "run_directory": "results/gyro-final-review-20261110",
-    "runtime_git_commit": "c027d414ec8d1a18fb765c4605490ddffaa67990",
-    "seed": 1,
-    "imu_rate_hz": 100,
-    "step_s": 0.01,
-    "summary_sha256": "9c8f48e169e396f674682024a01377c407331676ea605782390f3056dc448b58",
-    "startracker_updates": 0,
-    "startracker_rejected": 381,
-    "navigation_position_rms_m": 0.8812092038991342,
-    "attitude_error_rms_deg": 0.4561339030755707,
-    "attitude_error_final_deg": 0.012143397619142437,
-    "gyro_only_attitude_error_final_deg": 1.8923705367135215
+    "data/vehicle_parameters.json": "bd01d038cb20c8d1f8e74edfbdef5ba23a63484dc90df513ad637f4a681ad682"
   },
   "integrated_results": {
-    "run": "results/gyro-final-review-20261110",
-    "runtime_source": "1ead44069ab1b585519470eab6bb3db71c92f2e2",
-    "report_base": "b5b7ae8",
-    "seed": 1,
-    "step_s": 0.01,
-    "imu_hz": 100,
-    "output_period_s": 0.1,
-    "position_rms_m": 0.8812092038991342,
-    "velocity_rms_mps": 0.13542702097209175,
-    "attitude_rms_deg": 0.4561339030755707,
-    "attitude_peak_deg": 1.5684482914389652,
+    "run": "results/final-submission-20261110-nav30",
+    "runtime_revision": "2d89a886a761407695eb26405aca78a9af6663a6",
+    "runtime_hashes_verified": 31,
+    "position_rms_m": 0.670762520288855,
+    "velocity_rms_mps": 0.03377533442268367,
+    "attitude_rms_deg": 0.20758216423199963,
+    "attitude_peak_deg": 1.5485559808930884,
     "attitude_peak_s": 35.899999999999224,
-    "attitude_final_deg": 0.012143397619142437,
+    "attitude_final_deg": 0.005655085899589241,
     "gyro_only_final_deg": 1.8923705367135215,
     "raw_rate_rms_degps": 0.011518970714237155,
-    "calibrated_rate_rms_degps": 0.018984085130864543,
+    "calibrated_rate_rms_degps": 0.01251219694404113,
     "rate_sample_count": 4651,
     "position_3sigma_time_fraction": [
-      0.5,
-      0.3437231298366294,
-      0.751719690455718
+      1.0,
+      1.0,
+      1.0
     ],
-    "ascent_max_q_pa": 27620.553211264803,
-    "ascent_max_q_s": 71.89999999999768,
+    "star_accepted": 381,
+    "star_rejected": 0,
+    "star_nis_mean": 3.088110820771869,
+    "star_nis_max": 12.308147402039287,
+    "gnss_nis_mean": 6.127441082928232,
+    "covariance_shape": [
+      4652,
+      30,
+      30
+    ],
+    "covariance_min_eigenvalue": 1.0128521794757227e-12,
+    "covariance_max_asymmetry": 0.0,
     "landing": {
       "ground_contact": true,
       "legs_deployed": true,
@@ -133,6 +125,20 @@
         "contact_passed": true
       }
     ],
+    "sensor_counts": {
+      "gnss": {
+        "emitted": 4651,
+        "valid": 4651
+      },
+      "lidar": {
+        "emitted": 4651,
+        "valid": 496
+      },
+      "startracker": {
+        "emitted": 1861,
+        "valid": 381
+      }
+    },
     "events": [
       {
         "event": "liftoff",
@@ -175,11 +181,63 @@
         "time_s": 465.08269863489204
       }
     ],
-    "variant": {
+    "input_sha256": {
+      "Actuators.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "Aerodynamics.py": "b15e29124438a1ef1c3208771469d3347409677df497da956bb00ce29ce31235",
+      "ascent.py": "334126e1dc3ce3fadf20370e53d5b930885bf7cef621ce0951d22537b3ddd29a",
+      "dynamics.py": "fe20fa5a28707148629b8a4efb96eb7d8ac4f4bf96b2a0a582aea8b3ddde3f04",
+      "engine_schedule.py": "725c98e0623b543e70342df0a95bd0efcba2e7becd1764bb736d8c3b39768f7b",
+      "Environement.py": "a53a34da2a1ee1a34696d7e92d25941e0eb7d6ab641c39edfb64c6be395ed4cc",
+      "Events.py": "b46fb14abb13b77bbceb6c938fc30ad96f8835c66dc50c15d41ad4c3687d8539",
+      "frames.py": "8efeb3000e04329efbe43ca8b3b1c8d4ccebae1b3b867d95f1a9d8c49e7669b2",
+      "kalman.py": "e14c8cf93e95d759aba1232bcd3f6995f443e20b62dcf8e3a179bff7d18fc580",
+      "load_interface.py": "9d3208e43c59558d80df76c7ded36f0ac697ab1d338b628bb900fd26042b7c9e",
+      "main.py": "86b05ccd787ead51fff2ff8427e36971fe25eaedf47e5080dafabe6a96a86e06",
+      "mass_flow.py": "c679e5b37143e735630cf012714e7031c3c3e7774e28ce17d544f3d424f0e4f1",
+      "mass_properties.py": "28c8f5fc72a0e253cfd23403f48c46d0c5a4b628d441a945bec3bc71832e6843",
+      "mission.py": "212b41eec3ad8cd54050e3f6bceb7421f0360373bd367b863a0d593a200f29d5",
+      "propagation.py": "3290dd017aa4f6c3a427eaa720b72975130093a458c5a1f98f1e9e51111f22ae",
+      "propulsion.py": "d9c988f61ca1a337234d26949a9d3f758821c651238ed2563e6e3571e8f1f866",
+      "recovery.py": "67889172ebd574880574d7aaa95b1eef0fbb88a0beaa476af7e679bbf2b46ad0",
+      "sensors.py": "f060c3fbd4c9213f2d5d131edbaaecb2a536519f52465719a54d13fe96806082",
+      "staging.py": "f41d42607d44ea9b7fd041dc1a88d95f34d7ad9a083ba8b19f5db001e3b9f974",
+      "upper_stage.py": "140be86605fd63474ef4f2c7c5ff7f586e020ecf774c06b31c6acd198b7c97eb",
+      "VehicleData.py": "e8e15934b42bcc360b48e684cb04f717bd10bc653165ec837e3f2323ff6dd394",
+      "vehicle_mass_model.py": "d34b3e75793735062b11cb2629fc34e9ade648d340a1d3bddefa6d80c01e8eb3",
+      "vehicle_parameters.py": "f47a7565293872c1d4dfcb467c17adc8f0e6b1e41ebe9664ec14fed96f516ddf",
+      "data\\aero_configurations.json": "1cb9beefa49b064c6a8821b602957ab3b18a9aeaf36f9625febccc0694307ff1",
+      "data\\ascent_model_audit.json": "4412bbe56faee2274279557b594b70568f6c4b2111bb71ac60679ab0e623458d",
+      "data\\crs10_ascent_reference_source.json": "2f5144432fc23cfbea344ae53d5b295a736dfa61ed8d71175cb880cdb0e3a2c5",
+      "data\\crs10_mission.json": "8d559ef84cbf4f5b99684eb292427d1065847609be6a3d0e06ba47ab4cde157c",
+      "data\\drag_curve_pezent.json": "2af7eb6b0716cf14969873192cb42fc0a95a963f81d30b159b30a5ac4cde04a0",
+      "data\\drag_curve_pezent_extended.json": "c3670cf09a8e2179049b707fbf861c8fcf2a66e303ab289dc09b61a5426be66d",
+      "data\\vehicle_parameters.json": "bd01d038cb20c8d1f8e74edfbdef5ba23a63484dc90df513ad637f4a681ad682",
+      "data\\crs10_ascent_reference.csv": "1d165117cb6386b98fd6c88ae2d3ae47d16df0124da0e048f590a6a8bf36804d"
+    },
+    "source_hashes": {
+      "truth.csv": "49b8cdac785c58eef19e438a172cddf2a84eb1bc6172c367e39121ef4e92fd44",
+      "stage2_truth.csv": "ac510163a9f32ff8743a14f894d879df556d3790ec765f27e1ca71d58b2a252d",
+      "navigation.csv": "451b6e124cb40bb773c01a76e07029e1e82c556b5d6a46bc757e2f9179cb90ba",
+      "measurements.csv": "4493598f290ccae7b36d1bb98eeb4809d732f20090ae00a525ce124222b1983c",
+      "events.json": "8411b6cfcc5c29e54e4aafc67b4592e735401f6ebfdc172a006e52b77c26a311",
+      "stage2_events.json": "c86fe613f17c92ec96110e8b371f2349b05d250c3eac1d338932b60003c6879a",
+      "event_timeline.csv": "1cdb6543ed31229895e2315393c0ab225675f3ee303cba0a4958db8a002d27bd",
+      "validation.csv": "4897c1bfcf9899e8d0afbef02235b2e884c241d98e430bca01d9c543a2e6666e",
+      "summary.json": "c7282111f5dbf4ae5bd8a7103857d51c6d8a12eb8f35ecc403d35715f5ed304c",
+      "navigation_covariance.npz": "b54bbf1cc61fd623ab98ec91e14f300aac3c3bbef7ab1b4424bc784d3f3f246d",
+      "startracker_innovations.csv": "11a806ccf6630b926346c9b38ddbd5637f49189f8dff4db3c6792749a9223826"
+    },
+    "paired_baseline": {
+      "run": "results/gyro-final-review-20261110",
+      "position_rms_m": 0.8812092038991342,
+      "velocity_rms_mps": 0.13542702097209178,
+      "attitude_rms_deg": 0.4561339030755707,
+      "truth_byte_identical": true,
+      "upper_truth_byte_identical": true,
+      "common_measurements_identical": true
+    },
+    "coarse": {
       "run": "results/two-stage-final-check",
-      "imu_hz": 20,
-      "step_s": 0.05,
-      "end_s": 465.1899828934937,
       "landing": {
         "ground_contact": true,
         "legs_deployed": true,
@@ -189,42 +247,45 @@
         "angular_rate_degps": 0.11307568299765836,
         "target_error_m": 6.170503920588978
       }
-    },
-    "input_hashes_verified": true,
-    "source_hashes": {
-      "summary.json": "9c8f48e169e396f674682024a01377c407331676ea605782390f3056dc448b58",
-      "truth.csv": "49b8cdac785c58eef19e438a172cddf2a84eb1bc6172c367e39121ef4e92fd44",
-      "stage2_truth.csv": "ac510163a9f32ff8743a14f894d879df556d3790ec765f27e1ca71d58b2a252d",
-      "navigation.csv": "7129d92ecc1a65e7360c18d5a4b9851520e5fbf993b8529f1637112fa1429e7f",
-      "measurements.csv": "3943b94a24a631ca31ddc296610625cc9e742be7f34fde4994e29be151a72801",
-      "events.json": "8411b6cfcc5c29e54e4aafc67b4592e735401f6ebfdc172a006e52b77c26a311",
-      "validation.csv": "4897c1bfcf9899e8d0afbef02235b2e884c241d98e430bca01d9c543a2e6666e"
-    },
-    "static_sensitivity": {
-      "remaining_propellant_kg": 10000,
-      "mass_kg": 32200.000000000015,
-      "nominal_cg_m": 16.211060540829695,
-      "conditional_cg_shift_m": 3.6857142857142837,
-      "lateral_force_n": 1000,
-      "moment_shift_nm": 3685.7142857142835
     }
   },
   "result_figures": [
     "results_flight_profiles.pdf",
     "results_trajectories.pdf",
+    "results_kinematics.pdf",
     "results_ascent_reference.pdf",
-    "results_navigation.pdf"
+    "results_navigation.pdf",
+    "results_navigation_validation.pdf"
   ],
   "final_appendix": {
-    "nominal_run": "results/gyro-final-review-20261110",
+    "nominal_run": "results/final-submission-20261110-nav30",
     "runtime_hashes_verified": 31,
-    "figure": "images/appendix_properties_availability.pdf",
-    "figure_sha256": "0f4b006524ab724abc9726b30b7a09ab7fae635435c0914e5d134c994ccb44a5",
+    "sensor_counts": {
+      "gnss": {
+        "emitted": 4651,
+        "valid": 4651
+      },
+      "lidar": {
+        "emitted": 4651,
+        "valid": 496
+      },
+      "startracker": {
+        "emitted": 1861,
+        "valid": 381
+      }
+    },
     "source_files": {
       "truth.csv": "49b8cdac785c58eef19e438a172cddf2a84eb1bc6172c367e39121ef4e92fd44",
-      "measurements.csv": "3943b94a24a631ca31ddc296610625cc9e742be7f34fde4994e29be151a72801",
-      "summary.json": "9c8f48e169e396f674682024a01377c407331676ea605782390f3056dc448b58",
-      "events.json": "8411b6cfcc5c29e54e4aafc67b4592e735401f6ebfdc172a006e52b77c26a311"
+      "stage2_truth.csv": "ac510163a9f32ff8743a14f894d879df556d3790ec765f27e1ca71d58b2a252d",
+      "navigation.csv": "451b6e124cb40bb773c01a76e07029e1e82c556b5d6a46bc757e2f9179cb90ba",
+      "measurements.csv": "4493598f290ccae7b36d1bb98eeb4809d732f20090ae00a525ce124222b1983c",
+      "events.json": "8411b6cfcc5c29e54e4aafc67b4592e735401f6ebfdc172a006e52b77c26a311",
+      "stage2_events.json": "c86fe613f17c92ec96110e8b371f2349b05d250c3eac1d338932b60003c6879a",
+      "event_timeline.csv": "1cdb6543ed31229895e2315393c0ab225675f3ee303cba0a4958db8a002d27bd",
+      "validation.csv": "4897c1bfcf9899e8d0afbef02235b2e884c241d98e430bca01d9c543a2e6666e",
+      "summary.json": "c7282111f5dbf4ae5bd8a7103857d51c6d8a12eb8f35ecc403d35715f5ed304c",
+      "navigation_covariance.npz": "b54bbf1cc61fd623ab98ec91e14f300aac3c3bbef7ab1b4424bc784d3f3f246d",
+      "startracker_innovations.csv": "11a806ccf6630b926346c9b38ddbd5637f49189f8dff4db3c6792749a9223826"
     },
     "code_excerpts": [
       {
@@ -245,33 +306,88 @@
         "last_line": 184,
         "sha256": "e8e15934b42bcc360b48e684cb04f717bd10bc653165ec837e3f2323ff6dd394"
       }
-    ],
-    "sensor_counts": {
-      "gnss": {
-        "emitted": 4651,
-        "valid": 4651
-      },
-      "lidar": {
-        "emitted": 4651,
-        "valid": 496
-      },
-      "startracker": {
-        "emitted": 1861,
-        "valid": 381
-      }
-    },
-    "input_register_sources": [
-      "vehicle_parameters.py",
-      "data/vehicle_parameters.json",
-      "data/aero_configurations.json",
-      "data/drag_curve_pezent_extended.json",
-      "Environement.py",
-      "sensors.py",
-      "kalman.py",
-      "mission.py",
-      "recovery.py",
-      "upper_stage.py",
-      "data/crs10_mission.json"
     ]
+  },
+  "navigation_validation_sha256": "045982aa678662715522f100c1085ad4c63aab9a5490b7e6d674c89080eada61",
+  "reproduction_archive": {
+    "file": "reproduction_data.zip",
+    "sha256": "1ce3dc687ee1ca779dbe9bfc048b225a883ae0de2b0071f879ce6404efef6d2a",
+    "records": {
+      "nominal/truth.csv": "49b8cdac785c58eef19e438a172cddf2a84eb1bc6172c367e39121ef4e92fd44",
+      "nominal/stage2_truth.csv": "ac510163a9f32ff8743a14f894d879df556d3790ec765f27e1ca71d58b2a252d",
+      "nominal/navigation.csv": "451b6e124cb40bb773c01a76e07029e1e82c556b5d6a46bc757e2f9179cb90ba",
+      "nominal/measurements.csv": "4493598f290ccae7b36d1bb98eeb4809d732f20090ae00a525ce124222b1983c",
+      "nominal/events.json": "8411b6cfcc5c29e54e4aafc67b4592e735401f6ebfdc172a006e52b77c26a311",
+      "nominal/stage2_events.json": "c86fe613f17c92ec96110e8b371f2349b05d250c3eac1d338932b60003c6879a",
+      "nominal/event_timeline.csv": "1cdb6543ed31229895e2315393c0ab225675f3ee303cba0a4958db8a002d27bd",
+      "nominal/validation.csv": "4897c1bfcf9899e8d0afbef02235b2e884c241d98e430bca01d9c543a2e6666e",
+      "nominal/summary.json": "c7282111f5dbf4ae5bd8a7103857d51c6d8a12eb8f35ecc403d35715f5ed304c",
+      "nominal/navigation_covariance.npz": "b54bbf1cc61fd623ab98ec91e14f300aac3c3bbef7ab1b4424bc784d3f3f246d",
+      "nominal/startracker_innovations.csv": "11a806ccf6630b926346c9b38ddbd5637f49189f8dff4db3c6792749a9223826",
+      "baseline/truth.csv": "49b8cdac785c58eef19e438a172cddf2a84eb1bc6172c367e39121ef4e92fd44",
+      "baseline/stage2_truth.csv": "ac510163a9f32ff8743a14f894d879df556d3790ec765f27e1ca71d58b2a252d",
+      "baseline/navigation.csv": "7129d92ecc1a65e7360c18d5a4b9851520e5fbf993b8529f1637112fa1429e7f",
+      "baseline/measurements.csv": "3943b94a24a631ca31ddc296610625cc9e742be7f34fde4994e29be151a72801",
+      "baseline/events.json": "8411b6cfcc5c29e54e4aafc67b4592e735401f6ebfdc172a006e52b77c26a311",
+      "baseline/stage2_events.json": "c86fe613f17c92ec96110e8b371f2349b05d250c3eac1d338932b60003c6879a",
+      "baseline/event_timeline.csv": "1cdb6543ed31229895e2315393c0ab225675f3ee303cba0a4958db8a002d27bd",
+      "baseline/validation.csv": "4897c1bfcf9899e8d0afbef02235b2e884c241d98e430bca01d9c543a2e6666e",
+      "baseline/summary.json": "9c8f48e169e396f674682024a01377c407331676ea605782390f3056dc448b58",
+      "coarse/truth.csv": "eaaaf3ea42e45e18b6cc05c6537180de638ee207062142514adf84604a2f95c5",
+      "coarse/stage2_truth.csv": "2316fdbf2a550d3cfcb803305fb4a1c97b1a0571a9221321f36c102670cccc77",
+      "coarse/navigation.csv": "bb8da477e5c4c5eb5846ddcb994802044be501efd257e45e6433f779aa5fb991",
+      "coarse/measurements.csv": "993bce8365902f5463b98ac1a3e580743d57c18fe320a6ff40c087dffbd33bf2",
+      "coarse/events.json": "f6158f5d632b8412c5f35a014354ce36c63cbaee68fa1cd306cd5e9ffb228c7a",
+      "coarse/stage2_events.json": "c86fe613f17c92ec96110e8b371f2349b05d250c3eac1d338932b60003c6879a",
+      "coarse/event_timeline.csv": "22eb742e1e582429346fa17812520ee1f763c866592e92760121308ffa1a6f7c",
+      "coarse/validation.csv": "515db5ba35510d3dda15244ffa2b054f03617688cb642335d28031772d119d9d",
+      "coarse/summary.json": "657f212735e5c80ad7ee8c03861af62eb57150f6286d05b595710c2c557a7e51"
+    }
+  },
+  "generated_figure_sha256": {
+    "appendix_properties_availability.pdf": "aff7c19c7a261a764212cef19ce120c33ab7c73320980d93b8679d18bf413383",
+    "code_mass_assembly.pdf": "2433a4a0915b8c776de4ba2c4d7401bdfcdf6bd06ef05a0c3abbaab6fa1ec981",
+    "mass_properties_depletion.pdf": "f0a021465ed215268db80eb3570ed9da59f6c78e68b8f9d711a91944db37ca0a",
+    "results_ascent_reference.pdf": "194b7131383eb539d1ba9b3b0a697565c708b96d77c2f06398956f687de55a14",
+    "results_flight_profiles.pdf": "5c2d0d10f4212c99ec8d166fec2754f7501d9b45179ebab7bce5230ad0dd5c95",
+    "results_kinematics.pdf": "df9ca87aefe01b7ba766fe64fc4eaf97107c996a6444373d992d2e8d10cb31c0",
+    "results_navigation.pdf": "19534cad847719b1328ccaf2c59ad5bba4f23d3869cb1b42e1b2cf4cb23e5b97",
+    "results_navigation_validation.pdf": "d5ea9c1e45cf85f52d67ffeffd8fff29a68bed03190931e62c3015bae1b22ae6",
+    "results_trajectories.pdf": "14232e924073dfe38f42ea1d3948d1428de73c2f4ca43a0d11e81d67d2750c22",
+    "simulation_architecture.pdf": "068890dbcd7d1c894a0ad2546dc3e95a1230c25f96ec62774f99d55d1eebf8e8"
+  },
+  "reproducer_sha256": "4938ef7c48129d4e908691c39246bc1c8149336a7db8d942d280930f443edaaf",
+  "runtime_text_lf_sha256": {
+    "Actuators.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "Aerodynamics.py": "b15e29124438a1ef1c3208771469d3347409677df497da956bb00ce29ce31235",
+    "ascent.py": "e8a50ef3b351db2cae6d768367f486a1464ba63854627415c7ba530c3afea410",
+    "dynamics.py": "fe20fa5a28707148629b8a4efb96eb7d8ac4f4bf96b2a0a582aea8b3ddde3f04",
+    "engine_schedule.py": "725c98e0623b543e70342df0a95bd0efcba2e7becd1764bb736d8c3b39768f7b",
+    "Environement.py": "a53a34da2a1ee1a34696d7e92d25941e0eb7d6ab641c39edfb64c6be395ed4cc",
+    "Events.py": "bf76d25df0251269123a3aa35e7f0c30fb678605784274a3651e0b4abfe3343a",
+    "frames.py": "8efeb3000e04329efbe43ca8b3b1c8d4ccebae1b3b867d95f1a9d8c49e7669b2",
+    "kalman.py": "546cbabaa1a04bc640aab0dbfdebb8e3bfbbe396bc02d1edc218066427409de5",
+    "load_interface.py": "9d3208e43c59558d80df76c7ded36f0ac697ab1d338b628bb900fd26042b7c9e",
+    "main.py": "86b05ccd787ead51fff2ff8427e36971fe25eaedf47e5080dafabe6a96a86e06",
+    "mass_flow.py": "c679e5b37143e735630cf012714e7031c3c3e7774e28ce17d544f3d424f0e4f1",
+    "mass_properties.py": "28c8f5fc72a0e253cfd23403f48c46d0c5a4b628d441a945bec3bc71832e6843",
+    "mission.py": "212b41eec3ad8cd54050e3f6bceb7421f0360373bd367b863a0d593a200f29d5",
+    "propagation.py": "3290dd017aa4f6c3a427eaa720b72975130093a458c5a1f98f1e9e51111f22ae",
+    "propulsion.py": "d9c988f61ca1a337234d26949a9d3f758821c651238ed2563e6e3571e8f1f866",
+    "recovery.py": "7df6cac027ff69a719a3b6aaf6e6a6569e6e1bb2cbce5f75656a3391e38dfb06",
+    "sensors.py": "f060c3fbd4c9213f2d5d131edbaaecb2a536519f52465719a54d13fe96806082",
+    "staging.py": "f41d42607d44ea9b7fd041dc1a88d95f34d7ad9a083ba8b19f5db001e3b9f974",
+    "upper_stage.py": "a29fc89f28c986888228abb94cf453c0f2e7136ca276b28ae5dd60dac9125e05",
+    "VehicleData.py": "e8e15934b42bcc360b48e684cb04f717bd10bc653165ec837e3f2323ff6dd394",
+    "vehicle_mass_model.py": "d34b3e75793735062b11cb2629fc34e9ade648d340a1d3bddefa6d80c01e8eb3",
+    "vehicle_parameters.py": "f47a7565293872c1d4dfcb467c17adc8f0e6b1e41ebe9664ec14fed96f516ddf",
+    "data\\aero_configurations.json": "8f84e1bd65de13a8f25c7391b44d290eb3ed436aa1eb4678d13e483ab8aa1a0e",
+    "data\\ascent_model_audit.json": "dc83ec7945fc8457dcbbb7a28e7072a3ac8e2d8e08e2d92315fe92ecdc87cc94",
+    "data\\crs10_ascent_reference_source.json": "2f5144432fc23cfbea344ae53d5b295a736dfa61ed8d71175cb880cdb0e3a2c5",
+    "data\\crs10_mission.json": "dd82d90eef5aacdca3d21508d5d3d3ffea0c1ead571d1b039d2c879caa3ab37b",
+    "data\\drag_curve_pezent.json": "2af7eb6b0716cf14969873192cb42fc0a95a963f81d30b159b30a5ac4cde04a0",
+    "data\\drag_curve_pezent_extended.json": "c3670cf09a8e2179049b707fbf861c8fcf2a66e303ab289dc09b61a5426be66d",
+    "data\\vehicle_parameters.json": "1a4fecbb5d3a8dd6a38c185d67f5db267051dd36d408f304e12722cca068da34",
+    "data\\crs10_ascent_reference.csv": "1d165117cb6386b98fd6c88ae2d3ae47d16df0124da0e048f590a6a8bf36804d"
   }
 }

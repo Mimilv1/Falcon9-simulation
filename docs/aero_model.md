@@ -6,7 +6,7 @@ enter the shared Body frame, and where the model's honest limits sit. It is
 the reasoning behind the module docstring and the records in
 `data/aero_configurations.json`.
 
-Scope: one `Aerodynamics` model instance, four declared vehicle
+Scope: one `Aerodynamics` model instance, five declared vehicle
 configurations, optional grid-fin control. Not in scope: propulsion gimbal
 (TVC), actuator rate/travel dynamics, a control law, and any mission-timing
 decision about which configuration is active when — those belong to the
@@ -55,8 +55,9 @@ Physics notes worth knowing:
 | --- | --- | --- | --- | --- | --- |
 | `full_stack` | stack base (S1 engine bay) | 21.08 / 62.4 m | Pezent 2024 readout, extended to M 10 | no | launch to separation |
 | `booster_alone` | booster base (unchanged after `separate(1)`) | 10.52 / 42.6 m | declared estimate | no | post-separation coast, boostback |
-| `booster_landing` | same as booster_alone | 10.52 / 42.6 m | declared estimate (+fin/leg increment) | yes | entry, landing burn (fins/legs present) |
-| `second_stack` | stage-2 aft skirt base (renumbered by `separate(1)`) | 10.52 / 19.8 m | declared estimate | no | S2+Dragon ascent |
+| `booster_return` | same as booster_alone | 10.52 / 42.6 m | declared estimate (+fin increment) | yes | entry and aerodynamic descent; legs stowed |
+| `booster_landing` | same as booster_alone | 10.52 / 42.6 m | declared estimate (+fin/leg increment) | yes | landing burn; legs deployed |
+| `second_stack` | stage-2 aft skirt base (renumbered by `separate(1)`) | 10.52 / 19.8 m | declared estimate | no | declared/tested configuration; active continuation uses its separate constant-CD provider |
 
 The provider that selects the active configuration owns mission timing;
 selection is explicit (`evaluate(..., configuration_name)`) and an unknown
@@ -147,10 +148,7 @@ places:
 4. Construction-time station/range violations (configuration rejects, not a
    mid-flight break).
 
-The caution runs the other way too: inside the domain, declared-estimate
-coefficients do not crash — they produce plausible numbers with real
-uncertainty (the booster axial curve alone is good to roughly +/-50%). The
-tests pin conventions and invariants, not coefficient truth.
+Inside the declared domain, coefficient evaluation remains an engineering model. The +/-50% uncertainty entry is an assumed range, not a measured accuracy or statistical interval. Tests pin conventions and invariants rather than coefficient truth.
 
 ## Verification map
 
@@ -163,22 +161,14 @@ tests pin conventions and invariants, not coefficient truth.
 | RetroFlow | engine-first axial opposition, windward-end mirror convention (both directions) |
 | RotaryDamping | damping formula term by term, opposing signs |
 | DomainAndRest | domain rejections, rest case zeros |
-| ConfigurationData | JSON loads all four phases, sourced knot intact, fin/leg segments |
+| ConfigurationData | JSON loads all five configurations, sourced knot intact, fin/leg segments |
 | HypersonicExtension | all configurations evaluate across M 7..10, reject at M 10.5, ascent propagates past Mach 7 |
 | PhysicalInvariants | force extracts energy at every angle, damping dissipates, wind enters only through relative velocity, 90-deg continuity, qbar/Mach scaling, term-by-term formulas |
 | GridFinControl | single-fin formula at all azimuths, roll/pitch combinatorics, retro reversal, axial-share scaling, additivity, boundary deflections, rest case, roll moment reaching `dynamics.accelerations` with the correct angular acceleration |
 | ProviderIntegration | provider selection, unknown-name rejection, two-second vertical propagation through the A core |
 
-## Open items
+## Implemented selection and remaining scope
 
-- **Control law** — nothing commands the fins or a future TVC model; the aero
-  model accepts and validates commands only.
-- **Provider wiring** — `SteadyPoweredAscent` does not forward fin commands;
-  a descent-phase provider must pass them per step.
-- **Actuator layer** — rate/travel/deadband dynamics are a declared upstream
-  responsibility with no current implementation in the project.
-- **Evidence upgrade** — every declared estimate in the JSON wants replacing
-  with sourced data when available.
-- **Configuration switch modeling** — fin deployment and leg deployment are
-  binary today (`booster_alone` vs `booster_landing`); intermediate states
-  (fins deployed, legs stowed) would be additional declared configurations.
+`recovery.py` selects return/landing configurations and supplies static fin commands. The ascent-only provider does not command fins. `upper_stage.py` uses a separate axial-drag provider with CD = 0.3 on the stage cross-section; the declared `second_stack` configuration is tested but is not active in that continuation.
+
+Fin deployment and leg deployment are binary configuration changes; no travel-rate, deadband or servo dynamics are modeled. Attitude control uses the explicitly documented ideal moment allocation, and `Actuators.py` remains empty. Return coefficients and fin effectiveness remain declared estimates requiring independent evidence before hardware control design.
