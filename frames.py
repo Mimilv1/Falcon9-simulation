@@ -81,3 +81,24 @@ def skew(vector):
     """Cross-product matrix: skew(a) @ b == cross(a, b)."""
     x, y, z = vector3(vector)
     return np.array([[0.0, -z, y], [z, 0.0, -x], [-y, x, 0.0]])
+
+def quaternion_to_rotation_vector(quaternion_wxyz):
+    """Shortest rotation vector [rad] of a unit quaternion [w,x,y,z] (log map)."""
+    q = normalize_quaternion(quaternion_wxyz)
+    if q[0] < 0.0:
+        q = -q
+    vector_norm = float(np.linalg.norm(q[1:]))
+    if vector_norm < 1e-15:
+        return 2.0 * q[1:]
+    return 2.0 * np.arctan2(vector_norm, q[0]) * q[1:] / vector_norm
+
+
+def earth_rotation_quaternion(time_s, earth_rotation_ecef_radps):
+    """Quaternion ECEF -> ECI at time_s (ECI and ECEF coincide at t = 0).
+
+    The Earth rotation axis has the same components in both frames, so
+    v_eci = R(exp(w * t)) v_ecef.
+    """
+    return quaternion_from_rotation_vector(
+        float(time_s) * vector3(earth_rotation_ecef_radps)
+    )

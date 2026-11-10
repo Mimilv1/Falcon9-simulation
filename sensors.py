@@ -10,6 +10,7 @@ from frames import (
     quaternion_conjugate,
     quaternion_from_rotation_vector,
     quaternion_product,
+    earth_rotation_quaternion,
     body_to_ecef_matrix,
 )
 
@@ -40,8 +41,8 @@ class IMUSpec:
     accel_scale_factor: np.ndarray = field(default_factory=lambda: np.zeros(3))
     gyro_scale_factor: np.ndarray = field(default_factory=lambda: np.zeros(3))
 
-    accel_bias_rw: float = 0.0
-    gyro_bias_rw: float = 0.0
+    accel_bias_rw: float = 1e-5
+    gyro_bias_rw: float = 1e-7
 
     accel_misalignment: Optional[np.ndarray] = None
     gyro_misalignment: Optional[np.ndarray] = None
@@ -443,6 +444,243 @@ class Lidar:
             np.array([s.valid for s in self.log]),
             np.array([s.range_meas_m for s in self.log]),
             np.array([s.range_true_m for s in self.log]),
+        )
+
+
+# ---------------------------------------------------------------------------
+# Star tracker
+#
+# Output : attitude of the sensor frame S with respect to the inertial frame
+#          (ECI), q_S->ECI, Hamilton [w, x, y, z]. The simulation state lives in
+#          ECEF (rotating), so the sensor converts with the Earth rotation
+#          (ECI and ECEF coincide at t = 0) and the filter converts back.
+#          q_S->ECI = q_ECI<-ECEF(t) (x) q_body->ECEF (x) q_S->body
+# Sensor frame : z = boresight, x chosen from a reference body axis, y = z x x.
+# Noise  : small rotation about the sensor axes, q_meas = q_true (x) exp(n_S),
+#          cross-boresight (x, y) much more accurate than the roll about z.
+# Faults : blinded by body rate, Earth limb, Sun, dense atmosphere (stars not
+#          visible), plus first fix, outages and random dropouts.
+# ---------------------------------------------------------------------------
+
+ARCSEC_TO_RAD = np.pi / (180.0 * 3600.0)
+
+
+def _quaternion_from_matrix(m):
+    """Rotation matrix -> unit quaternion [w, x, y, z] (Shepperd's method)."""
+    m = np.asarray(m, dtype=float)
+    trace = np.trace(m)
+    if trace > 0.0:
+        s = 2.0 * np.sqrt(1.0 + trace)
+        q = np.array(
+            [0.25 * s, (m[2, 1] - m[1, 2]) / s, (m[0, 2] - m[2, 0]) / s,
+             (m[1, 0] - m[0, 1]) / s]
+        )
+    else:
+        i = int(np.argmax(np.diag(m)))
+        j, k = (i + 1) % 3, (i + 2) % 3
+        s = 2.0 * np.sqrt(1.0 + m[i, i] - m[j, j] - m[k, k])
+        q = np.zeros(4)
+        q[0] = (m[k, j] - m[j, k]) / s
+        q[1 + i] = 0.25 * s
+        q[1 + j] = (m[j, i] + m[i, j]) / s
+        q[1 + k] = (m[k, i] + m[i, k]) / s
+    return normalize_quaternion(q)
+
+
+@dataclass
+class StarTrackerSpec:
+    # Placeholder mounting: 60 deg from the vehicle axis (+x), toward +y, so the
+    # sensor looks at the sky (>110 deg from nadir) while the vehicle is upright
+    boresight_body: np.ndarray = field(
+        default_factory=lambda: np.array([0.5, np.sqrt(3.0) / 2.0, 0.0])
+    )
+    # Body axis that defines the sensor x axis (projected perpendicular to boresight)
+    reference_axis_body: np.ndarray = field(
+        default_factory=lambda: np.array([1.0, 0.0, 0.0])
+    )
+    rate_hz: float = 4.0
+    latency_s: float = 0.1
+
+    # 1-sigma noise: cross-boresight (sensor x, y) and roll about boresight (z)
+    cross_sigma_arcsec: float = 5.0
+    boresight_sigma_arcsec: float = 40.0
+    # True mounting error, sensor frame [rad]. Hidden from the filter.
+    alignment_bias_rotvec_rad: np.ndarray = field(default_factory=lambda: np.zeros(3))
+
+    # Availability
+    max_rate_radps: float = np.deg2rad(2.0)
+    min_altitude_m: float = 60_000.0
+    earth_exclusion_deg: float = 20.0  # margin beyond the Earth limb
+    sun_direction_eci: Optional[np.ndarray] = None
+    sun_exclusion_deg: float = 40.0
+    first_fix_time_s: float = 0.0
+    dropout_prob: float = 0.0
+    outages: tuple = ()
+
+    planet_radius_m: float = 6_371_000.0
+    planet_center_ecef_m: Optional[np.ndarray] = None
+
+    def __post_init__(self):
+        z = vector3(self.boresight_body).astype(float)
+        if np.linalg.norm(z) == 0.0:
+            raise ValueError("boresight_body must be nonzero")
+        z = z / np.linalg.norm(z)
+        ref = vector3(self.reference_axis_body).astype(float)
+        x = ref - np.dot(ref, z) * z
+        if np.linalg.norm(x) < 1e-6:
+            alt = np.array([0.0, 0.0, 1.0]) if abs(z[2]) < 0.9 else np.array([1.0, 0.0, 0.0])
+            x = alt - np.dot(alt, z) * z
+        x = x / np.linalg.norm(x)
+        y = np.cross(z, x)
+        self.boresight_body = z
+        self.reference_axis_body = ref
+        # Sensor -> body rotation (known mounting) and its quaternion
+        self.rotation_body_from_sensor = np.column_stack([x, y, z])
+        self.q_body_from_sensor = _quaternion_from_matrix(self.rotation_body_from_sensor)
+        self.alignment_bias_rotvec_rad = vector3(self.alignment_bias_rotvec_rad).copy()
+        if self.sun_direction_eci is not None:
+            sun = vector3(self.sun_direction_eci).astype(float)
+            self.sun_direction_eci = sun / np.linalg.norm(sun)
+        if self.planet_center_ecef_m is None:
+            self.planet_center_ecef_m = np.zeros(3)
+        self.planet_center_ecef_m = vector3(self.planet_center_ecef_m).copy()
+        self.outages = tuple((float(a), float(b)) for a, b in self.outages)
+        if self.rate_hz <= 0 or self.latency_s < 0 or self.planet_radius_m <= 0:
+            raise ValueError("rate_hz, planet_radius_m > 0 and latency_s >= 0 required")
+        if self.cross_sigma_arcsec < 0 or self.boresight_sigma_arcsec < 0:
+            raise ValueError("star tracker sigmas must be nonnegative")
+        if not 0.0 <= self.dropout_prob <= 1.0:
+            raise ValueError("dropout_prob must be in [0, 1]")
+
+    @property
+    def sigma_sensor_rad(self):
+        """1-sigma noise about the sensor x, y, z axes [rad]."""
+        c, b = self.cross_sigma_arcsec, self.boresight_sigma_arcsec
+        return np.array([c, c, b]) * ARCSEC_TO_RAD
+
+
+@dataclass(frozen=True)
+class StarTrackerSample:
+    t: float
+    valid: bool
+    reason: str  # "ok" or why the sensor is blind
+    t_meas_s: float  # epoch of the attitude (t - latency)
+    q_meas_sensor_to_eci_wxyz: np.ndarray  # NaN when invalid
+    q_true_sensor_to_eci_wxyz: np.ndarray
+    sigma_sensor_rad: np.ndarray
+    latency_s: float
+
+
+class StarTracker:
+    def __init__(self, spec, earth_rotation_ecef_radps=None, seed=None):
+        self.spec = spec
+        self.earth_rotation_ecef_radps = (
+            np.zeros(3)
+            if earth_rotation_ecef_radps is None
+            else vector3(earth_rotation_ecef_radps).copy()
+        )
+        self.rng = np.random.default_rng(seed)
+        self.period_s = 1.0 / spec.rate_hz
+        self.next_t = 0.0
+        self._hist_t, self._hist_q = [], []
+        self._q_bs_true = quaternion_product(
+            spec.q_body_from_sensor,
+            quaternion_from_rotation_vector(spec.alignment_bias_rotvec_rad),
+        )
+        self.log = []
+
+    def _push(self, t, q):
+        self._hist_t.append(t)
+        self._hist_q.append(q)
+        keep_from = t - self.spec.latency_s - self.period_s
+        while len(self._hist_t) > 2 and self._hist_t[1] <= keep_from:
+            self._hist_t.pop(0)
+            self._hist_q.pop(0)
+
+    def _delayed_attitude(self, t_q):
+        ts, qs = self._hist_t, self._hist_q
+        if t_q <= ts[0]:
+            return qs[0]
+        i = bisect.bisect_left(ts, t_q)
+        if i >= len(ts):
+            return qs[-1]
+        w = (t_q - ts[i - 1]) / (ts[i] - ts[i - 1])
+        delta = attitude_error_rotation_vector(qs[i], qs[i - 1])  # qs[i-1] -> qs[i]
+        return normalize_quaternion(
+            quaternion_product(qs[i - 1], quaternion_from_rotation_vector(w * delta))
+        )
+
+    def _block_reason(self, t, state, rot_true):
+        s = self.spec
+        if t < s.first_fix_time_s - 1e-9:
+            return "before_first_fix"
+        if any(t0 - 1e-9 <= t < t1 - 1e-9 for t0, t1 in s.outages):
+            return "outage"
+        if np.linalg.norm(state.omega_body_radps) > s.max_rate_radps:
+            return "rate"
+        position = rot_true @ state.position_body_m - s.planet_center_ecef_m
+        distance = float(np.linalg.norm(position))
+        if distance - s.planet_radius_m < s.min_altitude_m:
+            return "altitude"
+        boresight = rot_true @ body_to_ecef_matrix(self._q_bs_true)[:, 2]
+        nadir_angle = np.arccos(np.clip(np.dot(boresight, -position / distance), -1, 1))
+        limb = np.arcsin(min(1.0, s.planet_radius_m / distance))
+        if nadir_angle < limb + np.deg2rad(s.earth_exclusion_deg):
+            return "earth"
+        if s.sun_direction_eci is not None:
+            r_eci = body_to_ecef_matrix(
+                earth_rotation_quaternion(t, self.earth_rotation_ecef_radps)
+            )
+            sun_angle = np.arccos(np.clip(np.dot(r_eci @ boresight, s.sun_direction_eci), -1, 1))
+            if sun_angle < np.deg2rad(s.sun_exclusion_deg):
+                return "sun"
+        if s.dropout_prob > 0.0 and self.rng.random() < s.dropout_prob:
+            return "dropout"
+        return "ok"
+
+    def measure(self, t, state):
+        s = self.spec
+        q_ecef_body = normalize_quaternion(state.quaternion_body_to_ecef_wxyz)
+        rot_true = body_to_ecef_matrix(q_ecef_body)
+        self._push(t, q_ecef_body)
+        reason = self._block_reason(t, state, rot_true)
+        t_meas = t - s.latency_s
+        q_delayed = self._delayed_attitude(t_meas)
+        q_true = quaternion_product(
+            quaternion_product(
+                earth_rotation_quaternion(t_meas, self.earth_rotation_ecef_radps),
+                q_delayed,
+            ),
+            self._q_bs_true,
+        )
+        sigma = s.sigma_sensor_rad
+        if reason == "ok":
+            noise = self.rng.normal(0.0, sigma)
+            q_meas = normalize_quaternion(
+                quaternion_product(q_true, quaternion_from_rotation_vector(noise))
+            )
+        else:
+            q_meas = np.full(4, np.nan)
+        return StarTrackerSample(
+            t, reason == "ok", reason, t_meas, q_meas, q_true, sigma.copy(), s.latency_s
+        )
+
+    def update(self, t, state):
+        # History is fed every call (like GNSS), the sample only at the sensor rate
+        if t + 1e-9 < self.next_t:
+            self._push(t, normalize_quaternion(state.quaternion_body_to_ecef_wxyz))
+            return None
+        sample = self.measure(t, state)
+        self.log.append(sample)
+        self.next_t += self.period_s
+        return sample
+
+    def to_arrays(self):
+        return (
+            np.array([s.t for s in self.log]),
+            np.array([s.valid for s in self.log]),
+            np.array([s.q_meas_sensor_to_eci_wxyz for s in self.log]),
+            np.array([s.q_true_sensor_to_eci_wxyz for s in self.log]),
         )
 
 

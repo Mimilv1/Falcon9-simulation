@@ -79,6 +79,22 @@ def main():
                 f"(gyro-only baseline final="
                 f"{result['gyro_only_attitude_error_final_deg']:.3f} deg)"
             )
+    if "startracker_updates" in result:
+        print(
+            f"Star tracker: {result['startracker_updates']} updates, "
+            f"{result['startracker_rejected']} rejected by the NIS gate"
+        )
+    if "gyro_scale_factor_estimate_final" in result:
+        print(
+            "Gyro scale factor (est / true): "
+            f"{result['gyro_scale_factor_estimate_final']} / "
+            f"{result['gyro_scale_factor_true']}"
+        )
+        print(
+            "Gyro misalignment xy,xz,yx,yz,zx,zy [rad] (est / true): "
+            f"{result['gyro_misalignment_estimate_final_rad']} / "
+            f"{result['gyro_misalignment_true_rad']}"
+        )
     print("Full return flight completed:", result["full_mission_completed"])
     if "stage2" in result:
         upper = result["stage2"]["final"]
