@@ -122,37 +122,73 @@ criterion. The appendix carries the parameter/assumption/source register,
 variable definitions and units, run configurations, long code excerpts and
 additional results — anything pulled out of the body goes there, with a cross-reference.
 
-Chapter 2 covers the overall data flow (truth vs measurements vs estimates),
-coordinate frames, the quaternion convention, reference points, units, module
-interfaces, the mission loop and reproducibility. Chapter 3 must state the
-vehicle and separation material once, in one place:
+### Chapter contents (per `PROPOSED_OUTLINE.md`)
 
-1. **Vehicle Configuration and Evidence Classification** — CRS-10 stage/Dragon
-   configuration, geometry and mass budget, K/E/A definitions, provenance.
-2. **Propulsion and Propellant Depletion** — thrust, ambient-pressure
-   correction, specific impulse, mass flow, loaded vs consumed O/F, inventory.
-3. **Mass, Center of Gravity, and Inertia** — dry-component and liquid models,
-   component summation, property derivatives during fuel consumption.
-4. **Equations of Motion and Load Interfaces** — translational and rotational
-   equations, moving-CG/exhaust terms, force/moment conventions.
-5. **Initial Conditions and Flight-Phase Definition** — initial state, mission
-   sequence, transition conditions.
-6. **Stage Separation and Child-State Mapping** — configuration change,
-   inherited states, conservation-check definitions.
+Concrete content of each chapter; titles, files, page budgets and leads are
+in the binding outline table above.
 
-Chapter 8 carries the executed commands and numerics:
+1.  **Introduction and Project Scope** — Project 2 objectives, why CRS-10 was
+    selected, modeled flight scope, and validation objectives.
+2.  **Simulation Architecture and Shared Conventions** — overall data flow
+    (truth versus measurements versus estimates), coordinate frames, the
+    quaternion convention, reference points, units, module interfaces, the
+    mission loop and reproducibility.
+3.  **Vehicle Configuration, Dynamics, and Mission Definition** — the vehicle
+    and separation material stated once, in one place:
+    1.  **Vehicle Configuration and Evidence Classification** — CRS-10 stage/Dragon
+        configuration, geometry and mass budget, K/E/A definitions, provenance.
+    2.  **Propulsion and Propellant Depletion** — thrust, ambient-pressure
+        correction, specific impulse, mass flow, loaded vs consumed O/F, inventory.
+    3.  **Mass, Center of Gravity, and Inertia** — dry-component and liquid models,
+        component summation, property derivatives during fuel consumption.
+    4.  **Equations of Motion and Load Interfaces** — translational and rotational
+        equations, moving-CG/exhaust terms, force/moment conventions.
+    5.  **Initial Conditions and Flight-Phase Definition** — initial state, mission
+        sequence, transition conditions.
+    6.  **Stage Separation and Child-State Mapping** — configuration change,
+        inherited states, conservation-check definitions.
+4.  **Environment Models** — atmosphere, gravity, Earth rotation, wind,
+    spherical ground, model domains, sources, and assumptions.
+5.  **Aerodynamics** — configuration-dependent aerodynamic coefficients, axial
+    and crossflow forces, moments, damping, grid-fin aerodynamic response, and
+    evidence limits.
+6.  **Sensor Models and Measurement Generation** — IMU, GNSS and LiDAR mounting
+    locations; ideal measurement equations; noise, bias, scale factors,
+    latency, sampling rates, measurement validity. Sensor generation belongs
+    here; the algorithm that processes the observations belongs in Chapter 7.
+7.  **Navigation Architecture and State Estimation** — estimated states and
+    initialization, attitude propagation/interface, filter prediction and
+    measurement updates, process and measurement noise, covariance, estimation
+    assumptions.
+8.  **Mission Execution and Numerical Implementation** — the executed commands
+    and numerics:
+    1.  **Ascent Commands** — pitch program, attitude commands, engine commands, shutdown envelope, upper-stage continuation.
+    2.  **Return Commands** — boostback prediction and steering, entry-burn logic, landing-ignition prediction, fuel budgets, restart conditions.
+    3.  **Force and Moment Allocation and Actuator Representation** — engine selection, throttle, requested force direction, virtual/physical control moments, grid-fin commands, limits of the implemented actuator representation. Write this subsection last.
+    4.  **Integration, Events, and Sensor Scheduling** — RK4, accepted-state synchronization, scheduled/state-triggered events, contact refinement, guidance clocks, sensor/output timing.
+    5.  **Two-Vehicle Execution and Simulation Operation** — independent post-separation propagation, execution options, configuration/seed records, output files, failure handling.
+9.  **Verification, Validation, and Simulation Results** — model tests,
+    numerical checks, reference-data processing and comparison, flight and
+    landing results, navigation errors and consistency, sensitivity analysis.
+10. **Engineering Assessment and Implications for Future GNC** — dominant
+    uncertainties, the most dangerous model/navigation errors, their
+    consequences, demonstrated applicability, and improvements needed for
+    future guidance and control.
+11. **Conclusions** — achievement of the project objectives, key quantitative
+    findings, verified scope, and remaining limitations.
 
-1. **Ascent Commands** — pitch program, attitude commands, engine commands, shutdown envelope, upper-stage continuation.
-2. **Return Commands** — boostback prediction and steering, entry-burn logic, landing-ignition prediction, fuel budgets, restart conditions.
-3. **Force and Moment Allocation and Actuator Representation** — engine selection, throttle, requested force direction, virtual/physical control moments, grid-fin commands, limits of the implemented actuator representation. Write this subsection last.
-4. **Integration, Events, and Sensor Scheduling** — RK4, accepted-state synchronization, scheduled/state-triggered events, contact refinement, guidance clocks, sensor/output timing.
-5. **Two-Vehicle Execution and Simulation Operation** — independent post-separation propagation, execution options, configuration/seed records, output files, failure handling.
+References (unnumbered): combined, deduplicated bibliography of all authors,
+verifiable sources only. Appendix
+(`content/appendix.tex`, starts with `\appendix`): parameter/assumption/source
+register, variable definitions and units, run configurations, long code
+excerpts, additional results.
 
 ### Placement rules (definitions versus results)
 
 - Chapter 3 defines phase transitions, separation and child-state mapping
-  mathematics. Measured event times, conservation residuals and landing
-  metrics are results and belong in Chapter 9.
+  mathematics. Measured event times (including nominal-time phase rows),
+  conservation residuals and landing metrics are results and belong in
+  Chapter 9; return-planning propellant allocations belong to Chapter 8.
 - The aerodynamic response to a given grid-fin deflection stays in Chapter 5;
   the choice of deflection belongs in Chapter 8. Chapter 3 defines thrust and
   flow for a supplied throttle; Chapter 8 explains how throttle is selected.
@@ -167,30 +203,6 @@ Chapter 8 carries the executed commands and numerics:
 - Reference-attitude diagnostic results and gyro-driven navigation results
   must remain distinguishable in Chapter 9 and wherever navigation errors are
   quoted.
-
-### Migration of existing content (transition state)
-
-`content/` currently holds the old six-chapter layout. Map it as follows;
-restructure mechanically, do not rewrite content while moving it, and never
-let a float, table or label become orphaned:
-
-| Existing file | Destination |
-| --- | --- |
-| `introduction.tex` | Chapter 1; currently lorem ipsum — replace fully. |
-| `vehicle_mission.tex` | Vehicle config, propulsion inventory and phase definitions into Chapter 3 (absorb into `vehicle_dynamics.tex` when finalizing); the return propellant budget moves to Chapter 8; nominal-time phase rows and the flight-path figure move to Chapter 9. |
-| `environment_models.tex` | Chapter 4, unchanged. |
-| `aerodynamics.tex` | Chapter 5, unchanged (grid-fin aerodynamic response stays). |
-| `sensor_models.tex` | Chapter 6 — split out of `sensors_navigation.tex` (done). |
-| `navigation.tex` | Chapter 7 — split out of `sensors_navigation.tex` (done). |
-| `ascent_staging.tex` | Separation and conservation-audit definitions into 3.6; ascent commands, shutdown envelope and upper-stage continuation into 8.1. Delete after merging. |
-| `return_control.tex` | Return algorithms and allocation into 8.2–8.3; thrust-profile figure and landing metrics table into Chapter 9. Pending actuator subsection stays here until 8.3 exists. |
-| `references.tex` | Combined, deduplicated bibliography of all authors. |
-
-Until the destination chapters exist, moving blocks stay in their current
-files and `main.tex` registers the intermediate files with a "to be merged"
-comment. The final structure gate requires the transition resolved: one file
-per chapter, `main.tex` order matching the outline, no intermediate files
-left registered.
 
 ### Timing rules
 
@@ -209,9 +221,9 @@ left registered.
 
 - Headings: `\section` / `\subsection` / `\subsubsection` — no manual numbering.
 - Acronyms: `\ac{KEY}` in text; define keys only in `content/acronyms.tex`. The
-  current acronym file still holds template leftovers (AES, CPA, DPA, ...) —
-  replace them with mission acronyms; do not carry unused crypto acronyms into
-  the final report.
+  file now holds only mission acronyms (the template leftovers AES, CPA, DPA,
+  ... were removed); keep it that way and declare a key only when a chapter
+  uses it.
 - Figures:
 
   ```latex
@@ -348,13 +360,10 @@ injected `LD_LIBRARY_PATH` breaks poppler otherwise.
 - The prose docs (`docs/*.md`) lag the code and `data/*.json` in places.
   `../docs/flags.md` is the tracked list of them; read it before citing any
   doc statement, and append flags for discrepancies you discover.
-- `main.tex` loads `lipsum` (placeholder filler) and `svg` (needs Inkscape).
-  Do not use `\lipsum` anywhere in shipped content; remove the unused
-  `\usepackage{lipsum}` and `\usepackage{svg}` from `main.tex` before the final
-  build once figures are in place.
+- `main.tex` no longer loads `lipsum` or `svg`; keep it that way. Do not use
+  `\lipsum` anywhere in shipped content.
 - `content/sample_content.tex` is a syntax reference only. Never register it in
   `main.tex`: its lorem text and crypto figures would end up in the PDF.
-- `content/introduction.tex` currently contains lorem ipsum — replace it fully.
 - `Actuators.py` is an empty placeholder **at the time of this writing, but
   the actuator layer is planned and will be implemented before the report is
   submitted**. Treat it as a first-class part of the system:
@@ -382,8 +391,8 @@ All of the following must hold before the report is considered finished:
 - [ ] Body page count (title/ToC through Conclusions) is 14–20 (gate above);
       References and appendix sit outside the gate.
 - [ ] Chapter structure matches the binding outline: one file per chapter,
-      `main.tex` input order matches the outline, the migration transition is
-      fully resolved (no intermediate "to be merged" files registered), and
+      `main.tex` input order matches the outline, no interim files are
+      registered, and
       result material (measured times, residuals, flight profiles, landing
       metrics) lives in Chapter 9.
 - [ ] Results chapter distinguishes reference-attitude diagnostics from
