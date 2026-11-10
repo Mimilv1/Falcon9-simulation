@@ -24,7 +24,17 @@ from engine_schedule import SmoothShutdown
 from frames import body_to_ecef_matrix
 from kalman import NavigationKF
 from mass_flow import PropellantLimitError
-from sensors import GNSS, GNSSSpec, IMU, IMUSpec, Lidar, LidarSpec
+from sensors import (
+    GNSS,
+    GNSSSpec,
+    GyroAttitude,
+    GyroAttitudeSpec,
+    attitude_error_rotation_vector,
+    IMU,
+    IMUSpec,
+    Lidar,
+    LidarSpec,
+)
 from staging import separate_coasting_vehicle
 
 ROOT = Path(__file__).parent
@@ -172,12 +182,34 @@ class NavigationRun:
             seed=seed + 2,
         )
         p, v = structural_state(state, properties, self.imu.spec.station_body_m)
+        # Open-loop gyro propagation: kept as a dead-reckoning baseline to compare
+        # against the MEKF. It starts from the same (possibly misaligned) attitude.
+        self.attitude = GyroAttitude(
+            GyroAttitudeSpec(
+                initial_error_rotvec_rad=settings.get(
+                    "initial_attitude_error_rad", (0.0, 0.0, 0.0)
+                )
+            ),
+            state.quaternion_body_to_ecef_wxyz,
+        )
+        # True : the navigation filter is a MEKF; it estimates attitude and gyro
+        #        bias from the noisy gyros + GNSS/lidar and uses its own attitude.
+        # False: the filter uses the true attitude (original behaviour).
+        self.use_estimated_attitude = settings.get("use_estimated_attitude", True)
+        attitude_kwargs = {}
+        if self.use_estimated_attitude:
+            attitude_kwargs = dict(
+                q0=self.attitude.q.copy(),
+                attitude_sigma0=settings.get("initial_attitude_sigma_rad", 0.01),
+                gyro_bias_sigma0=settings.get("initial_gyro_bias_sigma_radps", 1e-3),
+            )
         self.filter = NavigationKF.from_imu_spec(
             self.imu.spec,
             p + settings["initial_position_error_m"],
             v,
             settings["initial_sigma"],
             environment=self.environment,
+            **attitude_kwargs,
         )
         self.last_time = None
         self.last_omega = np.zeros(3)
@@ -185,12 +217,21 @@ class NavigationRun:
         self.nis = []
 
     def observe(self, time_s, state, loads, properties):
-        rotation = body_to_ecef_matrix(state.quaternion_body_to_ecef_wxyz)
+        truth_rotation = body_to_ecef_matrix(state.quaternion_body_to_ecef_wxyz)
         imu = self.imu.update(time_s, state, loads, properties)
+        if imu is not None:
+            self.attitude.update(time_s, imu, state.quaternion_body_to_ecef_wxyz)
+        # With the MEKF the filter ignores `rotation` and uses its own attitude
+        rotation = (
+            self.filter.rotation if self.use_estimated_attitude else truth_rotation
+        )
         if imu is not None:
             if self.last_time is not None:
                 self.filter.predict(
-                    imu.accel_meas_mps2, rotation, time_s - self.last_time
+                    imu.accel_meas_mps2,
+                    rotation,
+                    time_s - self.last_time,
+                    gyro_meas=imu.gyro_meas_radps,
                 )
             self.last_time, self.last_omega = time_s, imu.gyro_meas_radps
         gnss = self.gnss.update(time_s, state, properties)
@@ -225,8 +266,27 @@ class NavigationRun:
     def row(self, time_s, state, properties):
         p, v = structural_state(state, properties, self.imu.spec.station_body_m)
         x = self.filter.x
+        q_true = state.quaternion_body_to_ecef_wxyz
+        gyro_only_error = attitude_error_rotation_vector(self.attitude.q, q_true)
+        if self.use_estimated_attitude:
+            q_est = self.filter.q
+            attitude_sigma = self.filter.attitude_sigma_rad
+        else:
+            q_est = q_true
+            attitude_sigma = np.full(3, np.nan)
+        attitude_error = attitude_error_rotation_vector(q_est, q_true)
         return {
             "time_s": time_s,
+            # Attitude used by the navigation filter (MEKF estimate, or truth)
+            **vector_row("quaternion_est_body_to_ecef", q_est, "wxyz"),
+            **vector_row("attitude_error_body_rad", attitude_error),
+            "attitude_error_deg": float(np.rad2deg(np.linalg.norm(attitude_error))),
+            **vector_row("attitude_sigma_body_rad", attitude_sigma),
+            **vector_row("gyro_bias_est_body_radps", self.filter.bg),
+            # Open-loop gyro propagation baseline (no aiding)
+            "gyro_only_attitude_error_deg": float(
+                np.rad2deg(np.linalg.norm(gyro_only_error))
+            ),
             **vector_row("position_ecef_m", x[:3]),
             **vector_row("velocity_ecef_mps", x[3:6]),
             **vector_row("accel_bias_body_mps2", x[6:9]),
@@ -709,6 +769,26 @@ def run_mission(
         summary["navigation_position_rms_m"] = float(
             np.sqrt(np.mean(np.sum(errors**2, axis=1)))
         )
+        summary["attitude_source"] = (
+            "mekf_gyro_gnss_lidar" if nav.use_estimated_attitude else "truth"
+        )
+        summary["limitations"][4] = (
+            "Navigation attitude and gyro bias are estimated by a MEKF from noisy gyros "
+            "with GNSS/lidar aiding (roll about the thrust axis is weakly observable); "
+            "sensor specifications remain placeholders."
+            if nav.use_estimated_attitude
+            else "Navigation uses truth attitude; sensor specifications remain placeholders."
+        )
+        summary["attitude_error_final_deg"] = nav_rows[-1]["attitude_error_deg"]
+        summary["attitude_error_rms_deg"] = float(
+            np.sqrt(np.mean([r["attitude_error_deg"] ** 2 for r in nav_rows]))
+        )
+        summary["gyro_only_attitude_error_final_deg"] = nav_rows[-1][
+            "gyro_only_attitude_error_deg"
+        ]
+        summary["gyro_bias_estimate_final_radps"] = [
+            nav_rows[-1][f"gyro_bias_est_body_radps_{a}"] for a in "xyz"
+        ]
     summary["physics_case"] = (
         "independent_terminal_test"
         if plan.get("vehicle_configuration") == "booster"
@@ -863,7 +943,7 @@ def plot_results(output, *, show=False, save=None):
         + truth[0]["phase"]
         + " to "
         + truth[-1]["phase"]
-        + "\nAssumed commands; navigation supplied with truth attitude"
+        + "\nAssumed commands; navigation attitude source: see summary.json (attitude_source)"
     )
     fig.tight_layout()
     destination = Path(save) if save else output / "overview.png"

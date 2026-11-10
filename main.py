@@ -11,7 +11,7 @@ def parse_args():
         description="CRS-10 ascent, shutdown, separation and booster coast."
     )
     parser.add_argument(
-        "--case", choices=["ascent", "terminal", "full"], default="ascent"
+        "--case", choices=["ascent", "terminal", "full"], default="full"
     )
     parser.add_argument("--until", type=float, default=None)
     parser.add_argument("--dt", type=float, default=None)
@@ -69,8 +69,16 @@ def main():
         print(result["detail"])
     if "navigation_position_rms_m" in result:
         print(
-            f"Navigation position RMS={result['navigation_position_rms_m']:.3f} m (truth attitude)"
+            f"Navigation position RMS={result['navigation_position_rms_m']:.3f} m "
+            f"(attitude source: {result.get('attitude_source', 'truth')})"
         )
+        if "attitude_error_rms_deg" in result:
+            print(
+                f"Attitude error RMS={result['attitude_error_rms_deg']:.3f} deg, "
+                f"final={result['attitude_error_final_deg']:.3f} deg "
+                f"(gyro-only baseline final="
+                f"{result['gyro_only_attitude_error_final_deg']:.3f} deg)"
+            )
     print("Full return flight completed:", result["full_mission_completed"])
     if "stage2" in result:
         upper = result["stage2"]["final"]

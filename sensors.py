@@ -4,7 +4,14 @@ import bisect
 import numpy as np
 
 from dynamics import acceleration_truth
-from frames import vector3
+from frames import (
+    vector3,
+    normalize_quaternion,
+    quaternion_conjugate,
+    quaternion_from_rotation_vector,
+    quaternion_product,
+    body_to_ecef_matrix,
+)
 
 
 def _axes3(value):
@@ -436,4 +443,101 @@ class Lidar:
             np.array([s.valid for s in self.log]),
             np.array([s.range_meas_m for s in self.log]),
             np.array([s.range_true_m for s in self.log]),
+        )
+
+
+# ---------------------------------------------------------------------------
+# Gyro-based attitude measurement (quaternion propagation)
+#
+# Conventions (identical to frames.py / dynamics.py):
+#   - Hamilton quaternions, scalar-first [w, x, y, z]
+#   - q maps body -> ECEF, omega is expressed in the body frame, so
+#     q_dot = 0.5 * q (x) [0, omega_body]
+#   - IMU.measure() returns the body rate relative to ECEF, so no Earth-rate
+#     term is needed.
+# ---------------------------------------------------------------------------
+
+
+def attitude_error_rotation_vector(q_est, q_true):
+    """Body-frame rotation vector [rad] that takes q_true to q_est."""
+    q_err = quaternion_product(quaternion_conjugate(q_true), q_est)
+    if q_err[0] < 0.0:
+        q_err = -q_err  # shortest rotation
+    vector_norm = float(np.linalg.norm(q_err[1:]))
+    if vector_norm < 1e-15:
+        return np.zeros(3)
+    return 2.0 * np.arctan2(vector_norm, q_err[0]) * q_err[1:] / vector_norm
+
+
+@dataclass
+class GyroAttitudeSpec:
+    # Initial misalignment of the estimate, body frame [rad]
+    initial_error_rotvec_rad: np.ndarray = field(default_factory=lambda: np.zeros(3))
+    # Constant gyro bias the estimator subtracts (0 = uncompensated gyro)
+    gyro_bias_estimate_radps: np.ndarray = field(default_factory=lambda: np.zeros(3))
+
+    def __post_init__(self):
+        for name in ("initial_error_rotvec_rad", "gyro_bias_estimate_radps"):
+            setattr(self, name, _axes3(getattr(self, name)))
+
+
+@dataclass(frozen=True)
+class GyroAttitudeSample:
+    t: float
+    quaternion_est_wxyz: np.ndarray
+    quaternion_true_wxyz: np.ndarray
+    error_rotvec_body_rad: np.ndarray
+    error_angle_rad: float
+
+
+class GyroAttitude:
+    """Attitude measurement by propagating the quaternion from noisy gyros.
+
+    Each IMU sample advances the estimate with the exact exponential map,
+    using the trapezoidal mean of two consecutive gyro samples over the
+    interval. There is no external aiding: gyro noise, bias and scale-factor
+    errors make the estimate drift (angle random walk + bias * t).
+    """
+
+    def __init__(self, spec, q0):
+        self.spec = spec
+        q0 = normalize_quaternion(q0)
+        error = quaternion_from_rotation_vector(spec.initial_error_rotvec_rad)
+        self.q = normalize_quaternion(quaternion_product(q0, error))
+        self.last_t = None
+        self.last_omega = np.zeros(3)
+        self.log = []
+
+    @property
+    def rotation(self):
+        """Estimated body -> ECEF rotation matrix."""
+        return body_to_ecef_matrix(self.q)
+
+    def update(self, t, imu_sample, q_true):
+        """Advance to the IMU sample time; q_true is used only for error logging."""
+        omega = imu_sample.gyro_meas_radps - self.spec.gyro_bias_estimate_radps
+        if not np.all(np.isfinite(omega)):
+            raise ValueError("Gyro sample must be finite.")
+        if self.last_t is not None:
+            dt = t - self.last_t
+            if dt < 0.0:
+                raise ValueError("Gyro samples must be time-ordered.")
+            if dt > 0.0:
+                dq = quaternion_from_rotation_vector(0.5 * (self.last_omega + omega) * dt)
+                self.q = normalize_quaternion(quaternion_product(self.q, dq))
+        self.last_t, self.last_omega = float(t), omega.copy()
+        q_true = normalize_quaternion(q_true)
+        error = attitude_error_rotation_vector(self.q, q_true)
+        sample = GyroAttitudeSample(
+            t, self.q.copy(), q_true, error, float(np.linalg.norm(error))
+        )
+        self.log.append(sample)
+        return sample
+
+    def to_arrays(self):
+        return (
+            np.array([s.t for s in self.log]),
+            np.array([s.quaternion_est_wxyz for s in self.log]),
+            np.array([s.quaternion_true_wxyz for s in self.log]),
+            np.array([s.error_rotvec_body_rad for s in self.log]),
         )
