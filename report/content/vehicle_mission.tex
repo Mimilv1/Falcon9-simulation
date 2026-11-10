@@ -1,195 +1,239 @@
-\section{Vehicle, Stages and Mission}
+\section{Vehicle Configuration, Dynamics, and Mission Definition}
 \label{sec:vehicle}
+\label{sec:vehicle-dynamics}
 
-The simulator follows the Falcon 9 launch vehicle in the configuration flown
-on SpaceX CRS-10, the tenth Commercial Resupply Services mission to the
-International Space Station (launched 19 February 2017 from Launch
-Complex~39A; the first stage returned to a landing site near the pad)
-\cite{nasacrs10press}. The model is not a reconstruction of flight
-hardware: it is a project-configured representation assembled from
-published sources. Every adopted parameter value therefore carries an
-evidence class --- K (authoritative known value), E (literature estimate)
-or A (explicit modeling assumption) --- and the tables in this report state
-the class of every value. The underlying records are
-\texttt{data/vehicle\_parameters.json} (parameter set and sources) and
-\texttt{data/crs10\_mission.json} (mission configuration).
+\subsection{Configuration and evidence-qualified parameters}
+The attached vehicle comprises stage 1, stage 2, and a loaded Dragon/trunk assembly. After separation, the lower vehicle contains stage 1 and the upper vehicle contains stage 2 and Dragon. The parameter register distinguishes K (authoritative published information), E (literature/data-derived estimate), and A (explicit modeling assumption). E/A denotes a sourced estimate whose use also requires an assumption. Source authority and applicability to the selected 2017 flight are separate considerations.
 
-\subsection{Vehicle configuration and stages}
+Table~\ref{tab:vehicle} consolidates the configuration used by \path{vehicle_parameters.py} and \path{VehicleData.py}. The $62.4\,\mathrm{m}$ equivalent height is the sum of adopted stage/Dragon lengths; it is not presented as a measured CRS-10 overall dimension. Stage boundaries and the contiguous attachment datums remain conditional. The $8430\,\mathrm{kg}$ loaded Dragon mass is retained as a provisional external estimate; the NASA cargo inventory is included within it. No separate satellite fairing is added.
 
-The modeled vehicle is a two-stage stack of $62.4\,\mathrm{m}$ model height:
-stage~1 ($42.6\,\mathrm{m}$), stage~2 ($12.6\,\mathrm{m}$), and the
-Dragon~spacecraft with its trunk represented as one uniform assembly of
-$7.2\,\mathrm{m}$ equivalent length and $1.83\,\mathrm{m}$ equivalent
-radius. All axial stations are measured from the structural base of the
-referenced stage along the vehicle's Body $+x$ axis (toward the nose).
-Table~\ref{tab:vehicle} lists the adopted geometry and mass values.
-
-\begin{table}[htbp]
-\centering
-\begin{tabular}{lrl}
+\begin{table}[!htbp]
+\centering\small
+\begin{tabularx}{\linewidth}{@{}p{0.37\linewidth}p{0.20\linewidth}p{0.08\linewidth}X@{}}
 \toprule
-Component & Value & Class \\
+Parameter & Adopted value & Class & Basis \\
 \midrule
-Outer diameter & $3.66\,\mathrm{m}$ & K \\
-Stage-1 length & $42.6\,\mathrm{m}$ & E/A \\
-Stage-2 length & $12.6\,\mathrm{m}$ & E/A \\
-Dragon$+$trunk equivalent length & $7.2\,\mathrm{m}$ & E/A \\
-Model total height & $62.4\,\mathrm{m}$ & E/A \\
-Stage-1 dry mass & $22\,200\,\mathrm{kg}$ & E \\
-Stage-1 propellant load & $410\,900\,\mathrm{kg}$ & E \\
-Stage-2 dry mass & $4\,000\,\mathrm{kg}$ & E \\
-Stage-2 propellant load & $107\,500\,\mathrm{kg}$ & E \\
-Dragon loaded assembly (incl.\ cargo) & $8\,430\,\mathrm{kg}$ & E \\
-Launch mass (model sum) & $553\,030\,\mathrm{kg}$ & E/A \\
-Stage-1 dry CG station above base & $17.52\,\mathrm{m}$ & E/A \\
-Stage-1 dry inertia $[I_{xx},I_{yy},I_{zz}]$ & $[61\,368.59, 4\,441\,994.04, 4\,441\,994.04]$\,$\mathrm{kg\,m^2}$ & E/A \\
+Outer diameter & $3.66\,\mathrm{m}$ & K & Later official external geometry \cite{spacexguide2025}. \\
+Stage-1 / stage-2 length & $42.6/12.6\,\mathrm{m}$ & E/A & Legacy FT geometry and assumed station allocation \cite{faa2018}. \\
+Stage-1 dry / propellant mass & $22200/410900\,\mathrm{kg}$ & E & Adopted research mass budget \cite{pezent2024}. \\
+Stage-2 dry / propellant mass & $4000/107500\,\mathrm{kg}$ & E & Same literature set \cite{pezent2024}. \\
+Loaded Dragon assembly & $8430\,\mathrm{kg}$ & E & Provisional external estimate \cite{kyledatasheet}. \\
+Dragon equivalent length / diameter & $7.2/3.66\,\mathrm{m}$ & E/A & Earlier Dragon geometry transferred to a uniform assembly \cite{crs1presskit}. \\
+Dragon / stage-2 CG station & $58.8/48.9\,\mathrm{m}$ & A & Midpoints above assumed attached-stage datums. \\
+Stage-1 nominal dry CG & $17.521\,\mathrm{m}$ & E/A & Component budget and residual allocation. \\
+Initial attached mass & $553030\,\mathrm{kg}$ & E/A & Sum of the adopted inventories and structures. \\
+Equivalent model height & $62.4\,\mathrm{m}$ & E/A & Sum of the adopted axial envelopes. \\
 \bottomrule
-\end{tabular}
-\caption{Vehicle geometry and mass model with evidence classes. Stage
-lengths combine legacy Full Thrust geometry with a contiguous-stage model;
-the Dragon assembly mass (including $2\,490\,\mathrm{kg}$ of cargo
-\cite{nasacrs10overview}) is an external estimate
-\cite{kyledatasheet}. Sources: geometry and dry/propellant masses
-\cite{spacexguide2025,pezent2024,crs1presskit}.}
+\end{tabularx}
+\caption{Consolidated vehicle inputs. Stations are measured from the attached stack base along Body $+x$. A known external diameter does not establish a known internal tank or mass distribution.}
 \label{tab:vehicle}
 \end{table}
 
-Inside stage~1, the RP-1 tank occupies the axial interval
-$x = 4.0$--$18.7\,\mathrm{m}$ and the LOX tank $x = 18.7$--$40.8\,\mathrm{m}$;
-the liquids are modeled as settled flat cylinders at constant densities
-($820\,\mathrm{kg/m^3}$ for RP-1, $1\,250\,\mathrm{kg/m^3}$ for LOX). The
-stage-1 dry mass contains a residual hardware budget of $6\,450\,\mathrm{kg}$
-distributed uniformly over $x = 4.0$--$40.8\,\mathrm{m}$, since no surveyed
-location exists; if that budget were free to move within its interval, the
-dry CG station would shift between $12.18\,\mathrm{m}$ and $22.87\,\mathrm{m}$.
-This range is a conditional spread of the placement assumption, not a
-confidence interval. Tank geometry, depletion and the resulting CG and
-inertia migration are treated in the propulsion and mass model chapter of
-this report.
+\subsection{Propulsion and propellant depletion}
+Stage 1 has one central engine and eight surrounding engines on an assumed $1.3\,\mathrm{m}$ radius ring. Stage 2 has one MVac engine. The force-application pivots are $1.0\,\mathrm{m}$ and $0.5\,\mathrm{m}$ above the respective bases (A); pivot stations, engine mass-centre stations, and nozzle-exit stations are distinct. Engine dry masses are already included in the stage dry budgets.
 
-\subsection{Propulsion inventory}
-
-Stage~1 carries nine Merlin 1D SL engines on a $1.3\,\mathrm{m}$ radius
-ring (A); stage~2 carries a single MVac engine. Engine thrust application
-(pivot) stations are $1.0\,\mathrm{m}$ and $0.5\,\mathrm{m}$ above the
-respective stage base (A), and the gimbal limit is
-$5^{\circ}$ (A). The model derives the vacuum thrust from the historical
-sea-level operating point of $756\,\mathrm{kN}$ per engine
-\cite{spacex2015} using the nozzle exit area $A_e$ and sea-level pressure
-$p_0 = 101\,325\,\mathrm{Pa}$:
-%
+For a running steady engine with throttle $u$, the implementation evaluates Equation~\eqref{eq:engine-model}; an off engine has zero thrust and flow:
 \begin{equation}
-\label{eq:thrust-vac}
-T_{\mathrm{vac}} = T_{\mathrm{sl}} + A_e \, p_0,
-\qquad
-I_{\mathrm{sp,sl}} = I_{\mathrm{sp,vac}} \, \frac{T_{\mathrm{sl}}}{T_{\mathrm{vac}}}
+ T=uT_{\mathrm{vac}}-A_ep_{\mathrm{amb}},\qquad
+ Q=\frac{uT_{\mathrm{vac}}}{I_{\mathrm{sp,vac}}g_0},\qquad g_0=9.80665\,\mathrm{m\,s^{-2}}.
+\label{eq:engine-model}
 \end{equation}
-%
-which yields $824.901\,\mathrm{kN}$ and $285.023\,\mathrm{s}$
-(respectively $935\,\mathrm{kN}$ and $348\,\mathrm{s}$ for the
-literature-sourced MVac). Table~\ref{tab:engines} summarizes the engine set;
-none of these values is a certified CRS-10 engine rating.
+Here $T$ is thrust, $Q$ positive propellant outflow, $A_e$ nozzle exit area, $p_{\mathrm{amb}}$ ambient pressure, and $I_{\mathrm{sp,vac}}$ the adopted vacuum specific impulse. The code retains a fixed-area ambient-pressure correction; the steady throttle does not scale that pressure term. Smooth ignition/shutdown envelopes subsequently scale the evaluated thrust and flow together. The effective stage-1 vacuum point is $756000+0.68(101325)=824901\,\mathrm{N}$ at full throttle, using the historical sea-level reference and a literature exit area. This mixed-source operating set is E/A, not a certified CRS-10 engine rating \cite{spacex2015,pezent2024}. Table~\ref{tab:engines} lists the adopted engine inputs.
 
-\begin{table}[htbp]
-\centering
-\begin{tabular}{lcc}
+\begin{table}[!htbp]
+\centering\small
+\begin{tabular}{@{}lcc@{}}
 \toprule
-Parameter & Merlin 1D SL ($\times 9$) & MVac ($\times 1$) \\
+Parameter & Stage-1 engine & Stage-2 engine \\
 \midrule
-Sea-level effective thrust & $756.000\,\mathrm{kN}$ (E/A) & --- \\
-Vacuum thrust & $824.901\,\mathrm{kN}$ (E/A) & $935\,\mathrm{kN}$ (E) \\
+Engine count & 9 & 1 \\
+Adopted vacuum thrust & $824.901\,\mathrm{kN}$ (E/A) & $935\,\mathrm{kN}$ (E) \\
 Vacuum specific impulse & $311\,\mathrm{s}$ (E) & $348\,\mathrm{s}$ (E) \\
-Sea-level specific impulse & $285.023\,\mathrm{s}$ (E/A) & --- \\
-Nozzle exit area & $0.68\,\mathrm{m^2}$ (E) & $4.90\,\mathrm{m^2}$ (E) \\
-Minimum throttle & $60\,\%$ (E) & $40\,\%$ (E) \\
+Exit area & $0.68\,\mathrm{m^2}$ (E) & $4.90\,\mathrm{m^2}$ (E) \\
+Steady minimum throttle & 0.60 (E) & 0.40 (E) \\
 \bottomrule
 \end{tabular}
-\caption{Engine model with evidence classes. The sea-level operating point
-is a historical SpaceX value \cite{spacex2015}; engine data and throttle
-limits are research-model estimates \cite{pezent2024}, not certified flight
-limits.}
+\caption{Engine operating inputs \cite{pezent2024,spacex2015}. The numerical scenario chooses engine count and throttle separately from these engine relations. A stored $5^\circ$ gimbal parameter (A) does not establish implemented physical gimbal dynamics.}
 \label{tab:engines}
 \end{table}
 
-The initial stage-1 inventory is $123\,500\,\mathrm{kg}$ of RP-1 and
-$287\,400\,\mathrm{kg}$ of LOX \cite{romerocalco2023} (loaded O/F mass
-ratio $2.327$), while the consumption model uses a constant O/F mass ratio
-of $2.35$ \cite{bykerk2023}. The adopted pair depletes LOX before RP-1 and
-leaves $1\,202.13\,\mathrm{kg}$ of RP-1 at the mathematical burn limit.
-This residual is a consequence of the adopted inventory/ratio combination,
-not a known Falcon~9 landing reserve; independent tank states would be
-required for variable O/F, venting or refilling.
+Stage-1 loading is $m_{f,0}=123500\,\mathrm{kg}$ of RP-1 and $m_{o,0}=287400\,\mathrm{kg}$ of LOX \cite{romerocalco2023}. Their loaded ratio is $2.32713$, while consumption uses $\eta=Q_o/Q_f=2.35$ \cite{bykerk2023}. Equation~\eqref{eq:inventory-split} reconstructs both tanks from the stage's total consumed mass $\Delta m$:
+\begin{equation}
+ Q_f=\frac{Q}{1+\eta},\quad Q_o=\frac{\eta Q}{1+\eta},\qquad
+ m_f=m_{f,0}-\frac{\Delta m}{1+\eta},\quad
+ m_o=m_{o,0}-\frac{\eta\Delta m}{1+\eta}.
+\label{eq:inventory-split}
+\end{equation}
+The adopted combination depletes LOX first and leaves $1202.128\,\mathrm{kg}$ of RP-1 at its mathematical limit. That residual is unusable under the assumed fixed ratio and is separate from a mission reserve. Reconstruction assumes fixed initial loading and no venting, refilling, or variable mixture schedule. Stage 2 retains an equivalent uniformly distributed propellant cylinder rather than the first-stage dual-column model.
 
-\subsection{Return propellant budget}
+\subsection{Changing mass, CG, and inertia}
+\subsubsection{Liquid and dry-component models}
+Each first-stage liquid is a settled, flat-ended cylindrical column at constant density. Table~\ref{tab:tank-model} lists its geometry and reference conditions. Structural section lengths are transferred to equivalent tank envelopes; domes, internal hardware displacement, and datum alignment are assumptions.
 
-The first-stage return reserves propellant by planning allocation (all
-class A): $38\,\mathrm{t}$ for the boostback burn, $16\,\mathrm{t}$ for the
-entry burn, $10\,\mathrm{t}$ for the landing burn, and a protected reserve of
-$2\,\mathrm{t}$. Unused boostback and entry allocations transfer to the
-landing burn; the reserve and the limiting-tank residual are never
-consumed. These are planning budgets, not measured characteristics of the
-CRS-10 vehicle.
-
-\subsection{Mission phases and flight paths}
-
-The mission executes as an event-driven phase sequence: each transition
-carries a condition (a fixed reference time, or a guard signal such as
-altitude, speed, propellant state or landing prediction) and is checked
-against the accepted integration state. The ascent commands
-MECO at $140\,\mathrm{s}$ (with a $1\,\mathrm{s}$ shutdown ramp) and
-separation at $144\,\mathrm{s}$; these are approximate published preflight
-times adopted as commands \cite{nasacrs10press}. All later event times are
-simulated outcomes of the model, not observed CRS-10 event times.
-Table~\ref{tab:phases} lists the nominal phases of the full mission.
-
-\begin{table}[htbp]
-\centering
-\begin{tabular}{lll}
+\begin{table}[!htbp]
+\centering\small
+\begin{tabular}{@{}lcc@{}}
 \toprule
-Phase & Transition condition & Nominal time\, [s] \\
+Quantity & RP-1 & LOX \\
 \midrule
-Powered ascent & Liftoff initial state & $0$ \\
-Shutdown ramp / MECO & Fixed command, $1\,\mathrm{s}$ ramp & $140.00$--$141.00$ \\
-Full-stack coast & Zero thrust and propellant flow & $141.00$--$144.00$ \\
-Stage separation & Zero flow, engines off & $144.00$ \\
-Boostback burn & Ignition after fuel and attitude checks & $161.00$--$208.81$ \\
-Return coast & --- & $208.81$--$370.14$ \\
-Entry burn & Descending through $45\,\mathrm{km}$; ends at $500\,\mathrm{m/s}$ & $370.14$--$392.95$ \\
-Aerodynamic descent & --- & $392.95$--$426.16$ \\
-Landing burn & Predicted stopping clearance $+\,1.5\,\mathrm{km}$ & $426.16$--$465.08$ \\
-Touchdown & Lowest leg tip reaches the ground sphere & $465.083$ \\
+Inner radius [m], E/A & 1.8269 & 1.8271 \\
+Bottom station [m], E/A & 4.0 & 18.7 \\
+Equivalent section length [m], E/A & 14.7 & 22.1 \\
+Density [$\mathrm{kg\,m^{-3}}$], E & 820 & 1250 \\
+Reference temperature [K], E & 266 & 66 \\
 \bottomrule
 \end{tabular}
-\caption{Mission phases of the full simulation case. Times after boostback
-ignition are simulated outcomes (nominal run, seed 1); the ascent times are
-adopted reference commands.}
+\caption{Equivalent tank inputs. Radii subtract the modeled skin thickness from $1.83\,\mathrm{m}$; section lengths/stations use Ecker's structural model \cite[Table 1]{ecker2017}. Density/temperature pairs use Miquel's Table 5, whose reference pressure is unspecified \cite{miquel2020}.}
+\label{tab:tank-model}
+\end{table}
+
+For liquid mass $m_i$, density $\rho_i$, radius $r_i$, bottom station $b_i$, and outflow $Q_i$, Equation~\eqref{eq:liquid-column} defines height, centroid, and centroid rate:
+\begin{equation}
+ h_i=\frac{m_i}{\rho_i\pi r_i^2},\qquad
+ c_i=b_i+\frac{h_i}{2},\qquad
+ \dot c_i=-\frac{Q_i}{2\rho_i\pi r_i^2}.
+\label{eq:liquid-column}
+\end{equation}
+The height must remain inside the adopted envelope. Slosh, ullage motion, reverse-acceleration settling, and feed transients are not resolved. The settled-column approximation is retained through coast and return; restart settling is a separate scenario assumption.
+
+The dry allocation is shell $8000\,\mathrm{kg}$ at $21.0\,\mathrm{m}$, fins $1520\,\mathrm{kg}$ at $40.3\,\mathrm{m}$, engines $4230\,\mathrm{kg}$ at $0.452\,\mathrm{m}$, and folded legs $2000\,\mathrm{kg}$ at $6.66\,\mathrm{m}$, using published group estimates with equivalent shapes \cite[Table 2]{bykerk2023}. The remaining $6450\,\mathrm{kg}$ closes the $22200\,\mathrm{kg}$ budget and is assumed uniformly distributed over $4.0$--$40.8\,\mathrm{m}$. This yields nominal dry CG $17.521\,\mathrm{m}$. Moving the residual group's centroid anywhere within that interval gives conditional dry-CG bounds $12.18$--$22.87\,\mathrm{m}$; they are allocation bounds, not statistical confidence limits.
+
+The shell/residual groups use thin-shell equivalents and localized groups use equivalent disks. The liquid columns and loaded Dragon use uniform solid cylinders. Dry-group placements stay fixed; deployed aerodynamic/contact geometry does not separately relocate the dry leg mass. The initial combined vehicle has CG station $29.3704\,\mathrm{m}$ and inertia diagonal approximately $[9.47993\times10^5,1.13857\times10^8,1.13857\times10^8]\,\mathrm{kg\,m^2}$. These are model outputs (E/A), not measured CRS-10 mass properties.
+
+\subsubsection{Component aggregation and analytical derivatives}
+A \texttt{MassComponent} describes one part or liquid about its own centre. \texttt{MassProperties} describes the attached vehicle about its current CG. With component mass $m_i$, axial centroid $c_i$, local inertia $\mat J_{i,c}$, and offset $\vect d_i=(c_i-c)\vect e_x$, Equation~\eqref{eq:mass-combination} gives the combined properties:
+\begin{equation}
+ \begin{aligned}
+ m&=\sum_i m_i,\qquad c=\frac{\sum_i m_ic_i}{m},\\
+ \mat J_C&=\sum_i\left[\mat J_{i,c}+m_i\mat S(\vect d_i)\right],\qquad
+ \mat S(\vect d)=(\vect d^{\mathsf T}\vect d)\mat I-\vect d\vect d^{\mathsf T}.
+ \end{aligned}
+\label{eq:mass-combination}
+\end{equation}
+Here $\mat I$ is the identity matrix. The implementation differentiates both component properties and parallel-axis offsets. Equation~\eqref{eq:property-rates} states the first derivatives; second CG/mass derivatives are also evaluated analytically for the motion and sensor interfaces:
+\begin{equation}
+\begin{aligned}
+ \dot c&=\frac{\sum_i(\dot m_ic_i+m_i\dot c_i)-\dot m c}{m},\\
+ \dot{\mat J}_C&=\sum_i\left[\dot{\mat J}_{i,c}+\dot m_i\mat S(\vect d_i)+m_i\dot{\mat S}(\vect d_i)\right].
+\end{aligned}
+\label{eq:property-rates}
+\end{equation}
+Axial placement makes the parallel-axis addition $\operatorname{diag}(0,d_i^2,d_i^2)$. Thus Body $I_{xx}$ is axial and $I_{yy},I_{zz}$ are transverse. Figure~\ref{fig:mass-assembly} shows this same operation in code, and Figure~\ref{fig:depletion-properties} shows its first-stage-only inventory dependence. The late change in CG trend follows the changing weights of the two liquid centroids and the fixed dry allocation.
+
+\par\medskip\noindent\begin{minipage}{\linewidth}
+\centering
+\includegraphics[width=\linewidth]{images/code_mass_assembly.pdf}
+\captionof{figure}{Exact parallel-axis and derivative accumulation in \texttt{mass\_properties.py}. Each local inertia is shifted to the combined CG once. Source line numbers and file hash are retained with the figure provenance.}
+\label{fig:mass-assembly}
+\end{minipage}\par\medskip
+
+\par\medskip\noindent\begin{minipage}{\linewidth}
+\centering
+\includegraphics[width=\linewidth]{images/mass_properties_depletion.pdf}
+\captionof{figure}{Stage-1-only mass-property sweep from full loading to the fixed-ratio limiting inventory. The curves evaluate the adopted component model against consumed propellant; they are neither measured flight properties nor a separate trajectory simulation.}
+\label{fig:depletion-properties}
+\end{minipage}\par\medskip
+
+\subsection{Equations of motion and load closure}
+The changing-mass model uses fixed nozzle-exit stations and balanced transverse outflow. For outlet $j$, $Q_j\geq0$ is outward flow, $\mu_j=-Q_j$ its signed mass-removal rate, $\dot\mu_j=-\dot Q_j$, and $\vect d_j=\vect s_j-\vect c$ the exit arm. $\mat G_j$ is the outlet's second-moment-per-unit-mass tensor in $\mathrm{m^2}$. The open-system balance retains explicit flow terms, consistent with control-volume rocket dynamics \cite{rocketpyeom}.
+
+Equations~\eqref{eq:linear-balance} and~\eqref{eq:angular-balance} are the implemented CG balances. $\vect a_C^B$ is the external-frame coordinate acceleration expressed in Body components; $\vect g^B$ and $\vect a_{\mathrm{rot}}^B$ are supplied separately by the environment:
+\begin{align}
+ m\vect a_C^B={}&\vect F^B+m\vect g^B+m\vect a_{\mathrm{rot}}^B
+ +\sum_j\left[2\mu_j(\vect\omega^B\times\vect d_j^B-\dot{\vect c}^B)
+ +\dot\mu_j\vect d_j^B\right],\label{eq:linear-balance}\\
+ \mat J_C\dot{\vect\omega}^B={}&\vect M_C^B-\vect\omega^B\times(\mat J_C\vect\omega^B)
+ -\dot{\mat J}_C\vect\omega^B+
+ \sum_j\mu_j[\mat S(\vect d_j^B)+\mat G_j]\vect\omega^B.
+\label{eq:angular-balance}
+\end{align}
+Pressure-corrected thrust already contains the exhaust reaction; another $Qv_e$ force is not added. The remaining flow terms describe reference migration and angular-momentum outflow. The current closure requires axial CG migration, fixed exits, and balanced transverse exhaust centroids; internal swirl and moving nozzle boundaries are omitted. The code verifies consistency between consumption and mass derivatives before evaluating these balances.
+
+Because the state is stored in current Body axes, Equation~\eqref{eq:stored-state} includes basis-transport terms. The quaternion uses the same approximate relative-rate convention as Section~\ref{sec:architecture}:
+\begin{equation}
+\begin{aligned}
+ \dot{\vect r}_C^B&=\vect v_C^B-\vect\omega^B\times\vect r_C^B,&
+ \dot{\vect v}_C^B&=\vect a_C^B-\vect\omega^B\times\vect v_C^B,\\
+ \dot{\vect q}_{BE}&=\tfrac12\vect q_{BE}\otimes[0,(\vect\omega^B)^{\mathsf T}]^{\mathsf T},&
+ \dot m_{p,k}&=-Q_k.
+\end{aligned}
+\label{eq:stored-state}
+\end{equation}
+The integrator temporarily uses external translational components within RK4, then returns the accepted state in Body components. This avoids artificial radial interpolation error from rotating an Earth-scale stored vector.
+
+Structural-base and CG states are related by Equation~\eqref{eq:base-cg}, with base $O$ and current CG station $\vect c^B$:
+\begin{equation}
+ \vect r_C^B=\vect r_O^B+\vect c^B,\qquad
+ \vect v_C^B=\vect v_O^B+\vect\omega^B\times\vect c^B+\dot{\vect c}^B.
+\label{eq:base-cg}
+\end{equation}
+The same transformation applies to a fixed sensor station after replacing the base-to-CG displacement appropriately. \path{to_state} and \path{apply_state} use matching flow/rate inputs. Their initial stationary-base condition can therefore have a nonzero geometric-CG velocity from depletion, without implying motion of the sensor mount.
+
+\subsubsection{Moment inputs and actuator representation}
+The moment $\vect M_C^B$ includes aerodynamic moments and an A-class ideal control couple. The active \path{propulsion.py} relation keeps thrust along Body $+x$ and rejects nonzero gimbal commands; the stored gimbal limit is not an implemented TVC actuator. For \path{ascent.py}, Equation~\eqref{eq:ideal-moment} maps desired Body angular acceleration $\vect\alpha_{\mathrm{cmd}}$ to its added control moment:
+\begin{equation}
+ \vect M_{\mathrm{ideal}}=\mat J_C\vect\alpha_{\mathrm{cmd}},\qquad
+ \mat J_C^{-1}\vect M_{\mathrm{ideal}}=\vect\alpha_{\mathrm{cmd}}.
+\label{eq:ideal-moment}
+\end{equation}
+The cancellation in this control contribution is deliberate model inversion, not disappearance of physical inertia or evidence that aerodynamic stability removes the need for TVC. Inertia still determines the requested torque and the response to other loads. The ascent couple is unlimited. \path{recovery.py} adds gyroscopic feedforward and aerodynamic-moment compensation before fin allocation and moment saturation; changing-inertia and exhaust-flow terms remain in the dynamics.
+
+Thus the scenario demonstrates vehicle propagation with declared moment authority, rather than validated nozzle deflection, gimbal dynamics, or actuator stability margins. A physical TVC model would instead link commanded deflection, actuator limits and dynamics, thrust direction, and the CG moment arm. Flight-command and allocation details belong in the mission-execution chapter; this distinction defines what the moment input represents.
+
+\subsection{Initial state and flight-phase definition}
+The structural base starts at the launch location of Section~\ref{sec:architecture}, with zero velocity relative to rotating Earth and zero Body-relative angular rate. The launch quaternion sets Body $+x$ upward; inventories are the full values in Table~\ref{tab:vehicle}. Commands, configuration transitions, and continuous integration then generate all subsequent states.
+
+Table~\ref{tab:phases} defines the mission sequence without substituting simulated event times for input conditions. The official schedule labels its entries approximate. Adopting a published time as a simulation command is an A-class choice even when the published schedule itself is authoritative \cite{nasacrs10press}.
+
+\begin{table}[!htbp]
+\centering\small
+\begin{tabularx}{\linewidth}{@{}p{0.27\linewidth}X@{}}
+\toprule
+Transition & Definition in the selected scenario \\
+\midrule
+Liftoff / ascent & Initial attached vehicle; prescribed ascent commands. \\
+Shutdown begins & $140\,\mathrm{s}$; project one-second smooth ramp. \\
+MECO / stack coast & $141\,\mathrm{s}$; thrust and flow reach zero. \\
+Stage separation & $144\,\mathrm{s}$; attached parent, engines off, zero flow and flow derivative. \\
+Upper-stage ignition & $152\,\mathrm{s}$; independent upper-child commands. \\
+Boostback ignition & $161\,\mathrm{s}$; detached booster and fuel/attitude/readiness guards. \\
+Boostback end / return coast & Miss, fuel, or duration condition followed by smooth shutdown. \\
+Entry ignition & Descending through $45\,\mathrm{km}$ with restart guards. \\
+Entry end / aerodynamic descent & $500\,\mathrm{m\,s^{-1}}$ speed target or planning cap, then shutdown. \\
+Landing ignition & Project stopping-clearance prediction with restart guards. \\
+First contact & Lowest assumed deployed leg tip reaches the ground sphere; evaluate landing criteria. \\
+Upper-stage cutoff & $545\,\mathrm{s}$; prescribed upper-child shutdown. \\
+\bottomrule
+\end{tabularx}
+\caption{Physical phase definitions and command references. Entry/landing conditions and return planning criteria are project assumptions. Their actual execution times and numerical results belong to the simulation-results analysis.}
 \label{tab:phases}
 \end{table}
 
-Three flight paths leave the pad together and diverge at separation
-(Figure~\ref{fig:flightpaths}). The full stack ascends to MECO and
-separates; the separated upper stage (stage 2 with the Dragon assembly)
-ignites $8\,\mathrm{s}$ after separation and, under its assumed command
-sequence, shuts down at SECO $545\,\mathrm{s}$ at about
-$200\,\mathrm{km}$ altitude and $1\,600\,\mathrm{km}$ surface distance
-from the launch site. The booster flies the return arc: after boostback it
-coasts to an apogee of about $111.5\,\mathrm{km}$ at roughly
-$90\,\mathrm{km}$ surface distance, descends through the entry burn and the
-aerodynamic descent, and lands at the assumed ground target
-$14.0\,\mathrm{km}$ south and $6.0\,\mathrm{km}$ east of the launch site
-(the nominal run reaches that target within meters). The upper-stage
-commands are demonstration assumptions (A), not reconstructed flight data;
-quantitative comparison of the ascent against the video-derived telemetry
-record and the landing acceptance metrics are discussed in the results
-chapter of this report.
+First contact uses four assumed leg tips $1.0\,\mathrm{m}$ below the base at $3.5\,\mathrm{m}$ radius. A successful contact additionally requires deployed legs, vertical speed at most $2\,\mathrm{m\,s^{-1}}$, horizontal speed at most $1\,\mathrm{m\,s^{-1}}$, tilt at most $5^\circ$, angular-rate magnitude at most $1\,\mathrm{deg\,s^{-1}}$, and target error at most $10\,\mathrm{m}$. These are A-class project limits, not certified Falcon 9 requirements. The target is an assumed point $14\,\mathrm{km}$ south and $6\,\mathrm{km}$ east of launch on the ground sphere, rather than surveyed LZ-1 coordinates.
 
-\begin{figure}[htbp]
-\centering
-\includegraphics[width=\linewidth]{images/flight_paths.pdf}
-\caption{Simulated flight paths of the nominal full-mission run (seed~1).
-Left: CG altitude against surface angular distance from the launch site.
-Right: ground displacement; the launch site is at the origin and the
-assumed landing target lies $14.0\,\mathrm{km}$ south and
-$6.0\,\mathrm{km}$ east of it. Markers denote mission events.}
-\label{fig:flightpaths}
-\end{figure}
+For normalized ramp time $\xi=(t-t_s)/\Delta t$, Equation~\eqref{eq:shutdown} supplies a smooth shutdown amplitude and its time derivative on $0\leq\xi\leq1$:
+\begin{equation}
+ \gamma=1-10\xi^3+15\xi^4-6\xi^5,\qquad
+ \dot\gamma=-\frac{30\xi^2(1-\xi)^2}{\Delta t},\qquad \Delta t=1\,\mathrm{s}.
+\label{eq:shutdown}
+\end{equation}
+The envelope is constant outside the ramp, with zero endpoint slope and curvature. Scaling thrust and flow together while supplying the analytical flow derivative avoids an unmodeled discontinuous-flow impulse. The duration is a numerical assumption, not a measured engine transient. Return planning budgets, steering laws, and actuator allocation are kept in mission execution rather than embedded in the vehicle equations.
+
+\subsection{Separation and inherited child states}
+The separation map assumes zero impulse and no discarded mass. Both children inherit the parent's attitude and angular rate. For a cut offset $\vect\ell^B$ from the parent structural base, the lower base retains the parent's base state and the upper base follows Equation~\eqref{eq:separation-map}:
+\begin{equation}
+ \vect r_{O,u}^B=\vect r_{O,p}^B+\vect\ell^B,\qquad
+ \vect v_{O,u}^B=\vect v_{O,p}^B+\vect\omega^B\times\vect\ell^B.
+\label{eq:separation-map}
+\end{equation}
+Upper-child component stations are rebased consistently, while Dragon stays on that child. Different child CG coordinates are expected because the tracked points have changed. Position/velocity continuity is checked at fixed structural points and at the recombined mass centre.
+
+The conservation audit uses angular momentum about the parent CG. With child CG offset $\vect\rho_k$ and velocity difference $\Delta\vect v_k$ from the parent CG, Equation~\eqref{eq:separation-angular-momentum} includes spin and displaced-CG motion:
+\begin{equation}
+ \vect H_{\mathrm{after}}=\sum_k\left[\mat J_k\vect\omega_k+
+ \vect\rho_k\times(m_k\Delta\vect v_k)\right].
+\label{eq:separation-angular-momentum}
+\end{equation}
+The map compares this value with the parent spin angular momentum, and also checks mass, linear momentum, kinetic energy, recombined CG, and structural-point continuity. Relative conservation tolerance is $10^{-10}$; position and velocity continuity tolerances are $10^{-8}\,\mathrm{m}$ and $10^{-8}\,\mathrm{m\,s^{-1}}$; attitude/rate checks use $10^{-12}$ in their respective norms. These are numerical consistency criteria for the assumed map, not physical separation accuracy.
+
+Afterward, stage 1 excludes stage 2 and Dragon from its mass properties, and the upper child excludes stage 1. Both use inherited states and separate subsequent commands on the same clock. The upper stage retains the uniform propellant/Dragon approximations and its separate drag provider, rather than automatically selecting the declared \texttt{second\_stack} aerodynamic configuration. Dragon remains attached over the $600\,\mathrm{s}$ demonstration interval. The sequence tests continuous configuration/state handling; public validation of the complete return and upper-stage command laws is outside the available ascent reference.

@@ -1,0 +1,57 @@
+{
+  "source_revision": "1ead44069ab1b585519470eab6bb3db71c92f2e2",
+  "external_assets": [
+    {
+      "file": "crs10_pad_nasa.jpg",
+      "url": "https://www.nasa.gov/image-article/falcon-9-rocket-ready-spacex-crs-10-2/",
+      "credit": "NASA/Glenn Benson"
+    },
+    {
+      "file": "crs10_presskit_header.pdf",
+      "url": "https://www.nasa.gov/wp-content/uploads/2018/07/crs10presskitfinal.pdf",
+      "selection": "p.1 header crop"
+    },
+    {
+      "file": "crs10_mission_patch.pdf",
+      "url": "https://www.nasa.gov/wp-content/uploads/2018/07/crs10presskitfinal.pdf",
+      "selection": "p.1 mission patch crop"
+    }
+  ],
+  "model_figures": [
+    {
+      "file": "mass_properties_depletion.pdf",
+      "basis": "Stage-1-only inventory sweep to the limiting-tank residual; not a trajectory or flight measurement."
+    },
+    {
+      "file": "simulation_architecture.pdf",
+      "basis": "Implemented module interfaces and default 24-component MEKF error state with a gated star-tracker interface; the reviewed seed-1 run accepts zero star fixes."
+    }
+  ],
+  "code_excerpt": {
+    "file": "code_mass_assembly.pdf",
+    "source": "mass_properties.py",
+    "first_line": 157,
+    "last_line": 169,
+    "source_sha256": "28c8f5fc72a0e253cfd23403f48c46d0c5a4b628d441a945bec3bc71832e6843"
+  },
+  "model_input_sha256": {
+    "vehicle_parameters.py": "f47a7565293872c1d4dfcb467c17adc8f0e6b1e41ebe9664ec14fed96f516ddf",
+    "vehicle_mass_model.py": "d34b3e75793735062b11cb2629fc34e9ade648d340a1d3bddefa6d80c01e8eb3",
+    "mass_properties.py": "28c8f5fc72a0e253cfd23403f48c46d0c5a4b628d441a945bec3bc71832e6843",
+    "data\\vehicle_parameters.json": "0985bfbc204aae31826671bb984db2d6d5eaf6f31d419a21946628e7b0a80599"
+  },
+  "navigation_review": {
+    "run_directory": "results/gyro-final-review-20261110",
+    "runtime_git_commit": "c027d414ec8d1a18fb765c4605490ddffaa67990",
+    "seed": 1,
+    "imu_rate_hz": 100,
+    "step_s": 0.01,
+    "summary_sha256": "9c8f48e169e396f674682024a01377c407331676ea605782390f3056dc448b58",
+    "startracker_updates": 0,
+    "startracker_rejected": 381,
+    "navigation_position_rms_m": 0.8812092038991342,
+    "attitude_error_rms_deg": 0.4561339030755707,
+    "attitude_error_final_deg": 0.012143397619142437,
+    "gyro_only_attitude_error_final_deg": 1.8923705367135215
+  }
+}
